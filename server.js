@@ -25,8 +25,22 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf'
 };
 
-const PROTOTYPE_PREFIX = '/prototype';
-const PROTOTYPE_DIST = path.join(__dirname, 'apps', 'platform', 'dist');
+const PLATFORM_DIST = path.join(__dirname, 'apps', 'platform', 'dist');
+
+function serveFile(res, filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  fs.readFile(filePath, (err, content) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(content);
+  });
+}
 
 const server = http.createServer((req, res) => {
   // CORS & Security headers
@@ -42,58 +56,75 @@ const server = http.createServer((req, res) => {
 
   const urlPath = req.url.split('?')[0];
 
-  // ── Prototype route: serves the React/TypeScript visual prototype ──
-  if (urlPath === PROTOTYPE_PREFIX || urlPath.startsWith(PROTOTYPE_PREFIX + '/')) {
-    let subPath = urlPath.slice(PROTOTYPE_PREFIX.length) || '/index.html';
-    if (subPath === '/') subPath = '/index.html';
-    let filePath = path.join(PROTOTYPE_DIST, path.normalize(subPath));
+  // ── 1. Preserved Legacy Route (/legacy or /legacy/*) ──────────────────────
+  if (urlPath === '/legacy' || urlPath.startsWith('/legacy/')) {
+    let sub = urlPath.slice('/legacy'.length) || '/index.html';
+    if (sub === '/' || sub === '') sub = '/index.html';
+    const legacyPath = path.join(__dirname, path.normalize(sub));
 
-    fs.stat(filePath, (err, stats) => {
-      // SPA fallback: all unknown sub-paths serve index.html
+    fs.stat(legacyPath, (err, stats) => {
       if (err || !stats.isFile()) {
-        filePath = path.join(PROTOTYPE_DIST, 'index.html');
+        serveFile(res, path.join(__dirname, 'index.html'));
+      } else {
+        serveFile(res, legacyPath);
       }
-      const ext = path.extname(filePath).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      fs.readFile(filePath, (readErr, content) => {
-        if (readErr) {
+    });
+    return;
+  }
+
+  // ── 2. Vite Bundled Assets (/assets/*) ───────────────────────────────────
+  if (urlPath.startsWith('/assets/')) {
+    const assetSub = urlPath.slice('/assets/'.length);
+    const distAssetPath = path.join(PLATFORM_DIST, 'assets', path.normalize(assetSub));
+
+    fs.stat(distAssetPath, (err, stats) => {
+      if (!err && stats.isFile()) {
+        serveFile(res, distAssetPath);
+        return;
+      }
+
+      // Fallback to root assets folder
+      const rootAssetPath = path.join(__dirname, 'assets', path.normalize(assetSub));
+      fs.stat(rootAssetPath, (rootErr, rootStats) => {
+        if (!rootErr && rootStats.isFile()) {
+          serveFile(res, rootAssetPath);
+        } else {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('React Prototype — 404 Not Found');
-          return;
+          res.end('Asset Not Found');
         }
-        res.writeHead(200, { 'Content-Type': contentType });
-        res.end(content);
       });
     });
     return;
   }
 
-  // ── Existing demo: serves root index.html and all original assets ──
-  let safePath = path.normalize(urlPath).replace(/^(\.\.[\\/\\])+/, '');
-  if (safePath === '/' || safePath === '\\') {
-    safePath = '/index.html';
+  // ── 3. Static Assets for Legacy/Root (/css/*, /js/*, /assets/*) ──────────
+  if (urlPath.startsWith('/css/') || urlPath.startsWith('/js/')) {
+    const rawPath = path.join(__dirname, path.normalize(urlPath));
+    fs.stat(rawPath, (err, stats) => {
+      if (!err && stats.isFile()) {
+        serveFile(res, rawPath);
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Static File Not Found');
+      }
+    });
+    return;
   }
 
-  let filePath = path.join(__dirname, safePath);
-
-  fs.stat(filePath, (err, stats) => {
-    if (err || !stats.isFile()) {
-      // Fallback to index.html for client-side navigation
-      filePath = path.join(__dirname, 'index.html');
+  // ── 4. Main React Application Routes (SPA) ───────────────────────────────
+  // Serves apps/platform/dist/index.html for:
+  // - / (Redesigned Public Homepage)
+  // - /platform, /platform/* (Customer Application & Detail)
+  // - /prototype, /prototype/* (Design Review & Scenarios)
+  // - /dashboard, /detail
+  const spaIndex = path.join(PLATFORM_DIST, 'index.html');
+  fs.stat(spaIndex, (err, stats) => {
+    if (!err && stats.isFile()) {
+      serveFile(res, spaIndex);
+    } else {
+      // Emergency fallback to root index.html if platform dist is missing
+      serveFile(res, path.join(__dirname, 'index.html'));
     }
-
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-
-    fs.readFile(filePath, (readErr, content) => {
-      if (readErr) {
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('404 Not Found');
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content);
-    });
   });
 });
 
@@ -101,7 +132,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n=============================================================`);
   console.log(`  MIKHLAFI LABS — Enterprise Decision Intelligence Platform`);
   console.log(`  INTELLIGENCE · SYSTEMS · INNOVATION`);
-  console.log(`  Original Demo:      http://localhost:${PORT}`);
-  console.log(`  React/TS Prototype: http://localhost:${PORT}/prototype`);
+  console.log(`  New Public Homepage:     http://localhost:${PORT}/`);
+  console.log(`  Customer Platform:       http://localhost:${PORT}/platform`);
+  console.log(`  Scenario Review:         http://localhost:${PORT}/prototype`);
+  console.log(`  Preserved Legacy Site:   http://localhost:${PORT}/legacy`);
   console.log(`=============================================================\n`);
 });

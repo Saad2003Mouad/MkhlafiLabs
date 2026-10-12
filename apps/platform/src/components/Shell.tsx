@@ -1,144 +1,317 @@
-import React from 'react';
-import { LocaleMode, ThemeMode, ViewMode } from '../types';
+import React, { useState } from 'react';
+import { LocaleMode, ThemeMode, AppRoute } from '../types';
 import {
   IconDashboard,
   IconFinance,
   IconDecisions,
   IconRisk,
   IconProjects,
-  IconAssistant
+  IconSupplier,
+  IconCustomer,
+  IconAssistant,
+  IconDataQuality,
+  IconShield,
+  IconServer,
+  IconMenu,
+  IconX,
+  IconGlobe,
+  IconSun,
+  IconMoon
 } from './Icons';
 
 interface ShellProps {
   theme: ThemeMode;
   locale: LocaleMode;
-  view: ViewMode;
-  onSelectView: (v: ViewMode) => void;
+  currentRoute: AppRoute;
+  onNavigateRoute: (r: AppRoute) => void;
+  onNavigateHome: () => void;
+  onToggleTheme: () => void;
+  onToggleLocale: () => void;
   children: React.ReactNode;
 }
 
 export const Shell: React.FC<ShellProps> = ({
+  theme,
   locale,
-  view,
-  onSelectView,
+  currentRoute,
+  onNavigateRoute,
+  onNavigateHome,
+  onToggleTheme,
+  onToggleLocale,
   children
 }) => {
   const isAr = locale === 'ar';
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [selectedWorkspace, setSelectedWorkspace] = useState('org-01');
+
+  const workspaces = [
+    { id: 'org-01', nameAr: 'مجموعة الأفق القابضة (HQ)', nameEn: 'Al-Ufuq Holdings (HQ)' },
+    { id: 'org-02', nameAr: 'شركة التوريدات والخدمات اللوجستية', nameEn: 'National Logistics & Supply' },
+    { id: 'org-03', nameAr: 'المجموعة الصناعية الخليجية', nameEn: 'Gulf Industrial Group' }
+  ];
 
   return (
     <div className="app-layout">
-      {/* Sidebar */}
-      <aside className="app-sidebar">
+      {/* Sidebar Navigation */}
+      <aside
+        className="app-sidebar"
+        style={{
+          display: mobileSidebarOpen ? 'flex' : undefined,
+          position: mobileSidebarOpen ? 'fixed' : undefined,
+          zIndex: mobileSidebarOpen ? 1500 : undefined,
+          height: mobileSidebarOpen ? '100vh' : undefined,
+          top: 0,
+          insetInlineStart: 0
+        }}
+      >
+        {/* Sidebar Header */}
         <div className="sidebar-header">
-          <div className="brand-icon">M</div>
-          <div className="brand-text">
-            <span className="brand-title">MIKHLAFI LABS</span>
-            <span className="brand-subtitle">SYSTEMS · INTEL</span>
-          </div>
+          <button onClick={onNavigateHome} className="brand-emblem" style={{ textAlign: 'start' }}>
+            <div className="brand-symbol" style={{ width: '30px', height: '30px', fontSize: '15px' }}>M</div>
+            <div className="brand-meta">
+              <span className="brand-name" style={{ fontSize: '13px' }}>MIKHLAFI LABS</span>
+              <span className="brand-sub" style={{ fontSize: '8px' }}>
+                {isAr ? 'منصة القرارات' : 'DECISION MESH'}
+              </span>
+            </div>
+          </button>
+          {mobileSidebarOpen && (
+            <button onClick={() => setMobileSidebarOpen(false)} className="ctrl-btn" style={{ marginInlineStart: 'auto' }}>
+              <IconX size={16} />
+            </button>
+          )}
         </div>
 
+        {/* Navigation Sections */}
         <nav className="sidebar-nav">
+          {/* Group 1: Workspace */}
           <div className="nav-section-title">
-            {isAr ? 'مساحة العمل الأساسية' : 'CORE WORKSPACE'}
+            {isAr ? 'مساحة العمل والقيادة' : 'WORKSPACE'}
           </div>
 
           <button
-            onClick={() => onSelectView('dashboard')}
-            className={`nav-item ${view === 'dashboard' ? 'active' : ''}`}
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
+            className={`nav-item ${currentRoute === 'platform' ? 'active' : ''}`}
           >
-            <IconDashboard />
-            <span>{isAr ? 'نظرة عامة / القيادة' : 'Executive Overview'}</span>
+            <IconDashboard size={16} />
+            <span>{isAr ? 'مركز القيادة التنفيذي' : 'Executive Command Center'}</span>
           </button>
 
+          {/* Group 2: Intelligence Suite */}
           <div className="nav-section-title">
             {isAr ? 'محركات الذكاء والتحليل' : 'INTELLIGENCE SUITE'}
           </div>
 
           <button
-            onClick={() => onSelectView('intelligence-detail')}
-            className={`nav-item ${view === 'intelligence-detail' ? 'active' : ''}`}
+            onClick={() => {
+              onNavigateRoute('detail');
+              setMobileSidebarOpen(false);
+            }}
+            className={`nav-item ${currentRoute === 'detail' ? 'active' : ''}`}
           >
-            <IconFinance />
-            <span>{isAr ? 'الذكاء المالي وكشف الشذوذ' : 'Financial Intelligence'}</span>
+            <IconFinance size={16} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{isAr ? 'الذكاء المالي وكشف الشذوذ' : 'Financial Intelligence'}</span>
+              <span className="severity-tag high" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                7 {isAr ? 'حالات' : 'flags'}
+              </span>
+            </div>
           </button>
 
           <button
-            onClick={() => onSelectView('dashboard')}
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
             className="nav-item"
           >
-            <IconDecisions />
-            <span>{isAr ? 'مركز القرارات التنفيذية' : 'Executive Decisions'}</span>
+            <IconDecisions size={16} />
+            <span>{isAr ? 'مركز القرارات التنفيذية' : 'Decision Center'}</span>
           </button>
 
           <button
-            onClick={() => onSelectView('dashboard')}
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
             className="nav-item"
           >
-            <IconRisk />
+            <IconRisk size={16} />
             <span>{isAr ? 'ذكاء إدارة المخاطر' : 'Risk Intelligence'}</span>
           </button>
 
           <button
-            onClick={() => onSelectView('dashboard')}
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
             className="nav-item"
           >
-            <IconProjects />
-            <span>{isAr ? 'ذكاء المشاريع (اختياري)' : 'Project Intelligence'}</span>
+            <IconProjects size={16} />
+            <span>{isAr ? 'ذكاء أداء المشاريع' : 'Project Intelligence'}</span>
           </button>
 
           <button
-            onClick={() => onSelectView('dashboard')}
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
             className="nav-item"
           >
-            <IconAssistant />
-            <span>{isAr ? 'المساعد الذكي للأعمال' : 'AI Assistant'}</span>
+            <IconSupplier size={16} />
+            <span>{isAr ? 'ذكاء الموردين والمشتريات' : 'Supplier Intelligence'}</span>
           </button>
 
+          <button
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
+            className="nav-item"
+          >
+            <IconCustomer size={16} />
+            <span>{isAr ? 'ذكاء ومراقبة العملاء' : 'Customer Intelligence'}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
+            className="nav-item"
+          >
+            <IconDataQuality size={16} />
+            <span>{isAr ? 'جودة وحوكمة البيانات' : 'Data Quality Intelligence'}</span>
+          </button>
+
+          {/* Group 3: AI Assistant */}
           <div className="nav-section-title">
-            {isAr ? 'إدارة المؤسسة' : 'ORGANIZATION'}
+            {isAr ? 'الذكاء الاصطناعي المدعوم بالأدلة' : 'AI ASSISTANT'}
+          </div>
+
+          <button
+            onClick={() => {
+              onNavigateRoute('platform');
+              setMobileSidebarOpen(false);
+            }}
+            className="nav-item"
+          >
+            <IconAssistant size={16} />
+            <span>{isAr ? 'المساعد التنفيذي الذكي' : 'Executive AI Assistant'}</span>
+          </button>
+
+          {/* Group 4: Administration & Settings */}
+          <div className="nav-section-title">
+            {isAr ? 'الإدارة والسيادة' : 'ADMINISTRATION'}
           </div>
 
           <button className="nav-item">
-            <span>🏢</span>
-            <span>{isAr ? 'الفروع والمستودعات' : 'Branches & Hubs'}</span>
+            <IconServer size={16} />
+            <span>{isAr ? 'مصادر البيانات وتكامل ERP' : 'Data Sources & ERP'}</span>
           </button>
 
           <button className="nav-item">
-            <span>🛡️</span>
-            <span>{isAr ? 'سجلات التدقيق والأمان' : 'Security & Audit'}</span>
+            <IconShield size={16} />
+            <span>{isAr ? 'الصلاحيات وسجلات التدقيق' : 'RBAC & Audit Trails'}</span>
           </button>
         </nav>
       </aside>
 
-      {/* Main Content Region */}
+      {/* Main App Content View */}
       <main className="app-main">
-        {/* Header */}
+        {/* Top Header */}
         <header className="app-header">
           <div className="header-left">
+            {/* Mobile Drawer Trigger */}
+            <button
+              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+              className="ctrl-btn"
+              style={{ display: 'none' }} // styled for small screens
+            >
+              <IconMenu size={18} />
+            </button>
+
+            {/* Organization / Workspace Switcher */}
             <div className="workspace-badge">
               <span>🏛️</span>
-              <span>{isAr ? 'المؤسسة: مجموعة التقنية القابضة' : 'Workspace: Tech Holdings Group'}</span>
+              <select
+                value={selectedWorkspace}
+                onChange={(e) => setSelectedWorkspace(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'inherit',
+                  fontFamily: 'inherit',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                    {isAr ? w.nameAr : w.nameEn}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-              HQ — Main Branch
-            </div>
+            {/* Quick Link back to Website */}
+            <button
+              onClick={onNavigateHome}
+              className="ctrl-btn"
+              style={{ fontSize: '11px' }}
+            >
+              <span>{isAr ? '🌐 الموقع العام' : '🌐 Public Website'}</span>
+            </button>
           </div>
 
-          <div className="header-right">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--status-success)' }} />
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                {isAr ? 'متصل بالخادم' : 'Server Online'}
+          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Live Data Freshness Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-subtle)', fontSize: '11px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--status-success)' }} />
+              <span style={{ color: 'var(--text-secondary)' }}>
+                {isAr ? 'البيانات: متصلة ومحدثة' : 'Feeds: Live & Fresh'}
               </span>
             </div>
 
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
-              SA
+            {/* Lang Toggle */}
+            <button onClick={onToggleLocale} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Language">
+              <IconGlobe size={14} />
+              <span>{isAr ? 'EN' : 'عربي'}</span>
+            </button>
+
+            {/* Theme Toggle */}
+            <button onClick={onToggleTheme} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Theme">
+              {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
+            </button>
+
+            {/* User Profile */}
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                background: 'var(--accent-subtle)',
+                border: '1px solid var(--accent-base)',
+                color: 'var(--accent-light)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '12px'
+              }}
+              title="Saad Al-Mikhlafi (Executive Admin)"
+            >
+              SM
             </div>
           </div>
         </header>
 
+        {/* Content Body */}
         {children}
       </main>
     </div>

@@ -1,161 +1,105 @@
-import React from 'react';
-import { KpiItem, LocaleMode, AnomalyRecord } from '../types';
+import React, { useState } from 'react';
+import { LocaleMode } from '../types';
+import { MOCK_KPIS, MOCK_ANOMALIES } from '../data/mockData';
 import { KpiCard } from './KpiCard';
 import { ChartPreview } from './ChartPreview';
+import { IconArrowRight } from './Icons';
 
 interface ExecutiveDashboardProps {
   locale: LocaleMode;
   onNavigateDetail: () => void;
 }
 
-const mockKpis: KpiItem[] = [
-  {
-    id: 'kpi-1',
-    titleAr: 'مؤشر الكفاءة التشغيلية',
-    titleEn: 'Operational Efficiency Index',
-    value: '94.2%',
-    delta: '+3.8%',
-    isPositive: true,
-    unitAr: 'معدل',
-    unitEn: 'Rate',
-    sourceAr: 'تحليل الأنشطة التشغيلية',
-    sourceEn: 'Operations Stream',
-    qualityStatus: 'fresh'
-  },
-  {
-    id: 'kpi-2',
-    titleAr: 'حجم التدفقات النقدية الصافية',
-    titleEn: 'Net Cash Flow Velocity',
-    value: '2.84M',
-    delta: '+12.4%',
-    isPositive: true,
-    unitAr: 'SAR (افتراضي)',
-    unitEn: 'Units',
-    sourceAr: 'دفتر الأستاذ والمدفوعات',
-    sourceEn: 'General Ledger',
-    qualityStatus: 'fresh'
-  },
-  {
-    id: 'kpi-3',
-    titleAr: 'الانحرافات المرصودة النشطة',
-    titleEn: 'Active Detected Anomalies',
-    value: '7',
-    delta: '-2',
-    isPositive: true, // Lower anomalies is positive
-    unitAr: 'حالات فحص',
-    unitEn: 'Cases',
-    sourceAr: 'محرك كشف الشذوذ المالي',
-    sourceEn: 'Anomaly Engine',
-    qualityStatus: 'fresh'
-  },
-  {
-    id: 'kpi-4',
-    titleAr: 'معدل مخاطر الموردين الكلي',
-    titleEn: 'Aggregate Supplier Risk',
-    value: '18.5%',
-    delta: '+1.2%',
-    isPositive: false, // Higher risk is negative
-    unitAr: 'نسبة مخاطرة',
-    unitEn: 'Risk Index',
-    sourceAr: 'سلاسل الإمداد ومواعيد التسليم',
-    sourceEn: 'Supply Ingestion',
-    qualityStatus: 'fresh'
-  }
-];
-
-const mockRecentAnomalies: AnomalyRecord[] = [
-  {
-    id: 'an-1',
-    code: 'ANOM-2026-081',
-    titleAr: 'تكرار صرف مدفوعات لمستفيد واحد خلال 48 ساعة',
-    titleEn: 'Duplicate payment disbursement pattern within 48h',
-    categoryAr: 'تسرب مالي',
-    categoryEn: 'Financial Leakage',
-    impactValue: '48,500',
-    severity: 'high',
-    confidenceScore: 0.94,
-    detectedAt: '2026-10-12 02:15',
-    statusAr: 'قيد الفحص',
-    statusEn: 'Under Review'
-  },
-  {
-    id: 'an-2',
-    code: 'ANOM-2026-079',
-    titleAr: 'انحراف تسعير عقود توريد مقارنة بمتوسط السوق',
-    titleEn: 'Procurement variance above contractual baseline',
-    categoryAr: 'كفاءة المشتريات',
-    categoryEn: 'Procurement',
-    impactValue: '124,000',
-    severity: 'medium',
-    confidenceScore: 0.88,
-    detectedAt: '2026-10-11 18:30',
-    statusAr: 'مؤكد جزئياً',
-    statusEn: 'Partially Verified'
-  },
-  {
-    id: 'an-3',
-    code: 'ANOM-2026-075',
-    titleAr: 'تأخر استلام بضائع يؤثر على تسليم 3 مشاريع',
-    titleEn: 'Milestone delay impact on dependent project delivery',
-    categoryAr: 'سلاسل الإمداد',
-    categoryEn: 'Supply Chain',
-    impactValue: 'N/A',
-    severity: 'low',
-    confidenceScore: 0.79,
-    detectedAt: '2026-10-11 11:20',
-    statusAr: 'مغلق ومصحح',
-    statusEn: 'Resolved'
-  }
-];
-
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, onNavigateDetail }) => {
   const isAr = locale === 'ar';
+  const [selectedPeriod, setSelectedPeriod] = useState('q4');
 
   return (
     <div className="content-scroll">
-      {/* Page Intro */}
+      {/* Top Header & Date Range Controls */}
       <div className="page-intro">
         <div>
-          <h1 className="page-title">{isAr ? 'نظرة عامة على مساحة عمل المنصة' : 'Executive Intelligence Overview'}</h1>
+          <h1 className="page-title">
+            {isAr ? 'مركز القيادة والذكاء التنفيذي الموحد' : 'Executive Command Center'}
+          </h1>
           <p className="page-desc">
             {isAr
               ? 'مراقبة حية وشاملة لأداء المؤسسة، كشف الانحرافات المالية والتشغيلية، ودعم اتخاذ القرارات الاستراتيجية.'
               : 'Holistic business monitoring, early operational anomaly detection, and unified decision intelligence.'}
           </p>
         </div>
-        <div className="period-pill">
-          <span>📅</span>
-          <span>{isAr ? 'الربع المالي الحالي (Q4 2026)' : 'Current Quarter (Q4 2026)'}</span>
+
+        {/* Date Range Selector & Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
+            <button
+              onClick={() => setSelectedPeriod('m')}
+              className={`ctrl-btn ${selectedPeriod === 'm' ? 'active' : ''}`}
+              style={{ padding: '4px 10px', fontSize: '11px', border: 'none' }}
+            >
+              {isAr ? 'الشهر الحالي' : 'Month'}
+            </button>
+            <button
+              onClick={() => setSelectedPeriod('q4')}
+              className={`ctrl-btn ${selectedPeriod === 'q4' ? 'active' : ''}`}
+              style={{ padding: '4px 10px', fontSize: '11px', border: 'none' }}
+            >
+              {isAr ? 'الربع المالي Q4' : 'Q4 Quarter'}
+            </button>
+            <button
+              onClick={() => setSelectedPeriod('y')}
+              className={`ctrl-btn ${selectedPeriod === 'y' ? 'active' : ''}`}
+              style={{ padding: '4px 10px', fontSize: '11px', border: 'none' }}
+            >
+              {isAr ? 'العام الحالي' : 'YTD'}
+            </button>
+          </div>
+
+          <button
+            onClick={onNavigateDetail}
+            className="btn-primary"
+            style={{ fontSize: '12px', padding: '7px 14px' }}
+          >
+            <span>{isAr ? 'التدقيق المالي الكامل' : 'Open Financial Audit'}</span>
+            <IconArrowRight size={13} />
+          </button>
         </div>
       </div>
 
-      {/* Honest Empty / Demo Disclaimer Alert */}
+      {/* Honest Demo Mode Disclaimer Banner */}
       <div className="honest-alert">
-        <span style={{ fontSize: '18px' }}>ℹ️</span>
-        <div>
-          <strong>{isAr ? 'وضع العرض الاسترشادي المدار (Demo Mode):' : 'Controlled Demo Environment:'}</strong>{' '}
+        <span style={{ fontSize: '20px' }}>ℹ️</span>
+        <div style={{ flex: 1 }}>
+          <strong style={{ color: 'var(--text-primary)' }}>
+            {isAr ? 'وضع العرض الاسترشادي المدار (Demonstration Dataset):' : 'Controlled Benchmark Evaluation Mode:'}
+          </strong>{' '}
           {isAr
-            ? 'البيانات المعروضة أدناه هي بيانات نموذجية استرشادية لاختبار وتدقيق تجربة الاستخدام ونظام التصميم قبل ربط قاعدة بيانات PostgreSQL.'
+            ? 'البيانات والأرقام المعروضة أدناه هي بيانات نموذجية استرشادية مصممة لتقييم تجربة الاستخدام وسرعة الاستجابة قبل إتمام ربط قاعدة بيانات PostgreSQL.'
             : 'Metrics displayed are demonstration benchmarks designed to evaluate UI responsiveness and the design system prior to live PostgreSQL connection.'}
         </div>
+        <span style={{ fontSize: '11px', color: 'var(--accent-light)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+          STATUS: DEMO_INTEGRITY_VERIFIED
+        </span>
       </div>
 
-      {/* KPI Grid */}
+      {/* KPI Summary Cards Grid */}
       <div className="kpi-grid">
-        {mockKpis.map((kpi) => (
+        {MOCK_KPIS.map((kpi) => (
           <KpiCard key={kpi.id} item={kpi} locale={locale} />
         ))}
       </div>
 
-      {/* Bento Grid Analytics Area */}
+      {/* Bento Grid: Trend Chart & Executive Action Queue */}
       <div className="bento-grid">
         {/* Trend Chart Panel */}
         <div className="content-panel">
           <div className="panel-header">
             <div>
-              <h2 className="panel-title">{isAr ? 'منحنى مؤشر الاستقرار التشغيلي' : 'Operational Stability Index Trend'}</h2>
-              <span className="panel-subtitle">
-                {isAr ? 'تطور الأداء المجمع ومعدل تلافي المخاطر الشهرية' : 'Aggregate operational performance vs mitigation baselines'}
+              <h2 className="panel-title">
+                {isAr ? 'منحنى مؤشر الاستقرار التشغيلي ومعدل تلافي الهدر' : 'Operational Stability Index & Loss Mitigation Trend'}
+              </h2>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                {isAr ? 'تطور الأداء المجمع ومعدل تلافي المخاطر الشهرية مقابل الحدود المرجعية' : 'Aggregate operational performance vs mitigation baselines over rolling quarters'}
               </span>
             </div>
             <button
@@ -163,47 +107,75 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, 
               style={{
                 fontSize: '12px',
                 color: 'var(--accent-light)',
-                fontWeight: 600,
-                textDecoration: 'underline'
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
               }}
             >
-              {isAr ? 'التفاصيل والتدقيق ←' : 'Deep-Dive Details →'}
+              <span>{isAr ? 'التفاصيل والتدقيق' : 'Deep-Dive'}</span>
+              <IconArrowRight size={13} />
             </button>
           </div>
 
           <ChartPreview locale={locale} />
         </div>
 
-        {/* Priority Decisions / Action Summary */}
+        {/* Priority Action Items / Executive Decisions Queue */}
         <div className="content-panel">
           <div className="panel-header">
-            <h2 className="panel-title">{isAr ? 'التوصيات التنفيذية العاجلة' : 'Executive Action Priorities'}</h2>
+            <h2 className="panel-title">
+              {isAr ? 'التوصيات والقرارات التنفيذية العاجلة' : 'Executive Action Priorities'}
+            </h2>
+            <span className="severity-tag high">3 PENDING</span>
           </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', borderLeft: isAr ? 'none' : '3px solid var(--status-danger)', borderRight: isAr ? '3px solid var(--status-danger)' : 'none' }}>
-              <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '2px' }}>
-                {isAr ? 'مراجعة أمر الصرف رقم #482' : 'Audit Disbursement Order #482'}
+            <div style={{ padding: '12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', borderInlineStart: '3px solid var(--status-danger)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                  {isAr ? 'مراجعة أمر الصرف رقم #INV-9041' : 'Audit Disbursement #INV-9041'}
+                </strong>
+                <span style={{ fontSize: '11px', color: 'var(--status-danger)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                  48,500 SAR
+                </span>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                {isAr ? 'اشتباه في تكرار المطالبة مع فرع الرياض' : 'Suspected duplicate invoice matched across Riyadh branch'}
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                {isAr ? 'اشتباه في تكرار المطالبة مع فرع الرياض خلال 48 ساعة' : 'Suspected duplicate invoice matched across Riyadh branch within 48h'}
+              </div>
+              <button
+                onClick={onNavigateDetail}
+                style={{ fontSize: '11px', color: 'var(--accent-light)', fontWeight: 700, marginTop: '6px' }}
+              >
+                {isAr ? 'فحص الأدلة واتخاذ إجراء ←' : 'Inspect Evidence & Mitigate →'}
+              </button>
+            </div>
+
+            <div style={{ padding: '12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', borderInlineStart: '3px solid var(--status-warning)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                  {isAr ? 'تجديد عقود الموردين الرئيسيين' : 'Primary Vendor Contract Review'}
+                </strong>
+                <span style={{ fontSize: '11px', color: 'var(--status-warning)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                  -8.0% Window
+                </span>
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                {isAr ? 'فرصة تفاوض لتخفيض 8% بناءً على إجمالي حجم التوريد السنوي' : 'Volume renegotiation window open based on annualized aggregate procurement'}
               </div>
             </div>
 
-            <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', borderLeft: isAr ? 'none' : '3px solid var(--status-warning)', borderRight: isAr ? '3px solid var(--status-warning)' : 'none' }}>
-              <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '2px' }}>
-                {isAr ? 'تجديد عقود الموردين الرئيسيين' : 'Primary Vendor Contract Renewal'}
+            <div style={{ padding: '12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', borderInlineStart: '3px solid var(--status-info)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                  {isAr ? 'مزامنة بيانات المستودعات الموحدة' : 'Warehouse Data Sync Verified'}
+                </strong>
+                <span style={{ fontSize: '11px', color: 'var(--status-success)', fontWeight: 700 }}>
+                  100% Match
+                </span>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                {isAr ? 'فرصة تفاوض لتخفيض 8% بناءً على حجم التوريد السنوي' : '8% volume discount renegotiation window identified'}
-              </div>
-            </div>
-
-            <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', borderLeft: isAr ? 'none' : '3px solid var(--status-info)', borderRight: isAr ? '3px solid var(--status-info)' : 'none' }}>
-              <div style={{ fontWeight: 700, fontSize: '12px', marginBottom: '2px' }}>
-                {isAr ? 'اكتمال مزامنة مصادر بيانات المستودعات' : 'Warehouse Data Sync Verified'}
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                {isAr ? 'تم استيراد 1,420 حركة مخزون دون أي انحرافات' : '1,420 transactions processed with 100% integrity score'}
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                {isAr ? 'تم استيراد 1,420 حركة مخزون دون أي انحرافات محاسبية' : '1,420 transaction records reconciled across central hubs with zero discrepancies'}
               </div>
             </div>
           </div>
@@ -214,15 +186,18 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, 
       <div className="content-panel">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">{isAr ? 'أحدث الانحرافات المرصودة للتدقيق' : 'Recent Detected Anomalies'}</h2>
-            <span className="panel-subtitle">
-              {isAr ? 'قائمة الحالات التي تتطلب مراجعة من الإدارة المالية والتشغيلية' : 'Audit logs flagged by algorithmic verification rules'}
+            <h2 className="panel-title">
+              {isAr ? 'سجل الانحرافات وحالات التدقيق الجنائي المفتوحة' : 'Open Forensic Anomaly Audit Log'}
+            </h2>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {isAr ? 'قائمة الحالات التي تتطلب مراجعة من الإدارة المالية والتشغيلية' : 'Algorithmic flags generated via deterministic reconciliation rules'}
             </span>
           </div>
+
           <button
             onClick={onNavigateDetail}
             className="ctrl-btn"
-            style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ fontSize: '12px' }}
           >
             <span>🔍</span>
             <span>{isAr ? 'فتح شاشة التدقيق المالي الكامل' : 'Open Financial Intelligence'}</span>
@@ -234,34 +209,58 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, 
             <thead>
               <tr>
                 <th>{isAr ? 'رمز الحالة' : 'Code'}</th>
-                <th>{isAr ? 'عنوان الانحراف' : 'Anomaly Description'}</th>
+                <th>{isAr ? 'عنوان الانحراف المرصود' : 'Anomaly Description'}</th>
                 <th>{isAr ? 'التصنيف' : 'Category'}</th>
-                <th>{isAr ? 'الأثر المقدر' : 'Estimated Impact'}</th>
+                <th>{isAr ? 'الأثر المالي' : 'Impact Value'}</th>
                 <th>{isAr ? 'مستوى الخطورة' : 'Severity'}</th>
                 <th>{isAr ? 'نسبة الثقة' : 'Confidence'}</th>
                 <th>{isAr ? 'وقت الرصد' : 'Detected At'}</th>
                 <th>{isAr ? 'الحالة' : 'Status'}</th>
+                <th>{isAr ? 'الإجراء' : 'Action'}</th>
               </tr>
             </thead>
             <tbody>
-              {mockRecentAnomalies.map((an) => (
+              {MOCK_ANOMALIES.map((an) => (
                 <tr key={an.id}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{an.code}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-light)' }}>
+                    {an.code}
+                  </td>
                   <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                     {isAr ? an.titleAr : an.titleEn}
                   </td>
                   <td>{isAr ? an.categoryAr : an.categoryEn}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)' }}>{an.impactValue}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                    {an.impactValue}
+                  </td>
                   <td>
                     <span className={`severity-tag ${an.severity}`}>
                       {an.severity}
                     </span>
                   </td>
                   <td style={{ fontFamily: 'var(--font-mono)' }}>
-                    {(an.confidenceScore * 100).toFixed(0)}%
+                    {(an.confidenceScore * 100).toFixed(1)}%
                   </td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>{an.detectedAt}</td>
-                  <td>{isAr ? an.statusAr : an.statusEn}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                    {an.detectedAt}
+                  </td>
+                  <td>
+                    <span style={{ fontSize: '11px', fontWeight: 600 }}>
+                      {isAr ? an.statusAr : an.statusEn}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      onClick={onNavigateDetail}
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--accent-light)',
+                        fontWeight: 700,
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      {isAr ? 'فحص الأدلة' : 'Inspect'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
