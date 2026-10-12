@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { LocaleMode } from '../types';
+import React, { useState, useEffect } from 'react';
+import { LocaleMode, KpiItem } from '../types';
 import { MOCK_KPIS, MOCK_ANOMALIES } from '../data/mockData';
 import { KpiCard } from './KpiCard';
 import { ChartPreview } from './ChartPreview';
 import { IconArrowRight } from './Icons';
+import { useAuth } from '../context/AuthContext';
+import { api, DashboardSummaryResponse } from '../api/client';
 
 interface ExecutiveDashboardProps {
   locale: LocaleMode;
@@ -12,7 +14,90 @@ interface ExecutiveDashboardProps {
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, onNavigateDetail }) => {
   const isAr = locale === 'ar';
+  const { isAuthenticated, tenant, openAuthModal } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState('q4');
+  const [liveSummary, setLiveSummary] = useState<DashboardSummaryResponse | null>(null);
+  const [isLoadingLive, setIsLoadingLive] = useState<boolean>(false);
+  const [errorLive, setErrorLive] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (isAuthenticated) {
+      setIsLoadingLive(true);
+      setErrorLive(null);
+      api.getDashboardSummary()
+        .then((data) => {
+          if (isMounted) setLiveSummary(data);
+        })
+        .catch((err) => {
+          if (isMounted) setErrorLive(err.message || 'Failed to load live summary');
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingLive(false);
+        });
+    } else {
+      setLiveSummary(null);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, tenant?.organizationId]);
+
+  // Map live PostgreSQL metrics to KPI cards when authenticated
+  const liveKpis: KpiItem[] = liveSummary ? [
+    {
+      id: 'kpi-live-1',
+      titleAr: 'قرارات تنفيذية بانتظار الاعتماد',
+      titleEn: 'Pending Executive Decisions',
+      value: String(liveSummary.kpis.pendingDecisionsCount),
+      delta: 'محدث لحظياً',
+      isPositive: true,
+      unitAr: 'قرار',
+      unitEn: 'Actions',
+      sourceAr: 'PostgreSQL: tenant_decisions',
+      sourceEn: 'PostgreSQL: tenant_decisions',
+      qualityStatus: 'fresh'
+    },
+    {
+      id: 'kpi-live-2',
+      titleAr: 'الأثر المالي المتوقع للقرارات',
+      titleEn: 'Pending Decision Impact',
+      value: (Number(liveSummary.kpis.pendingImpactSAR) || 0).toLocaleString(),
+      delta: 'عالي التأثير',
+      isPositive: true,
+      unitAr: liveSummary.organization.currency || 'SAR',
+      unitEn: liveSummary.organization.currency || 'SAR',
+      sourceAr: 'PostgreSQL: tenant_decisions',
+      sourceEn: 'PostgreSQL: tenant_decisions',
+      qualityStatus: 'fresh'
+    },
+    {
+      id: 'kpi-live-3',
+      titleAr: 'قرارات منفذة ومدققة',
+      titleEn: 'Executed & Audited Actions',
+      value: String(liveSummary.kpis.executedDecisionsCount),
+      delta: `${(Number(liveSummary.kpis.executedImpactSAR) || 0).toLocaleString()} SAR`,
+      isPositive: true,
+      unitAr: 'منفذ',
+      unitEn: 'Executed',
+      sourceAr: 'PostgreSQL: audit_logs',
+      sourceEn: 'PostgreSQL: audit_logs',
+      qualityStatus: 'fresh'
+    },
+    {
+      id: 'kpi-live-4',
+      titleAr: 'سجلات التدقيق والأمان المسجلة',
+      titleEn: 'Audited Governance Events',
+      value: String(liveSummary.kpis.auditEventsLogged),
+      delta: 'مسار آمن 100%',
+      isPositive: true,
+      unitAr: 'حدث',
+      unitEn: 'Events',
+      sourceAr: 'PostgreSQL: audit_logs',
+      sourceEn: 'PostgreSQL: audit_logs',
+      qualityStatus: 'fresh'
+    }
+  ] : MOCK_KPIS;
 
   return (
     <div className="content-scroll">
@@ -66,25 +151,64 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, 
         </div>
       </div>
 
-      {/* Honest Demo Mode Disclaimer Banner */}
-      <div className="honest-alert">
-        <span style={{ fontSize: '20px' }}>ℹ️</span>
-        <div style={{ flex: 1 }}>
-          <strong style={{ color: 'var(--text-primary)' }}>
-            {isAr ? 'وضع العرض الاسترشادي المدار (Demonstration Dataset):' : 'Controlled Benchmark Evaluation Mode:'}
-          </strong>{' '}
-          {isAr
-            ? 'البيانات والأرقام المعروضة أدناه هي بيانات نموذجية استرشادية مصممة لتقييم تجربة الاستخدام وسرعة الاستجابة قبل إتمام ربط قاعدة بيانات PostgreSQL.'
-            : 'Metrics displayed are demonstration benchmarks designed to evaluate UI responsiveness and the design system prior to live PostgreSQL connection.'}
+      {/* Honest Demo Mode / Live Connection Banner */}
+      {isAuthenticated && isLoadingLive && (
+        <div className="honest-alert" style={{ borderColor: 'var(--accent-base)', background: 'rgba(59, 130, 246, 0.08)' }}>
+          <span style={{ fontSize: '20px' }}>⏳</span>
+          <div style={{ flex: 1 }}>
+            <strong>{isAr ? 'جارِ استرجاع المؤشرات الحية من PostgreSQL...' : 'Loading live metrics from PostgreSQL...'}</strong>
+          </div>
         </div>
-        <span style={{ fontSize: '11px', color: 'var(--accent-light)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-          STATUS: DEMO_INTEGRITY_VERIFIED
-        </span>
-      </div>
+      )}
+
+      {isAuthenticated && errorLive && (
+        <div className="honest-alert" style={{ borderColor: 'var(--status-danger)', background: 'rgba(239, 68, 68, 0.08)' }}>
+          <span style={{ fontSize: '20px' }}>⚠️</span>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--status-danger)' }}>{errorLive}</strong>
+          </div>
+        </div>
+      )}
+
+      {isAuthenticated && liveSummary ? (
+        <div className="honest-alert" style={{ borderColor: 'var(--status-success)', background: 'rgba(16, 185, 129, 0.08)' }}>
+          <span style={{ fontSize: '20px' }}>🟢</span>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--status-success)' }}>
+              {isAr ? 'جلسة تشغيلية حقيقية متصلة بقاعدة البيانات (Live Production Backend):' : 'Live Verified Database Connection (Multi-Tenant Active):'}
+            </strong>{' '}
+            {isAr
+              ? `المؤسسة الحالية: ${liveSummary.organization.nameAr || liveSummary.organization.nameEn} — محرك البيانات: ${liveSummary.databaseEngine} — حالة عزل البيانات: ${liveSummary.isolationStatus}`
+              : `Active Tenant: ${liveSummary.organization.nameEn} — Engine: ${liveSummary.databaseEngine} — Isolation: ${liveSummary.isolationStatus}`}
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--status-success)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+            POSTGRESQL_TENANT_ISOLATED
+          </span>
+        </div>
+      ) : (
+        <div className="honest-alert">
+          <span style={{ fontSize: '20px' }}>ℹ️</span>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>
+              {isAr ? 'وضع العرض الاسترشادي المدار (Demonstration Dataset):' : 'Controlled Benchmark Evaluation Mode:'}
+            </strong>{' '}
+            {isAr
+              ? 'أنت تستعرض حالياً بيانات نموذجية استرشادية. لتسجيل الدخول إلى حساب مؤسستك والوصول إلى قاعدة بيانات PostgreSQL الحقيقية وعزل البيانات الصارم، انقر على زر تسجيل الدخول.'
+              : 'Viewing demonstration benchmarks. To view live tenant metrics isolated in PostgreSQL, sign in with your enterprise credentials.'}
+          </div>
+          <button
+            onClick={openAuthModal}
+            className="btn-primary"
+            style={{ fontSize: '11px', padding: '5px 12px' }}
+          >
+            <span>{isAr ? 'تسجيل الدخول' : 'Sign In'}</span>
+          </button>
+        </div>
+      )}
 
       {/* KPI Summary Cards Grid */}
       <div className="kpi-grid">
-        {MOCK_KPIS.map((kpi) => (
+        {liveKpis.map((kpi) => (
           <KpiCard key={kpi.id} item={kpi} locale={locale} />
         ))}
       </div>

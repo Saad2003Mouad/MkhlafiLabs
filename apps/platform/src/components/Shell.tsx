@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { LocaleMode, ThemeMode, AppRoute } from '../types';
+import { useAuth } from '../context/AuthContext';
 import {
   IconDashboard,
   IconFinance,
@@ -46,14 +47,23 @@ export const Shell: React.FC<ShellProps> = ({
   children
 }) => {
   const isAr = locale === 'ar';
+  const { user, tenant, isAuthenticated, openAuthModal, logout, switchOrganization } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [selectedWorkspace, setSelectedWorkspace] = useState('org-01');
 
-  const workspaces = [
-    { id: 'org-01', nameAr: 'مجموعة الأفق القابضة (HQ)', nameEn: 'Al-Ufuq Holdings (HQ)' },
-    { id: 'org-02', nameAr: 'شركة التوريدات والخدمات اللوجستية', nameEn: 'National Logistics & Supply' },
-    { id: 'org-03', nameAr: 'المجموعة الصناعية الخليجية', nameEn: 'Gulf Industrial Group' }
+  const fallbackWorkspaces = [
+    { id: 'demo-org-1', nameAr: 'مجموعة الأفق القابضة (عرض تجريبي)', nameEn: 'Al-Ufuq Holdings (Demo View)' },
+    { id: 'demo-org-2', nameAr: 'شركة التوريدات والخدمات (عرض تجريبي)', nameEn: 'National Logistics (Demo View)' }
   ];
+
+  const availableWorkspaces = (tenant?.availableOrganizations && tenant.availableOrganizations.length > 0)
+    ? tenant.availableOrganizations.map(o => ({
+        id: o.id,
+        nameAr: o.nameAr || o.nameEn,
+        nameEn: o.nameEn
+      }))
+    : fallbackWorkspaces;
+
+  const currentOrgId = tenant?.organizationId || availableWorkspaces[0]?.id || '';
 
   const handleNav = (route: AppRoute) => {
     onNavigateRoute(route);
@@ -294,11 +304,11 @@ export const Shell: React.FC<ShellProps> = ({
             </button>
 
             {/* Organization / Workspace Switcher */}
-            <div className="workspace-badge">
+            <div className="workspace-badge" title={isAr ? 'عزل المؤسسات متعدد المستأجرين (Tenant Isolation)' : 'Multi-Tenant Isolation'}>
               <span>🏛️</span>
               <select
-                value={selectedWorkspace}
-                onChange={(e) => setSelectedWorkspace(e.target.value)}
+                value={currentOrgId}
+                onChange={(e) => switchOrganization(e.target.value)}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -310,7 +320,7 @@ export const Shell: React.FC<ShellProps> = ({
                   cursor: 'pointer'
                 }}
               >
-                {workspaces.map((w) => (
+                {availableWorkspaces.map((w) => (
                   <option key={w.id} value={w.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
                     {isAr ? w.nameAr : w.nameEn}
                   </option>
@@ -329,11 +339,27 @@ export const Shell: React.FC<ShellProps> = ({
           </div>
 
           <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Live Data Freshness Badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-subtle)', fontSize: '11px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--status-success)' }} />
+            {/* Live Data Freshness & Tenant Isolation Badge */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 8px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '11px'
+            }}>
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: isAuthenticated ? 'var(--status-success)' : 'var(--status-warning)'
+              }} />
               <span style={{ color: 'var(--text-secondary)' }}>
-                {isAr ? 'البيانات: متصلة ومحدثة' : 'Feeds: Live & Fresh'}
+                {isAuthenticated
+                  ? (isAr ? `PostgreSQL: ${tenant?.orgNameAr || tenant?.orgNameEn || 'متصل'}` : `PostgreSQL: ${tenant?.orgNameEn || 'Connected'}`)
+                  : (isAr ? 'وضع الاستعراض التجريبي' : 'Demo Preview Mode')}
               </span>
             </div>
 
@@ -348,25 +374,54 @@ export const Shell: React.FC<ShellProps> = ({
               {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
             </button>
 
-            {/* User Profile */}
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'var(--accent-subtle)',
-                border: '1px solid var(--accent-base)',
-                color: 'var(--accent-light)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '12px'
-              }}
-              title="Saad Al-Mikhlafi (Executive Admin)"
-            >
-              SM
-            </div>
+            {/* Authentication & User Controls */}
+            {isAuthenticated && user ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '3px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--accent-subtle)',
+                    border: '1px solid var(--accent-base)',
+                    color: 'var(--accent-light)',
+                    fontSize: '11px',
+                    fontWeight: 700
+                  }}
+                  title={`${user.email} (${tenant?.role || 'Member'})`}
+                >
+                  <span>{user.nameEn || user.email}</span>
+                  <span style={{
+                    fontSize: '9px',
+                    padding: '1px 4px',
+                    borderRadius: '3px',
+                    background: 'var(--accent-base)',
+                    color: '#fff',
+                    textTransform: 'uppercase'
+                  }}>
+                    {tenant?.role || 'MEMBER'}
+                  </span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="ctrl-btn"
+                  style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--status-danger)' }}
+                  title={isAr ? 'تسجيل الخروج' : 'Sign Out'}
+                >
+                  {isAr ? 'خروج' : 'Sign Out'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={openAuthModal}
+                className="btn-primary"
+                style={{ fontSize: '11px', padding: '6px 12px' }}
+              >
+                <span>{isAr ? 'تسجيل الدخول' : 'Sign In'}</span>
+              </button>
+            )}
           </div>
         </header>
 

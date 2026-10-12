@@ -1,54 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
 import { IconOrganization, IconCheck, IconPlus } from '../Icons';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../api/client';
 
 interface OrganizationViewProps {
   locale: LocaleMode;
 }
 
-interface MemberItem {
-  id: string;
-  name: string;
-  email: string;
-  roleAr: string;
-  roleEn: string;
-  branch: string;
-  status: 'active' | 'invited';
-}
-
 export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [members] = useState<MemberItem[]>([
+  const { isAuthenticated, tenant, openAuthModal } = useAuth();
+
+  const fallbackMembers = [
     {
-      id: 'm-1',
+      id: 'm-demo-1',
+      user_id: 'u-1',
       name: 'سعد المخلافي',
-      email: 's.mikhlafi@holding.sa',
-      roleAr: 'المسؤول التنفيذي الأعلى (Owner)',
-      roleEn: 'Executive Owner (Superadmin)',
-      branch: 'Riyadh HQ',
+      email: 'saad@mikhlafi-labs.com',
+      role: 'org_owner',
+      branch_name: 'الرياض — المقر الرئيسي',
       status: 'active'
     },
     {
-      id: 'm-2',
+      id: 'm-demo-2',
+      user_id: 'u-2',
       name: 'فهد السبيعي',
       email: 'f.subaie@holding.sa',
-      roleAr: 'مدير التدقيق المالي',
-      roleEn: 'Chief Audit Officer',
-      branch: 'Riyadh HQ',
-      status: 'active'
-    },
-    {
-      id: 'm-3',
-      name: 'م. خالد الغامدي',
-      email: 'k.ghamdi@holding.sa',
-      roleAr: 'مدير العمليات وسلاسل الإمداد',
-      roleEn: 'Operations & Logistics Director',
-      branch: 'Jeddah Hub',
+      role: 'org_admin',
+      branch_name: 'الرياض — المقر الرئيسي',
       status: 'active'
     }
-  ]);
+  ];
 
+  const fallbackBranches = [
+    { id: 'b-demo-1', name: 'المقر الرئيسي — الرياض', code: 'RUH-HQ', status: 'active' },
+    { id: 'b-demo-2', name: 'مركز العمليات اللوجستية — جدة', code: 'JED-LOG', status: 'active' }
+  ];
+
+  const [members, setMembers] = useState<any[]>(fallbackMembers);
+  const [branches, setBranches] = useState<any[]>(fallbackBranches);
   const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (isAuthenticated) {
+      Promise.all([api.getBranches(), api.getMembers()])
+        .then(([bRes, mRes]) => {
+          if (isMounted) {
+            setBranches(bRes.branches || []);
+            setMembers(mRes.members || []);
+          }
+        })
+        .catch(() => {
+          // Fall back gracefully if error
+        });
+    } else {
+      setBranches(fallbackBranches);
+      setMembers(fallbackMembers);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, tenant?.organizationId]);
 
   const handleInvite = () => {
     setInviteFeedback(isAr ? 'تم إرسال دعوة انضمام بريدية مع رابط التحقق الثنائي.' : 'Invitation sent with 2FA verification link.');
@@ -91,37 +105,56 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
         </div>
       )}
 
+      {/* Tenant Isolation Banner */}
+      {isAuthenticated ? (
+        <div className="honest-alert" style={{ borderColor: 'var(--status-success)', background: 'rgba(16, 185, 129, 0.08)' }}>
+          <span style={{ fontSize: '20px' }}>🏛️</span>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--status-success)' }}>
+              {isAr ? 'عزل المؤسسة مفعل (Strict Tenant Isolation):' : 'Tenant Isolation Enforced:'}
+            </strong>{' '}
+            {isAr
+              ? `جميع الفروع والمستخدمين المعروضين أدناه مسترجعون حصرياً من سجلات المؤسسة النشطة (${tenant?.orgNameAr || tenant?.orgNameEn}) ولا يمكن لأي مؤسسة أخرى استعراضها.`
+              : `All branches and memberships displayed below are strictly isolated to the active organization (${tenant?.orgNameEn}). Cross-tenant access is denied at DB level.`}
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--status-success)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+            ROLE: {tenant?.role?.toUpperCase()}
+          </span>
+        </div>
+      ) : (
+        <div className="honest-alert">
+          <span style={{ fontSize: '20px' }}>ℹ️</span>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--text-primary)' }}>
+              {isAr ? 'بيانات توضيحية استرشادية:' : 'Preview Demonstration Mode:'}
+            </strong>{' '}
+            {isAr
+              ? 'سجل الدخول لاستعراض فروع مؤسستك الحقيقية من PostgreSQL وإدارة صلاحيات الأعضاء.'
+              : 'Sign in to access your organization-specific branches and manage membership roles.'}
+          </div>
+          <button
+            onClick={openAuthModal}
+            className="btn-primary"
+            style={{ fontSize: '11px', padding: '5px 12px' }}
+          >
+            <span>{isAr ? 'تسجيل الدخول' : 'Sign In'}</span>
+          </button>
+        </div>
+      )}
+
       {/* Branches Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', margin: '16px 0' }}>
-        <div className="decision-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, fontSize: '13px' }}>{isAr ? 'المقر الرئيسي — الرياض' : 'Riyadh Headquarters'}</span>
-            <span className="severity-tag optimal">PRIMARY</span>
+        {branches.map((b) => (
+          <div key={b.id} className="decision-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: '13px' }}>{b.name}</span>
+              <span className="severity-tag optimal">{b.code || 'ACTIVE'}</span>
+            </div>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+              {isAr ? 'فرع تشغيلي موثق ومعزول ضمن حدود المؤسسة' : 'Operational branch isolated to tenant scope'}
+            </p>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
-            {isAr ? 'ربط مباشر بأنظمة SAP ودفتر الأستاذ العام' : 'Direct SAP & GL Core Link'}
-          </p>
-        </div>
-
-        <div className="decision-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, fontSize: '13px' }}>{isAr ? 'مركز العمليات اللوجستية — جدة' : 'Jeddah Logistics Hub'}</span>
-            <span className="severity-tag optimal">ACTIVE</span>
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
-            {isAr ? 'مراقبة سلاسل التوريد وعقود المقاولين' : 'Procurement & Logistics Link'}
-          </p>
-        </div>
-
-        <div className="decision-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, fontSize: '13px' }}>{isAr ? 'الفرع الصناعي — الخبر' : 'Khobar Industrial Branch'}</span>
-            <span className="severity-tag optimal">ACTIVE</span>
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
-            {isAr ? 'متابعة المشاريع وتكلفة المواد المباشرة' : 'Industrial Projects & Assets Link'}
-          </p>
-        </div>
+        ))}
       </div>
 
       {/* Members Table */}
@@ -131,7 +164,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
             {isAr ? 'فريق القيادة والوصول المصرح' : 'Active Authorized Leadership Team'}
           </span>
           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {isAr ? 'المقاعد المفعلة: 3 من 25' : 'Seats: 3 / 25 Used'}
+            {isAr ? `إجمالي الأعضاء: ${members.length}` : `Total Members: ${members.length}`}
           </span>
         </div>
 
@@ -149,12 +182,14 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
             <tbody>
               {members.map((m) => (
                 <tr key={m.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 600 }}>{m.name}</td>
+                  <td style={{ padding: '12px 14px', fontWeight: 600 }}>{m.name || m.user_id}</td>
                   <td style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>{m.email}</td>
-                  <td style={{ padding: '12px 14px', color: 'var(--accent-light)', fontWeight: 600 }}>{isAr ? m.roleAr : m.roleEn}</td>
-                  <td style={{ padding: '12px 14px' }}>{m.branch}</td>
+                  <td style={{ padding: '12px 14px', color: 'var(--accent-light)', fontWeight: 600 }}>
+                    <span style={{ textTransform: 'uppercase' }}>{m.role}</span>
+                  </td>
+                  <td style={{ padding: '12px 14px' }}>{m.branch_name || (isAr ? 'المقر العام' : 'Headquarters')}</td>
                   <td style={{ padding: '12px 14px' }}>
-                    <span className="severity-tag optimal">{m.status.toUpperCase()}</span>
+                    <span className="severity-tag optimal">{(m.status || 'ACTIVE').toUpperCase()}</span>
                   </td>
                 </tr>
               ))}

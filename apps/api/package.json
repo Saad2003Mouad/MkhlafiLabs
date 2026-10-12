@@ -6,6 +6,11 @@
   "description": "MIKHLAFI LABS — Central REST API & Security Gateway",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "pg": "^8.23.1"
   }
 }

@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { handleApiRequest } from './apps/api/src/server.js';
+import { runMigrations } from './apps/api/src/db/connection.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT || 3000;
@@ -43,23 +46,11 @@ function serveFile(res, filePath) {
 }
 
 const server = http.createServer((req, res) => {
-  // CORS & Security headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
   const urlPath = req.url.split('?')[0];
 
-  // ── 1. Legacy Route Clean Redirect (/legacy -> /platform) ─────────────────
-  if (urlPath === '/legacy' || urlPath.startsWith('/legacy/')) {
-    res.writeHead(302, { 'Location': '/platform' });
-    res.end();
+  // ── 1. API Endpoints (/api/*) ────────────────────────────────────────────
+  if (urlPath.startsWith('/api/')) {
+    handleApiRequest(req, res);
     return;
   }
 
@@ -103,13 +94,18 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n=============================================================`);
-  console.log(`  MIKHLAFI LABS — Enterprise Decision Intelligence Platform`);
-  console.log(`  INTELLIGENCE · SYSTEMS · INNOVATION`);
-  console.log(`  New Public Homepage:     http://localhost:${PORT}/`);
-  console.log(`  Customer Platform:       http://localhost:${PORT}/platform`);
-  console.log(`  Scenario Review:         http://localhost:${PORT}/prototype`);
-  console.log(`  Preserved Legacy Site:   http://localhost:${PORT}/legacy`);
-  console.log(`=============================================================\n`);
+runMigrations().then(() => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n=============================================================`);
+    console.log(`  MIKHLAFI LABS — Enterprise Decision Intelligence Platform`);
+    console.log(`  INTELLIGENCE · SYSTEMS · INNOVATION`);
+    console.log(`  Public Website:          http://localhost:${PORT}/`);
+    console.log(`  Customer Platform:       http://localhost:${PORT}/platform`);
+    console.log(`  REST API Gateway:        http://localhost:${PORT}/api/v1`);
+    console.log(`  Database Status:         PostgreSQL Schema Initialized`);
+    console.log(`=============================================================\n`);
+  });
+}).catch(err => {
+  console.error('[Database Migration Failed on Startup]:', err);
+  process.exit(1);
 });

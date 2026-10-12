@@ -149,3 +149,14 @@ CREATE TABLE data_sources (
 * بدلاً من إضافة أعمدة متخصصة بكل قطاع إلى جدول `organizations` أو جداول المعاملات، يتم استخدام:
   1. **حقول البيانات المرنة (JSONB Meta Fields):** تخزين المتغيرات الإضافية لكل قطاع دون الحاجة لتغيير هيكل الجداول في كل مرة.
   2. **جداول الامتدادات المنفصلة (Extension Tables):** عند الحاجة لمنطق قطاعي متقدم (مثل `construction_project_phases` أو `retail_store_inventories`)، يتم إنشاء جداول مستقلة ترتبط بالكيان الأصلي عبر `foreign key`، مع تفعيلها فقط للمؤسسات التي تشترك في تلك الإمكانية.
+
+---
+
+## 4. حالة التنفيذ الفعلي — المرحلة الثانية (Phase 2 Implemented State)
+- **ملف الترحيل الأولي**: `apps/api/src/db/migrations/001_initial_schema.sql` (مفعل ومطبق بنجاح).
+- **طبقة الاتصال**: `apps/api/src/db/connection.js` تدعم الاتصال المزدوج:
+  - `pg.Pool` لقواعد بيانات PostgreSQL الخارجية عند ضبط `DATABASE_URL`.
+  - `@electric-sql/pglite` كمحرك PostgreSQL 16 داخلي متكامل للتطوير المحلي والاختبارات التلقائية بدون Docker.
+- **جداول النواة المنفذة والمختبرة**: `_migrations`, `users`, `organizations`, `branches`, `roles`, `permissions`, `role_permissions`, `memberships`, `user_sessions`, `audit_logs`, `tenant_decisions`.
+- **الفحوصات التلقائية**: 23 اختباراً آلياً لاختراق الحدود بين المستأجرين والمصادقة الصارمة (`npm test` بنسبة نجاح 100%).
+

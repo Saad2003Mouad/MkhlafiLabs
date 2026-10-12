@@ -1,8 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { ThemeMode, LocaleMode, AppRoute, ViewportMode } from './types';
-import { ScenarioToolbar } from './components/common/ScenarioToolbar';
+// MIKHLAFI LABS — Central Application Entry Point & Unified Router
+// Enforces strict separation between Public Website, Dedicated Auth, and Protected Customer Application
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { ThemeMode, LocaleMode } from './types';
+import { ROUTES, parseRoute, RouteMatch } from './router/routes';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthModal } from './components/auth/AuthModal';
+
+// Layouts & Guards
+import { PublicLayout } from './layouts/PublicLayout';
+import { CustomerLayout } from './layouts/CustomerLayout';
+import { ProtectedRoute } from './guards/ProtectedRoute';
+
+// Public Website Pages
 import { WebsiteHome } from './components/website/WebsiteHome';
-import { Shell } from './components/Shell';
+import { AboutPage } from './pages/public/AboutPage';
+import { PlatformOverviewPage } from './pages/public/PlatformOverviewPage';
+import { SolutionsPage } from './pages/public/SolutionsPage';
+import { IndustriesPage } from './pages/public/IndustriesPage';
+import { PricingPage } from './pages/public/PricingPage';
+import { ContactPage } from './pages/public/ContactPage';
+
+// Dedicated Auth Pages
+import { LoginPage } from './pages/auth/LoginPage';
+import { RegisterPage } from './pages/auth/RegisterPage';
+
+// 404 Not Found Page
+import { NotFoundPage } from './pages/not-found/NotFoundPage';
+
+// Protected Customer Application Views
 import { ExecutiveDashboard } from './components/ExecutiveDashboard';
 import { IntelligenceDetail } from './components/IntelligenceDetail';
 import { DecisionsView } from './components/platform/DecisionsView';
@@ -20,112 +46,54 @@ import { OrganizationView } from './components/platform/OrganizationView';
 import { BillingView } from './components/platform/BillingView';
 import { SettingsView } from './components/platform/SettingsView';
 
-export const App: React.FC = () => {
+const AppRouterContent: React.FC = () => {
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [locale, setLocale] = useState<LocaleMode>('ar');
-  const [viewport, setViewport] = useState<ViewportMode>('desktop');
+  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
 
-  // Determine initial route from URL pathname
-  const getInitialRoute = (): AppRoute => {
-    const path = window.location.pathname.toLowerCase();
-    if (path.includes('/platform/decisions')) return 'platform-decisions';
-    if (path.includes('/platform/risk')) return 'platform-risk';
-    if (path.includes('/platform/project')) return 'platform-projects';
-    if (path.includes('/platform/supplier')) return 'platform-suppliers';
-    if (path.includes('/platform/customer')) return 'platform-customers';
-    if (path.includes('/platform/data-quality')) return 'platform-data-quality';
-    if (path.includes('/platform/assistant')) return 'platform-assistant';
-    if (path.includes('/platform/report')) return 'platform-reports';
-    if (path.includes('/platform/alert')) return 'platform-alerts';
-    if (path.includes('/platform/integration')) return 'platform-integrations';
-    if (path.includes('/platform/workflow')) return 'platform-workflows';
-    if (path.includes('/platform/organization') || path.includes('/platform/branch')) return 'platform-organization';
-    if (path.includes('/platform/billing')) return 'platform-billing';
-    if (path.includes('/platform/setting')) return 'platform-settings';
-    if (path.includes('/platform/finance') || path.includes('/detail')) return 'platform-finance';
-    if (path.startsWith('/platform') || path.startsWith('/dashboard') || path.startsWith('/app') || path.startsWith('/overview')) {
-      return 'platform-overview';
-    }
-    return 'website';
-  };
+  const { isAuthModalOpen, closeAuthModal, refreshAuth } = useAuth();
 
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>(getInitialRoute);
-
-  // Sync route with URL history
-  const navigateRoute = (targetRoute: AppRoute) => {
-    setCurrentRoute(targetRoute);
-    let targetPath = '/';
-    switch (targetRoute) {
-      case 'platform-overview':
-        targetPath = '/platform';
-        break;
-      case 'platform-finance':
-        targetPath = '/platform/finance';
-        break;
-      case 'platform-decisions':
-        targetPath = '/platform/decisions';
-        break;
-      case 'platform-risk':
-        targetPath = '/platform/risk';
-        break;
-      case 'platform-projects':
-        targetPath = '/platform/projects';
-        break;
-      case 'platform-suppliers':
-        targetPath = '/platform/suppliers';
-        break;
-      case 'platform-customers':
-        targetPath = '/platform/customers';
-        break;
-      case 'platform-data-quality':
-        targetPath = '/platform/data-quality';
-        break;
-      case 'platform-assistant':
-        targetPath = '/platform/assistant';
-        break;
-      case 'platform-reports':
-        targetPath = '/platform/reports';
-        break;
-      case 'platform-alerts':
-        targetPath = '/platform/alerts';
-        break;
-      case 'platform-integrations':
-        targetPath = '/platform/integrations';
-        break;
-      case 'platform-workflows':
-        targetPath = '/platform/workflows';
-        break;
-      case 'platform-organization':
-        targetPath = '/platform/organization';
-        break;
-      case 'platform-billing':
-        targetPath = '/platform/billing';
-        break;
-      case 'platform-settings':
-        targetPath = '/platform/settings';
-        break;
-      case 'website':
-      default:
-        targetPath = '/';
-        break;
-    }
-
+  // Navigation handler
+  const navigate = useCallback((targetPath: string) => {
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
+    setCurrentPath(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
 
-  // Handle browser back/forward navigation
+  // Listen to browser forward/back buttons
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentRoute(getInitialRoute());
+      setCurrentPath(window.location.pathname || '/');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Synchronize HTML attributes with current theme and locale
+  // Global click interception for internal links
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a');
+      if (!target) return;
+      const href = target.getAttribute('href');
+      // If href is an internal path and not an anchor scroll or external link
+      if (
+        href &&
+        href.startsWith('/') &&
+        !href.startsWith('//') &&
+        !target.getAttribute('download') &&
+        target.getAttribute('target') !== '_blank'
+      ) {
+        e.preventDefault();
+        navigate(href);
+      }
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, [navigate]);
+
+  // Sync theme and locale attributes
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
@@ -135,118 +103,217 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute('lang', locale);
   }, [locale]);
 
-  const renderPlatformContent = () => {
-    switch (currentRoute) {
-      case 'platform-overview':
+  const routeMatch: RouteMatch = parseRoute(currentPath);
+
+  // ── Render Dedicated Auth Pages ───────────────────────────────────────────
+  if (routeMatch.category === 'auth') {
+    if (routeMatch.matchedRoute === ROUTES.AUTH.LOGIN) {
+      return (
+        <LoginPage
+          locale={locale}
+          theme={theme}
+          onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onNavigateHome={() => navigate(ROUTES.PUBLIC.HOME)}
+          onNavigateRegister={(returnUrl) =>
+            navigate(returnUrl ? `${ROUTES.AUTH.REGISTER}?returnUrl=${encodeURIComponent(returnUrl)}` : ROUTES.AUTH.REGISTER)
+          }
+          onLoginSuccess={(dest) => navigate(dest || ROUTES.APP.ROOT)}
+        />
+      );
+    }
+
+    if (routeMatch.matchedRoute === ROUTES.AUTH.REGISTER) {
+      return (
+        <RegisterPage
+          locale={locale}
+          theme={theme}
+          onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onNavigateHome={() => navigate(ROUTES.PUBLIC.HOME)}
+          onNavigateLogin={(returnUrl) =>
+            navigate(returnUrl ? `${ROUTES.AUTH.LOGIN}?returnUrl=${encodeURIComponent(returnUrl)}` : ROUTES.AUTH.LOGIN)
+          }
+          onRegisterSuccess={(dest) => navigate(dest || ROUTES.APP.ROOT)}
+        />
+      );
+    }
+  }
+
+  // ── Render Protected Customer Application Workspace (/app/*) ──────────────
+  if (routeMatch.category === 'app') {
+    const renderCustomerView = () => {
+      switch (routeMatch.matchedRoute) {
+        case ROUTES.APP.FINANCE:
+          return <IntelligenceDetail locale={locale} onBack={() => navigate(ROUTES.APP.OVERVIEW)} />;
+        case ROUTES.APP.DECISIONS:
+          return <DecisionsView locale={locale} onNavigateDetail={() => navigate(ROUTES.APP.FINANCE)} />;
+        case ROUTES.APP.RISK:
+          return <RiskView locale={locale} />;
+        case ROUTES.APP.PROJECTS:
+          return <ProjectsView locale={locale} />;
+        case ROUTES.APP.SUPPLIERS:
+          return <SuppliersView locale={locale} />;
+        case ROUTES.APP.CUSTOMERS:
+          return <CustomersView locale={locale} />;
+        case ROUTES.APP.DATA_QUALITY:
+          return <DataQualityView locale={locale} />;
+        case ROUTES.APP.ASSISTANT:
+          return <AssistantView locale={locale} />;
+        case ROUTES.APP.REPORTS:
+          return <ReportsView locale={locale} />;
+        case ROUTES.APP.ALERTS:
+          return <AlertsView locale={locale} />;
+        case ROUTES.APP.INTEGRATIONS:
+          return <IntegrationsView locale={locale} />;
+        case ROUTES.APP.WORKFLOWS:
+          return <WorkflowsView locale={locale} />;
+        case ROUTES.APP.ORGANIZATION:
+          return <OrganizationView locale={locale} />;
+        case ROUTES.APP.BILLING:
+          return <BillingView locale={locale} />;
+        case ROUTES.APP.SETTINGS:
+          return <SettingsView locale={locale} />;
+        case ROUTES.APP.ROOT:
+        case ROUTES.APP.OVERVIEW:
+        default:
+          return <ExecutiveDashboard locale={locale} onNavigateDetail={() => navigate(ROUTES.APP.FINANCE)} />;
+      }
+    };
+
+    return (
+      <ProtectedRoute
+        currentPath={currentPath}
+        locale={locale}
+        onRedirectToLogin={(returnPath) =>
+          navigate(`${ROUTES.AUTH.LOGIN}?returnUrl=${encodeURIComponent(returnPath)}`)
+        }
+      >
+        <CustomerLayout
+          theme={theme}
+          locale={locale}
+          currentPath={routeMatch.matchedRoute}
+          onNavigate={navigate}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+        >
+          {renderCustomerView()}
+        </CustomerLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  // ── Render 404 Not Found Page ───────────────────────────────────────────────
+  if (routeMatch.category === 'not-found') {
+    return (
+      <PublicLayout
+        locale={locale}
+        theme={theme}
+        onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        onNavigate={navigate}
+      >
+        <NotFoundPage
+          locale={locale}
+          onNavigate={navigate}
+        />
+      </PublicLayout>
+    );
+  }
+
+  // ── Render Public Marketing Website ────────────────────────────────────────
+  const renderPublicPage = () => {
+    switch (routeMatch.matchedRoute) {
+      case ROUTES.PUBLIC.ABOUT:
         return (
-          <ExecutiveDashboard
+          <AboutPage
             locale={locale}
-            onNavigateDetail={() => navigateRoute('platform-finance')}
+            onNavigate={navigate}
           />
         );
-      case 'platform-finance':
+      case ROUTES.PUBLIC.PLATFORM:
         return (
-          <IntelligenceDetail
+          <PlatformOverviewPage
             locale={locale}
-            onBack={() => navigateRoute('platform-overview')}
+            onNavigateLogin={() => navigate(ROUTES.AUTH.LOGIN)}
+            onNavigateRegister={() => navigate(ROUTES.AUTH.REGISTER)}
+            onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
           />
         );
-      case 'platform-decisions':
+      case ROUTES.PUBLIC.SOLUTIONS:
         return (
-          <DecisionsView
+          <SolutionsPage
             locale={locale}
-            onNavigateDetail={() => navigateRoute('platform-finance')}
+            onNavigateRegister={() => navigate(ROUTES.AUTH.REGISTER)}
+            onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
           />
         );
-      case 'platform-risk':
-        return <RiskView locale={locale} />;
-      case 'platform-projects':
-        return <ProjectsView locale={locale} />;
-      case 'platform-suppliers':
-        return <SuppliersView locale={locale} />;
-      case 'platform-customers':
-        return <CustomersView locale={locale} />;
-      case 'platform-data-quality':
-        return <DataQualityView locale={locale} />;
-      case 'platform-assistant':
-        return <AssistantView locale={locale} />;
-      case 'platform-reports':
-        return <ReportsView locale={locale} />;
-      case 'platform-alerts':
-        return <AlertsView locale={locale} />;
-      case 'platform-integrations':
-        return <IntegrationsView locale={locale} />;
-      case 'platform-workflows':
-        return <WorkflowsView locale={locale} />;
-      case 'platform-organization':
-        return <OrganizationView locale={locale} />;
-      case 'platform-billing':
-        return <BillingView locale={locale} />;
-      case 'platform-settings':
-        return <SettingsView locale={locale} />;
+      case ROUTES.PUBLIC.INDUSTRIES:
+        return (
+          <IndustriesPage
+            locale={locale}
+            onNavigateRegister={() => navigate(ROUTES.AUTH.REGISTER)}
+            onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
+          />
+        );
+      case ROUTES.PUBLIC.PRICING:
+        return (
+          <PricingPage
+            locale={locale}
+            onNavigateRegister={() => navigate(ROUTES.AUTH.REGISTER)}
+            onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
+          />
+        );
+      case ROUTES.PUBLIC.CONTACT:
+        return (
+          <ContactPage
+            locale={locale}
+          />
+        );
+      case ROUTES.PUBLIC.HOME:
       default:
         return (
-          <ExecutiveDashboard
+          <WebsiteHome
             locale={locale}
-            onNavigateDetail={() => navigateRoute('platform-finance')}
+            onNavigatePlatform={() => navigate(ROUTES.PUBLIC.PLATFORM)}
+            onNavigateDetail={() => {
+              navigate(ROUTES.PUBLIC.SOLUTIONS);
+            }}
           />
         );
     }
   };
 
   return (
-    <div className="prototype-root">
-      {/* Universal Scenario & Inspection Bar */}
-      <ScenarioToolbar
-        theme={theme}
+    <>
+      <PublicLayout
         locale={locale}
-        currentRoute={currentRoute}
-        viewport={viewport}
-        onSelectRoute={navigateRoute}
-        onSelectTheme={setTheme}
-        onSelectLocale={setLocale}
-        onSelectViewport={setViewport}
-      />
+        theme={theme}
+        onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        onNavigate={navigate}
+      >
+        {renderPublicPage()}
+      </PublicLayout>
 
-      {/* Main Viewport Container (with 390px mobile simulation support) */}
-      <div className={`viewport-container ${viewport === 'mobile' ? 'simulated-mobile' : ''}`}>
-        <div className="page-wrapper" style={{ width: '100%' }}>
-          {currentRoute === 'website' ? (
-            /* Redesigned Public Corporate Website */
-            <WebsiteHome
-              locale={locale}
-              theme={theme}
-              onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-              onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              onNavigatePlatform={() => navigateRoute('platform-overview')}
-              onNavigateDetail={(modId) => {
-                if (modId === 'financial-intelligence') navigateRoute('platform-finance');
-                else if (modId === 'executive-decisions') navigateRoute('platform-decisions');
-                else if (modId === 'risk-prediction') navigateRoute('platform-risk');
-                else if (modId === 'project-intelligence') navigateRoute('platform-projects');
-                else if (modId === 'supplier-intelligence') navigateRoute('platform-suppliers');
-                else if (modId === 'customer-intelligence') navigateRoute('platform-customers');
-                else if (modId === 'ai-assistant') navigateRoute('platform-assistant');
-                else if (modId === 'data-quality') navigateRoute('platform-data-quality');
-                else navigateRoute('platform-overview');
-              }}
-            />
-          ) : (
-            /* Redesigned Customer Platform Shell */
-            <Shell
-              theme={theme}
-              locale={locale}
-              currentRoute={currentRoute}
-              onNavigateRoute={navigateRoute}
-              onNavigateHome={() => navigateRoute('website')}
-              onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-            >
-              {renderPlatformContent()}
-            </Shell>
-          )}
-        </div>
-      </div>
-    </div>
+      {/* Auxiliary Auth Modal if triggered */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={closeAuthModal}
+        locale={locale}
+        onAuthSuccess={() => {
+          refreshAuth();
+          navigate(ROUTES.APP.ROOT);
+        }}
+      />
+    </>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppRouterContent />
+    </AuthProvider>
   );
 };
