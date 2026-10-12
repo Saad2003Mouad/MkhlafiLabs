@@ -25,6 +25,9 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf'
 };
 
+const PROTOTYPE_PREFIX = '/prototype';
+const PROTOTYPE_DIST = path.join(__dirname, 'apps', 'platform', 'dist');
+
 const server = http.createServer((req, res) => {
   // CORS & Security headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -38,7 +41,35 @@ const server = http.createServer((req, res) => {
   }
 
   const urlPath = req.url.split('?')[0];
-  let safePath = path.normalize(urlPath).replace(/^(\.\.[\/\\])+/, '');
+
+  // ── Prototype route: serves the React/TypeScript visual prototype ──
+  if (urlPath === PROTOTYPE_PREFIX || urlPath.startsWith(PROTOTYPE_PREFIX + '/')) {
+    let subPath = urlPath.slice(PROTOTYPE_PREFIX.length) || '/index.html';
+    if (subPath === '/') subPath = '/index.html';
+    let filePath = path.join(PROTOTYPE_DIST, path.normalize(subPath));
+
+    fs.stat(filePath, (err, stats) => {
+      // SPA fallback: all unknown sub-paths serve index.html
+      if (err || !stats.isFile()) {
+        filePath = path.join(PROTOTYPE_DIST, 'index.html');
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      fs.readFile(filePath, (readErr, content) => {
+        if (readErr) {
+          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('React Prototype — 404 Not Found');
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': contentType });
+        res.end(content);
+      });
+    });
+    return;
+  }
+
+  // ── Existing demo: serves root index.html and all original assets ──
+  let safePath = path.normalize(urlPath).replace(/^(\.\.[\\/\\])+/, '');
   if (safePath === '/' || safePath === '\\') {
     safePath = '/index.html';
   }
@@ -70,6 +101,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n=============================================================`);
   console.log(`  MIKHLAFI LABS — Enterprise Decision Intelligence Platform`);
   console.log(`  INTELLIGENCE · SYSTEMS · INNOVATION`);
-  console.log(`  Server running at: http://localhost:${PORT}`);
+  console.log(`  Original Demo:      http://localhost:${PORT}`);
+  console.log(`  React/TS Prototype: http://localhost:${PORT}/prototype`);
   console.log(`=============================================================\n`);
 });
