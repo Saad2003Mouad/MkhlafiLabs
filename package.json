@@ -1,0 +1,11 @@
+{
+  "name": "mikhlafi-labs",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MIKHLAFI LABS — Intelligence · Systems · Innovation. Enterprise Decision Intelligence Platform & Corporate Portal.",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  }
+}

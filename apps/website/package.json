@@ -1,0 +1,8 @@
+{
+  "name": "@mikhlafi-labs/website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MIKHLAFI LABS — Public Corporate & Marketing Portal",
+  "main": "src/index.js"
+}

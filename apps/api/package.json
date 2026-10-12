@@ -1,0 +1,11 @@
+{
+  "name": "@mikhlafi-labs/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MIKHLAFI LABS — Central REST API & Security Gateway",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}

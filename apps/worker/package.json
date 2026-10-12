@@ -1,0 +1,8 @@
+{
+  "name": "@mikhlafi-labs/worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MIKHLAFI LABS — Background Tasks & Outbox Event Processor",
+  "main": "src/index.js"
+}
