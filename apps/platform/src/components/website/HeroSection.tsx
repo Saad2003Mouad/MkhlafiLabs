@@ -100,6 +100,24 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
             {/* Live Interactive Preview Body */}
             <div className="cockpit-body">
+              {/* Media Showcase Frame */}
+              <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--radius-sm)', marginBottom: '12px', border: '1px solid var(--border-subtle)', background: '#000' }}>
+                <img
+                  src="/assets/images/corporate-hero-cockpit.jpg"
+                  alt="MIKHLAFI LABS Executive Decision Cockpit"
+                  style={{ width: '100%', height: '175px', objectFit: 'cover', display: 'block' }}
+                />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(12,18,23,0.92) 0%, rgba(12,18,23,0.2) 60%, transparent 100%)' }} />
+                <div style={{ position: 'absolute', bottom: '8px', insetInlineStart: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '10px', padding: '2px 7px', background: 'rgba(0,0,0,0.75)', borderRadius: '4px', border: '1px solid var(--status-success)', color: 'var(--status-success)', fontWeight: 700 }}>
+                    ● {isAr ? 'دقة التدقيق 99.8%' : 'Audit Precision 99.8%'}
+                  </span>
+                  <span style={{ fontSize: '10px', padding: '2px 7px', background: 'rgba(0,0,0,0.75)', borderRadius: '4px', border: '1px solid var(--status-danger)', color: 'var(--status-danger)', fontWeight: 700 }}>
+                    ⚠️ {isAr ? 'كشف الهدر: 48,500 ريال' : 'Leak: 48,500 SAR'}
+                  </span>
+                </div>
+              </div>
+
               {/* Preview KPI Strip */}
               <div className="preview-kpi-row">
                 <div className="preview-kpi-box">

@@ -10,13 +10,18 @@ import {
   IconCustomer,
   IconAssistant,
   IconDataQuality,
-  IconShield,
   IconServer,
   IconMenu,
   IconX,
   IconGlobe,
   IconSun,
-  IconMoon
+  IconMoon,
+  IconBell,
+  IconWorkflow,
+  IconFileText,
+  IconOrganization,
+  IconCreditCard,
+  IconSettings
 } from './Icons';
 
 interface ShellProps {
@@ -49,6 +54,11 @@ export const Shell: React.FC<ShellProps> = ({
     { id: 'org-02', nameAr: 'شركة التوريدات والخدمات اللوجستية', nameEn: 'National Logistics & Supply' },
     { id: 'org-03', nameAr: 'المجموعة الصناعية الخليجية', nameEn: 'Gulf Industrial Group' }
   ];
+
+  const handleNav = (route: AppRoute) => {
+    onNavigateRoute(route);
+    setMobileSidebarOpen(false);
+  };
 
   return (
     <div className="app-layout">
@@ -90,27 +100,34 @@ export const Shell: React.FC<ShellProps> = ({
           </div>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className={`nav-item ${currentRoute === 'platform' ? 'active' : ''}`}
+            onClick={() => handleNav('platform-overview')}
+            className={`nav-item ${currentRoute === 'platform-overview' ? 'active' : ''}`}
           >
             <IconDashboard size={16} />
             <span>{isAr ? 'مركز القيادة التنفيذي' : 'Executive Command Center'}</span>
           </button>
 
+          <button
+            onClick={() => handleNav('platform-alerts')}
+            className={`nav-item ${currentRoute === 'platform-alerts' ? 'active' : ''}`}
+          >
+            <IconBell size={16} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{isAr ? 'مركز التنبيهات الفورية' : 'Alerts & Telemetry'}</span>
+              <span className="severity-tag high" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                2 {isAr ? 'جديد' : 'new'}
+              </span>
+            </div>
+          </button>
+
           {/* Group 2: Intelligence Suite */}
           <div className="nav-section-title">
-            {isAr ? 'محركات الذكاء والتحليل' : 'INTELLIGENCE SUITE'}
+            {isAr ? 'محركات الذكاء الثمانية' : 'INTELLIGENCE SUITE'}
           </div>
 
           <button
-            onClick={() => {
-              onNavigateRoute('detail');
-              setMobileSidebarOpen(false);
-            }}
-            className={`nav-item ${currentRoute === 'detail' ? 'active' : ''}`}
+            onClick={() => handleNav('platform-finance')}
+            className={`nav-item ${currentRoute === 'platform-finance' ? 'active' : ''}`}
           >
             <IconFinance size={16} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -122,69 +139,66 @@ export const Shell: React.FC<ShellProps> = ({
           </button>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-decisions')}
+            className={`nav-item ${currentRoute === 'platform-decisions' ? 'active' : ''}`}
           >
             <IconDecisions size={16} />
-            <span>{isAr ? 'مركز القرارات التنفيذية' : 'Decision Center'}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{isAr ? 'مركز القرارات التنفيذية' : 'Decision Center'}</span>
+              <span className="severity-tag critical" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                3 {isAr ? 'أولويات' : 'critical'}
+              </span>
+            </div>
           </button>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-risk')}
+            className={`nav-item ${currentRoute === 'platform-risk' ? 'active' : ''}`}
           >
             <IconRisk size={16} />
-            <span>{isAr ? 'ذكاء إدارة المخاطر' : 'Risk Intelligence'}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{isAr ? 'التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence'}</span>
+              <span className="severity-tag medium" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                1.7M SAR
+              </span>
+            </div>
           </button>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-projects')}
+            className={`nav-item ${currentRoute === 'platform-projects' ? 'active' : ''}`}
           >
             <IconProjects size={16} />
-            <span>{isAr ? 'ذكاء أداء المشاريع' : 'Project Intelligence'}</span>
+            <span>{isAr ? 'ذكاء أداء المشاريع والعقود' : 'Project Intelligence'}</span>
           </button>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-suppliers')}
+            className={`nav-item ${currentRoute === 'platform-suppliers' ? 'active' : ''}`}
           >
             <IconSupplier size={16} />
             <span>{isAr ? 'ذكاء الموردين والمشتريات' : 'Supplier Intelligence'}</span>
           </button>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-customers')}
+            className={`nav-item ${currentRoute === 'platform-customers' ? 'active' : ''}`}
           >
             <IconCustomer size={16} />
-            <span>{isAr ? 'ذكاء ومراقبة العملاء' : 'Customer Intelligence'}</span>
+            <span>{isAr ? 'ذكاء ومراقبة العملاء (Churn)' : 'Customer Intelligence'}</span>
           </button>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-data-quality')}
+            className={`nav-item ${currentRoute === 'platform-data-quality' ? 'active' : ''}`}
           >
             <IconDataQuality size={16} />
-            <span>{isAr ? 'جودة وحوكمة البيانات' : 'Data Quality Intelligence'}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{isAr ? 'جودة وحوكمة البيانات' : 'Data Quality Intelligence'}</span>
+              <span className="severity-tag optimal" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                97.4%
+              </span>
+            </div>
           </button>
 
           {/* Group 3: AI Assistant */}
@@ -193,29 +207,74 @@ export const Shell: React.FC<ShellProps> = ({
           </div>
 
           <button
-            onClick={() => {
-              onNavigateRoute('platform');
-              setMobileSidebarOpen(false);
-            }}
-            className="nav-item"
+            onClick={() => handleNav('platform-assistant')}
+            className={`nav-item ${currentRoute === 'platform-assistant' ? 'active' : ''}`}
           >
             <IconAssistant size={16} />
             <span>{isAr ? 'المساعد التنفيذي الذكي' : 'Executive AI Assistant'}</span>
           </button>
 
-          {/* Group 4: Administration & Settings */}
+          {/* Group 4: Operations & Mitigation */}
           <div className="nav-section-title">
-            {isAr ? 'الإدارة والسيادة' : 'ADMINISTRATION'}
+            {isAr ? 'العمليات والسياسات' : 'OPERATIONS & POLICIES'}
           </div>
 
-          <button className="nav-item">
-            <IconServer size={16} />
-            <span>{isAr ? 'مصادر البيانات وتكامل ERP' : 'Data Sources & ERP'}</span>
+          <button
+            onClick={() => handleNav('platform-workflows')}
+            className={`nav-item ${currentRoute === 'platform-workflows' ? 'active' : ''}`}
+          >
+            <IconWorkflow size={16} />
+            <span>{isAr ? 'سير العمل وسياسات الأتمتة' : 'Workflows & Automation'}</span>
           </button>
 
-          <button className="nav-item">
-            <IconShield size={16} />
-            <span>{isAr ? 'الصلاحيات وسجلات التدقيق' : 'RBAC & Audit Trails'}</span>
+          <button
+            onClick={() => handleNav('platform-reports')}
+            className={`nav-item ${currentRoute === 'platform-reports' ? 'active' : ''}`}
+          >
+            <IconFileText size={16} />
+            <span>{isAr ? 'التقارير وسجلات التدقيق' : 'Reports & Audit Trails'}</span>
+          </button>
+
+          {/* Group 5: Administration & Settings */}
+          <div className="nav-section-title">
+            {isAr ? 'الإدارة والسيادة' : 'ADMINISTRATION & TENANCY'}
+          </div>
+
+          <button
+            onClick={() => handleNav('platform-integrations')}
+            className={`nav-item ${currentRoute === 'platform-integrations' ? 'active' : ''}`}
+          >
+            <IconServer size={16} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{isAr ? 'مصادر البيانات وتكامل ERP' : 'Data Sources & ERP'}</span>
+              <span className="severity-tag optimal" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                4
+              </span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handleNav('platform-organization')}
+            className={`nav-item ${currentRoute === 'platform-organization' ? 'active' : ''}`}
+          >
+            <IconOrganization size={16} />
+            <span>{isAr ? 'المؤسسة والفروع والمستخدمين' : 'Organization & Branches'}</span>
+          </button>
+
+          <button
+            onClick={() => handleNav('platform-billing')}
+            className={`nav-item ${currentRoute === 'platform-billing' ? 'active' : ''}`}
+          >
+            <IconCreditCard size={16} />
+            <span>{isAr ? 'الاشتراك والاستحقاقات' : 'Subscription & Quotas'}</span>
+          </button>
+
+          <button
+            onClick={() => handleNav('platform-settings')}
+            className={`nav-item ${currentRoute === 'platform-settings' ? 'active' : ''}`}
+          >
+            <IconSettings size={16} />
+            <span>{isAr ? 'إعدادات المنظومة' : 'Platform Settings'}</span>
           </button>
         </nav>
       </aside>
@@ -229,7 +288,7 @@ export const Shell: React.FC<ShellProps> = ({
             <button
               onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
               className="ctrl-btn"
-              style={{ display: 'none' }} // styled for small screens
+              style={{ display: 'none' }}
             >
               <IconMenu size={18} />
             </button>

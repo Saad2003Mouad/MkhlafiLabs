@@ -24,44 +24,77 @@ export const ScenarioToolbar: React.FC<ScenarioToolbarProps> = ({
 }) => {
   const isAr = locale === 'ar';
 
+  const routeOptions: Array<{ id: AppRoute; labelAr: string; labelEn: string }> = [
+    { id: 'website', labelAr: '🌐 الموقع الرئيسي', labelEn: '🌐 Website Home' },
+    { id: 'platform-overview', labelAr: '📊 مركز القيادة', labelEn: '📊 Command Center' },
+    { id: 'platform-finance', labelAr: '💰 الذكاء المالي', labelEn: '💰 Financial Intel' },
+    { id: 'platform-decisions', labelAr: '🎯 مركز القرارات', labelEn: '🎯 Decision Center' },
+    { id: 'platform-risk', labelAr: '⚠️ ذكاء المخاطر', labelEn: '⚠️ Risk Intelligence' },
+    { id: 'platform-projects', labelAr: '🏗️ ذكاء المشاريع', labelEn: '🏗️ Project Intel' },
+    { id: 'platform-suppliers', labelAr: '🚚 ذكاء الموردين', labelEn: '🚚 Supplier Intel' },
+    { id: 'platform-customers', labelAr: '👥 ذكاء العملاء', labelEn: '👥 Customer Intel' },
+    { id: 'platform-data-quality', labelAr: '🔍 جودة البيانات', labelEn: '🔍 Data Quality' },
+    { id: 'platform-assistant', labelAr: '🤖 المساعد الذكي', labelEn: '🤖 AI Assistant' },
+    { id: 'platform-workflows', labelAr: '⚡ سير العمل', labelEn: '⚡ Workflows' },
+    { id: 'platform-reports', labelAr: '📄 تقارير التدقيق', labelEn: '📄 Audit Reports' },
+    { id: 'platform-alerts', labelAr: '🔔 التنبيهات', labelEn: '🔔 Alerts' },
+    { id: 'platform-integrations', labelAr: '🔌 تكامل ERP', labelEn: '🔌 Integrations' },
+    { id: 'platform-organization', labelAr: '🏢 المؤسسة والفروع', labelEn: '🏢 Organization' },
+    { id: 'platform-billing', labelAr: '💳 الاشتراكات', labelEn: '💳 Billing' },
+    { id: 'platform-settings', labelAr: '⚙️ الإعدادات', labelEn: '⚙️ Settings' }
+  ];
+
   return (
     <div className="prototype-toolbar">
       {/* Brand Badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <span className="prototype-badge">
           <span>⚡</span>
-          <span>MIKHLAFI LABS // Phase 1.1 Live Product Engine</span>
-        </span>
-        <span style={{ color: 'var(--text-tertiary)', fontSize: '11px', display: 'none' }}>
-          React + TypeScript Foundation
+          <span>MIKHLAFI LABS // Phase 1.2 Enterprise Navigation Engine</span>
         </span>
       </div>
 
       {/* Control Groups */}
       <div className="controls-group">
-        {/* Page / View Selection */}
-        <div style={{ display: 'flex', gap: '4px' }}>
+        {/* Quick Page Route Selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button
             onClick={() => onSelectRoute('website')}
             className={`ctrl-btn ${currentRoute === 'website' ? 'active' : ''}`}
             title="Public Corporate Website"
           >
-            🌐 {isAr ? 'الموقع العام (Home)' : 'Public Website'}
+            🌐 {isAr ? 'الموقع العام' : 'Public Site'}
           </button>
           <button
-            onClick={() => onSelectRoute('platform')}
-            className={`ctrl-btn ${currentRoute === 'platform' ? 'active' : ''}`}
+            onClick={() => onSelectRoute('platform-overview')}
+            className={`ctrl-btn ${currentRoute === 'platform-overview' ? 'active' : ''}`}
             title="Customer Executive Cockpit"
           >
-            📊 {isAr ? 'لوحة القيادة (Dashboard)' : 'Command Center'}
+            📊 {isAr ? 'المنصة' : 'Platform'}
           </button>
-          <button
-            onClick={() => onSelectRoute('detail')}
-            className={`ctrl-btn ${currentRoute === 'detail' ? 'active' : ''}`}
-            title="Financial Intelligence Detail"
+
+          {/* Quick Route Switcher Select */}
+          <select
+            value={currentRoute}
+            onChange={(e) => onSelectRoute(e.target.value as AppRoute)}
+            className="ctrl-btn"
+            style={{
+              padding: '4px 8px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              background: 'var(--bg-surface-elevated)',
+              color: 'var(--text-primary)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)'
+            }}
           >
-            🔍 {isAr ? 'التدقيق المالي (Detail)' : 'Intelligence Detail'}
-          </button>
+            {routeOptions.map((opt) => (
+              <option key={opt.id} value={opt.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                {isAr ? opt.labelAr : opt.labelEn}
+              </option>
+            ))}
+          </select>
         </div>
 
         <span style={{ color: 'var(--border-strong)' }}>|</span>
@@ -114,21 +147,9 @@ export const ScenarioToolbar: React.FC<ScenarioToolbarProps> = ({
             onClick={() => onSelectViewport('mobile')}
             className={`ctrl-btn ${viewport === 'mobile' ? 'active' : ''}`}
           >
-            📱 Mobile (390px)
+            📱 Mobile
           </button>
         </div>
-
-        <span style={{ color: 'var(--border-strong)' }}>|</span>
-
-        {/* Link to Preserved Legacy Site */}
-        <a
-          href="/legacy"
-          className="ctrl-btn"
-          style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}
-          title="Open original legacy application"
-        >
-          ⏪ {isAr ? 'النسخة السابقة (Legacy)' : 'Legacy Version'}
-        </a>
       </div>
     </div>
   );

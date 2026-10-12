@@ -5,10 +5,12 @@ import { HeroSection } from './HeroSection';
 import { ChallengesSection } from './ChallengesSection';
 import { IntelligenceSuiteSection } from './IntelligenceSuiteSection';
 import { HowItWorksSection } from './HowItWorksSection';
+import { PhilosophySection } from './PhilosophySection';
 import { IntegrationsSection } from './IntegrationsSection';
 import { CrossIndustrySection } from './CrossIndustrySection';
 import { SecurityGovernanceSection } from './SecurityGovernanceSection';
 import { PricingPackagesSection } from './PricingPackagesSection';
+import { FaqSection } from './FaqSection';
 import { WebsiteFooter } from './WebsiteFooter';
 import { DemoModal } from './DemoModal';
 
@@ -64,17 +66,14 @@ export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
         {/* The 8 Modular Intelligence Engines */}
         <IntelligenceSuiteSection
           locale={locale}
-          onSelectModule={(modId) => {
-            if (modId === 'financial-intelligence') {
-              onNavigateDetail(modId);
-            } else {
-              onNavigatePlatform();
-            }
-          }}
+          onSelectModule={(modId) => onNavigateDetail(modId)}
         />
 
         {/* 4-Step Deterministic Forensic Methodology */}
         <HowItWorksSection locale={locale} />
+
+        {/* Sovereign Philosophy & Architecture Mesh Showcase */}
+        <PhilosophySection locale={locale} />
 
         {/* Non-Invasive Enterprise ERP Integrations Strip */}
         <IntegrationsSection locale={locale} />
@@ -90,6 +89,9 @@ export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
           locale={locale}
           onSelectPackage={(pkg) => handleOpenDemo(pkg)}
         />
+
+        {/* Frequently Asked Questions */}
+        <FaqSection locale={locale} />
       </main>
 
       {/* Footer */}
