@@ -56,23 +56,14 @@ const server = http.createServer((req, res) => {
 
   const urlPath = req.url.split('?')[0];
 
-  // ── 1. Preserved Legacy Route (/legacy or /legacy/*) ──────────────────────
+  // ── 1. Legacy Route Clean Redirect (/legacy -> /platform) ─────────────────
   if (urlPath === '/legacy' || urlPath.startsWith('/legacy/')) {
-    let sub = urlPath.slice('/legacy'.length) || '/index.html';
-    if (sub === '/' || sub === '') sub = '/index.html';
-    const legacyPath = path.join(__dirname, path.normalize(sub));
-
-    fs.stat(legacyPath, (err, stats) => {
-      if (err || !stats.isFile()) {
-        serveFile(res, path.join(__dirname, 'index.html'));
-      } else {
-        serveFile(res, legacyPath);
-      }
-    });
+    res.writeHead(302, { 'Location': '/platform' });
+    res.end();
     return;
   }
 
-  // ── 2. Vite Bundled Assets (/assets/*) ───────────────────────────────────
+  // ── 2. Assets (/assets/*) ────────────────────────────────────────────────
   if (urlPath.startsWith('/assets/')) {
     const assetSub = urlPath.slice('/assets/'.length);
     const distAssetPath = path.join(PLATFORM_DIST, 'assets', path.normalize(assetSub));
@@ -83,7 +74,7 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      // Fallback to root assets folder
+      // Root images/assets fallback
       const rootAssetPath = path.join(__dirname, 'assets', path.normalize(assetSub));
       fs.stat(rootAssetPath, (rootErr, rootStats) => {
         if (!rootErr && rootStats.isFile()) {
@@ -97,33 +88,17 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── 3. Static Assets for Legacy/Root (/css/*, /js/*, /assets/*) ──────────
-  if (urlPath.startsWith('/css/') || urlPath.startsWith('/js/')) {
-    const rawPath = path.join(__dirname, path.normalize(urlPath));
-    fs.stat(rawPath, (err, stats) => {
-      if (!err && stats.isFile()) {
-        serveFile(res, rawPath);
-      } else {
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Static File Not Found');
-      }
-    });
-    return;
-  }
-
-  // ── 4. Main React Application Routes (SPA) ───────────────────────────────
+  // ── 3. Main React Application Routes (SPA) ───────────────────────────────
   // Serves apps/platform/dist/index.html for:
   // - / (Redesigned Public Homepage)
-  // - /platform, /platform/* (Customer Application & Detail)
-  // - /prototype, /prototype/* (Design Review & Scenarios)
-  // - /dashboard, /detail
+  // - /platform, /platform/* (Customer Application & 16 Sub-Pages)
   const spaIndex = path.join(PLATFORM_DIST, 'index.html');
   fs.stat(spaIndex, (err, stats) => {
     if (!err && stats.isFile()) {
       serveFile(res, spaIndex);
     } else {
-      // Emergency fallback to root index.html if platform dist is missing
-      serveFile(res, path.join(__dirname, 'index.html'));
+      res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Platform bundle is building. Please run: npm run build in apps/platform');
     }
   });
 });
