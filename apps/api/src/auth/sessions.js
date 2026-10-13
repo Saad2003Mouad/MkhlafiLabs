@@ -82,6 +82,7 @@ export async function verifySession(rawToken) {
        u.phone,
        u.status AS user_status,
        u.is_verified,
+       u.is_platform_admin,
        u.created_at AS user_created_at
      FROM user_sessions s
      JOIN users u ON u.id = s.user_id
@@ -112,6 +113,7 @@ export async function verifySession(rawToken) {
       phone: row.phone,
       status: row.user_status,
       isVerified: row.is_verified,
+      isPlatformAdmin: !!row.is_platform_admin,
       createdAt: row.user_created_at
     }
   };

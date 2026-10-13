@@ -10,7 +10,11 @@ import { AuthModal } from './components/auth/AuthModal';
 // Layouts & Guards
 import { PublicLayout } from './layouts/PublicLayout';
 import { CustomerLayout } from './layouts/CustomerLayout';
+import { AdminLayout } from './layouts/AdminLayout';
 import { ProtectedRoute } from './guards/ProtectedRoute';
+
+// Platform Administration Page
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 
 // Public Website Pages
 import { WebsiteHome } from './components/website/WebsiteHome';
@@ -199,6 +203,34 @@ const AppRouterContent: React.FC = () => {
         >
           {renderCustomerView()}
         </CustomerLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  // ── Render Platform Operator Control Center (/admin/*) ────────────────────
+  if (routeMatch.category === 'admin') {
+    return (
+      <ProtectedRoute
+        currentPath={currentPath}
+        locale={locale}
+        onRedirectToLogin={(returnPath) =>
+          navigate(`${ROUTES.AUTH.LOGIN}?returnUrl=${encodeURIComponent(returnPath)}`)
+        }
+      >
+        <AdminLayout
+          theme={theme}
+          locale={locale}
+          currentPath={routeMatch.matchedRoute}
+          onNavigate={navigate}
+          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+        >
+          <AdminDashboardPage
+            locale={locale}
+            currentRoute={routeMatch.matchedRoute}
+            onNavigate={navigate}
+          />
+        </AdminLayout>
       </ProtectedRoute>
     );
   }

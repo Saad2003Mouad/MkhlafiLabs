@@ -2,6 +2,7 @@
 // Implements authenticated, tenant-isolated API endpoints conforming to Master Architecture v1.0
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { query, transaction, runMigrations } from './db/connection.js';
 import { hashPassword, verifyPassword } from './auth/passwords.js';
 import {
@@ -17,16 +18,83 @@ import {
   hasPermission,
   recordAuditEvent
 } from './middleware/tenant.js';
+import {
+  getFinancialAnomalies,
+  resolveFinancialAnomaly,
+  seedInitialFinancialRecords,
+  getBenchmarkStatus
+} from './services/financial/leakDetection.js';
+import {
+  getTenantDecisions,
+  createTenantDecision,
+  getTenantDecisionById,
+  executeTenantDecision
+} from './services/decisions/decisionsEngine.js';
+import {
+  getTenantRisks,
+  toggleRiskMitigation
+} from './services/risks/riskEngine.js';
+import {
+  getTenantProjects,
+  verifyProjectClaims
+} from './services/projects/projectEngine.js';
+import {
+  getTenantSuppliers,
+  auditTenantSupplier
+} from './services/suppliers/supplierEngine.js';
+import {
+  getTenantCustomers,
+  scheduleCustomerReview
+} from './services/customers/customerEngine.js';
+import {
+  getDataQualityAudits,
+  runDataQualityScan
+} from './services/data-quality/qualityEngine.js';
+import { processAssistantQuery } from './services/ai/assistantEngine.js';
+import {
+  getCommercialPackages,
+  getTenantBillingDetails
+} from './services/billing/billingEngine.js';
+import {
+  getPlatformOverview,
+  listTenants,
+  updateTenantStatus,
+  listPlatformUsers,
+  listLeadInquiries,
+  listPlatformAuditLogs
+} from './services/admin/adminEngine.js';
+
+export function getAllowedOrigin(incomingOrigin) {
+  if (!incomingOrigin) return null;
+  const configured = process.env.WEB_BASE_URL;
+  if (configured) {
+    try {
+      if (incomingOrigin === new URL(configured).origin) return incomingOrigin;
+    } catch (_) {}
+  }
+  try {
+    const parsed = new URL(incomingOrigin);
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+      return incomingOrigin;
+    }
+  } catch (_) {}
+  return null;
+}
 
 export function jsonResponse(res, statusCode, data, headers = {}) {
-  res.writeHead(statusCode, {
+  const allowedOrigin = res._allowedOrigin || (headers['Access-Control-Allow-Origin'] !== '*' ? headers['Access-Control-Allow-Origin'] : null);
+  const responseHeaders = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': headers['Access-Control-Allow-Origin'] || '*',
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Organization-Id',
+    'Vary': 'Origin',
     ...headers
-  });
+  };
+  if (allowedOrigin) {
+    responseHeaders['Access-Control-Allow-Origin'] = allowedOrigin;
+    responseHeaders['Access-Control-Allow-Credentials'] = 'true';
+    responseHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
+    responseHeaders['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Organization-Id';
+  }
+  res.writeHead(statusCode, responseHeaders);
   res.end(JSON.stringify(data, null, 2));
 }
 
@@ -57,14 +125,22 @@ export async function handleApiRequest(req, res) {
   const pathname = parsedUrl.pathname;
   const method = req.method;
 
+  const incomingOrigin = req.headers.origin;
+  const allowedOrigin = getAllowedOrigin(incomingOrigin);
+  res._allowedOrigin = allowedOrigin;
+
   // Handle CORS preflight
   if (method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': req.headers.origin || '*',
-      'Access-Control-Allow-Credentials': 'true',
+    const preflightHeaders = {
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Organization-Id'
-    });
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Organization-Id',
+      'Vary': 'Origin'
+    };
+    if (allowedOrigin) {
+      preflightHeaders['Access-Control-Allow-Origin'] = allowedOrigin;
+      preflightHeaders['Access-Control-Allow-Credentials'] = 'true';
+    }
+    res.writeHead(204, preflightHeaders);
     return res.end();
   }
 
@@ -78,6 +154,38 @@ export async function handleApiRequest(req, res) {
         rolesConfigured: parseInt(dbCheck.rows[0].count, 10),
         timestamp: new Date().toISOString()
       });
+    }
+
+    // ── PUBLIC: INBOUND LEAD INQUIRIES (/api/v1/inquiries) ──────────────────
+    if (method === 'POST' && pathname === '/api/v1/inquiries') {
+      const body = await readJsonBody(req);
+      const { name, email, companyName, phone, message, inquiryType = 'demo_request' } = body;
+      if (!name || !email) {
+        return jsonResponse(res, 400, { error: 'Name and email are required.' });
+      }
+      const leadRes = await query(
+        `INSERT INTO lead_inquiries (name, email, company_name, phone, message, inquiry_type, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'NEW')
+         RETURNING id, name, email, company_name, inquiry_type, status, created_at`,
+        [name, email.trim().toLowerCase(), companyName || null, phone || null, message || null, inquiryType]
+      );
+      return jsonResponse(res, 201, {
+        success: true,
+        message: 'Your inquiry has been received. Our solutions team will contact you shortly.',
+        inquiry: leadRes.rows[0]
+      });
+    }
+
+    // ── PUBLIC: COMMERCIAL PACKAGES CATALOG (/api/v1/packages) ───────────────
+    if (method === 'GET' && pathname === '/api/v1/packages') {
+      const packages = await getCommercialPackages();
+      return jsonResponse(res, 200, { packages });
+    }
+
+    // ── EMPIRICAL BENCHMARKS & SCIENTIFIC DATASET ────────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/benchmarks/financial') {
+      const benchmarkStatus = await getBenchmarkStatus();
+      return jsonResponse(res, 200, benchmarkStatus);
     }
 
     // ── AUTHENTICATION: REGISTER ───────────────────────────────────────────
@@ -100,7 +208,9 @@ export async function handleApiRequest(req, res) {
       }
 
       const passwordHash = await hashPassword(password);
-      const orgSlug = orgNameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `org-${Date.now().toString(36)}`;
+      const baseSlug = orgNameEn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'org';
+      const slugSuffix = crypto.randomBytes(3).toString('hex');
+      const orgSlug = `${baseSlug}-${slugSuffix}`;
 
       let user, org, sessionInfo;
 
@@ -147,6 +257,17 @@ export async function handleApiRequest(req, res) {
              ($1, $2, 'Early Payment Discount Capture on Q3 Batches', 'Working Capital', 145000.00, 'SAR', 'HIGH', 'PENDING'),
              ($1, $2, 'Subcontractor Milestone Variance Delay Claim', 'Project Governance', 540000.00, 'SAR', 'MEDIUM', 'PENDING')`,
           [org.id, branchId]
+        );
+
+        // 6. Seed Initial Financial Intelligence Records (Invoices & Anomalies)
+        await seedInitialFinancialRecords(tx, org.id, branchId);
+
+        // 7. Provision Default Enterprise Subscription
+        await tx.query(
+          `INSERT INTO organization_subscriptions (organization_id, package_id, status, billing_interval)
+           VALUES ($1, 'plan_enterprise', 'active', 'annual')
+           ON CONFLICT (organization_id) DO NOTHING`,
+          [org.id]
         );
       });
 
@@ -261,6 +382,18 @@ export async function handleApiRequest(req, res) {
       });
     }
 
+    // ── EMPIRICAL BENCHMARKS & SCIENTIFIC TRAINING ──────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/benchmarks/financial') {
+      const benchmarkStatus = await getBenchmarkStatus();
+      return jsonResponse(res, 200, benchmarkStatus);
+    }
+
+    if (method === 'POST' && pathname === '/api/v1/benchmarks/financial/train') {
+      const { trainAndValidateBenchmark } = await import('./services/financial/trainBenchmark.js');
+      const result = await trainAndValidateBenchmark();
+      return jsonResponse(res, 200, { success: true, benchmark: result });
+    }
+
     // ── AUTHENTICATION: CURRENT USER & TENANT CONTEXT ───────────────────────
     if (method === 'GET' && pathname === '/api/v1/auth/me') {
       const auth = await authenticateRequest(req);
@@ -280,12 +413,60 @@ export async function handleApiRequest(req, res) {
       });
     }
 
-    // ── PROTECTED ZONE: ALL ROUTES BELOW REQUIRE VALID AUTHENTICATION & TENANT
+    // ── PROTECTED ZONE: ALL ROUTES BELOW REQUIRE VALID AUTHENTICATION
     const auth = await authenticateRequest(req);
     if (!auth.authenticated) {
       return jsonResponse(res, 401, { error: auth.error });
     }
 
+    // ── PLATFORM ADMINISTRATION (/api/v1/admin/*) ──────────────────────────
+    // Does NOT require customer tenant context: strictly guarded by is_platform_admin = true
+    if (pathname.startsWith('/api/v1/admin')) {
+      const opCheck = await query('SELECT is_platform_admin FROM users WHERE id = $1', [auth.user.id]);
+      if (!opCheck.rows[0]?.is_platform_admin) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Platform operator authorization required.' });
+      }
+
+      if (method === 'GET' && pathname === '/api/v1/admin/overview') {
+        const overview = await getPlatformOverview();
+        return jsonResponse(res, 200, overview);
+      }
+
+      if (method === 'GET' && pathname === '/api/v1/admin/organizations') {
+        const organizations = await listTenants();
+        return jsonResponse(res, 200, { organizations });
+      }
+
+      if (method === 'PUT' && pathname.startsWith('/api/v1/admin/organizations/') && pathname.endsWith('/status')) {
+        const parts = pathname.split('/');
+        const targetOrgId = parts[parts.indexOf('organizations') + 1];
+        const body = await readJsonBody(req);
+        const { status, reason } = body;
+        if (!['active', 'suspended', 'archived'].includes(status)) {
+          return jsonResponse(res, 400, { error: 'Invalid organization status.' });
+        }
+        const updatedOrg = await updateTenantStatus(targetOrgId, status, reason, auth.user.id, req.socket.remoteAddress);
+        if (!updatedOrg) return jsonResponse(res, 404, { error: 'Organization not found.' });
+        return jsonResponse(res, 200, { success: true, organization: updatedOrg });
+      }
+
+      if (method === 'GET' && pathname === '/api/v1/admin/users') {
+        const users = await listPlatformUsers();
+        return jsonResponse(res, 200, { users });
+      }
+
+      if (method === 'GET' && pathname === '/api/v1/admin/leads') {
+        const leads = await listLeadInquiries();
+        return jsonResponse(res, 200, { leads });
+      }
+
+      if (method === 'GET' && pathname === '/api/v1/admin/audit') {
+        const auditLogs = await listPlatformAuditLogs();
+        return jsonResponse(res, 200, { auditLogs });
+      }
+    }
+
+    // ── PROTECTED CUSTOMER APPLICATION: REQUIRES RESOLVED TENANT CONTEXT ────
     const tenantRes = await resolveTenantContext(req, auth.user);
     if (!tenantRes.hasTenant) {
       const statusCode = tenantRes.forbidden ? 403 : 400;
@@ -473,33 +654,8 @@ export async function handleApiRequest(req, res) {
     // ── TENANT DECISIONS LIST (SCOPED STRICTLY TO TENANT) ────────────────────
     if (method === 'GET' && pathname === '/api/v1/records/decisions') {
       const statusFilter = parsedUrl.searchParams.get('status');
-      let sql = `SELECT id, organization_id, title, category, impact_amount, currency, risk_level, status, source_system, created_at
-                 FROM tenant_decisions
-                 WHERE organization_id = $1`;
-      const params = [orgId];
-
-      if (statusFilter) {
-        sql += ` AND status = $2`;
-        params.push(statusFilter.toUpperCase());
-      }
-
-      sql += ` ORDER BY impact_amount DESC, created_at DESC`;
-
-      const decisionsRes = await query(sql, params);
-
-      const impactSumRes = await query(
-        `SELECT COALESCE(SUM(impact_amount), 0) AS total_impact
-         FROM tenant_decisions
-         WHERE organization_id = $1 AND status = 'PENDING'`,
-        [orgId]
-      );
-
-      return jsonResponse(res, 200, {
-        organizationId: orgId,
-        count: decisionsRes.rows.length,
-        totalPendingImpactSAR: parseFloat(impactSumRes.rows[0].total_impact),
-        decisions: decisionsRes.rows
-      });
+      const result = await getTenantDecisions(orgId, statusFilter);
+      return jsonResponse(res, 200, result);
     }
 
     // ── CREATE TENANT DECISION RECORD ───────────────────────────────────────
@@ -511,39 +667,21 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 400, { error: 'Title and category are required.' });
       }
 
-      const resInsert = await query(
-        `INSERT INTO tenant_decisions (organization_id, branch_id, title, category, impact_amount, risk_level, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'PENDING')
-         RETURNING id, organization_id, title, category, impact_amount, risk_level, status, created_at`,
-        [orgId, branchId, title, category, parseFloat(impactAmount), riskLevel.toUpperCase()]
-      );
-
+      const decision = await createTenantDecision(orgId, { title, category, impactAmount, riskLevel, branchId });
       return jsonResponse(res, 201, {
         success: true,
-        decision: resInsert.rows[0]
+        decision
       });
     }
 
     // ── GET SINGLE DECISION (IDOR PROTECTION TEST) ──────────────────────────
     if (method === 'GET' && pathname.startsWith('/api/v1/records/decisions/')) {
       const recordId = pathname.slice('/api/v1/records/decisions/'.length);
-
-      // STRICT CHECK: Must match organization_id = orgId!
-      const recRes = await query(
-        `SELECT id, organization_id, title, category, impact_amount, currency, risk_level, status, created_at
-         FROM tenant_decisions
-         WHERE id = $1 AND organization_id = $2`,
-        [recordId, orgId]
-      );
-
-      if (recRes.rows.length === 0) {
-        // Return 404 to avoid leaking existence of record belonging to other tenants
+      const decision = await getTenantDecisionById(orgId, recordId);
+      if (!decision) {
         return jsonResponse(res, 404, { error: 'Decision record not found.' });
       }
-
-      return jsonResponse(res, 200, {
-        decision: recRes.rows[0]
-      });
+      return jsonResponse(res, 200, { decision });
     }
 
     // ── EXECUTE DECISION (RBAC & TENANT ENFORCED) ───────────────────────────
@@ -555,31 +693,14 @@ export async function handleApiRequest(req, res) {
       const parts = pathname.split('/');
       const recordId = parts[parts.indexOf('decisions') + 1];
 
-      // STRICT TENANT BOUNDARY: Must match organization_id = orgId!
-      const updateRes = await query(
-        `UPDATE tenant_decisions
-         SET status = 'EXECUTED', updated_at = now()
-         WHERE id = $1 AND organization_id = $2
-         RETURNING id, title, impact_amount, status`,
-        [recordId, orgId]
-      );
-
-      if (updateRes.rows.length === 0) {
+      const executed = await executeTenantDecision(orgId, recordId, auth.user.id);
+      if (!executed) {
         return jsonResponse(res, 404, { error: 'Decision record not found or inaccessible.' });
       }
 
-      await recordAuditEvent({
-        organizationId: orgId,
-        userId: auth.user.id,
-        action: 'DECISION_EXECUTED',
-        entityType: 'TENANT_DECISION',
-        entityId: recordId,
-        details: { title: updateRes.rows[0].title }
-      });
-
       return jsonResponse(res, 200, {
         success: true,
-        decision: updateRes.rows[0]
+        decision: executed
       });
     }
 
@@ -636,6 +757,131 @@ export async function handleApiRequest(req, res) {
         },
         databaseEngine: 'PostgreSQL 16 (Verified Relational Schema)',
         isolationStatus: 'STRICT_TENANT_ISOLATION_ENFORCED'
+      });
+    }
+
+    // ── FINANCIAL LEAK DETECTION ENDPOINTS (/api/v1/records/financial-leaks) ─
+    if (method === 'GET' && pathname === '/api/v1/records/financial-leaks') {
+      const severity = parsedUrl.searchParams.get('severity') || 'all';
+      const status = parsedUrl.searchParams.get('status') || 'all';
+      const result = await getFinancialAnomalies(orgId, { severity, status });
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/records/financial-leaks/') && pathname.endsWith('/resolve')) {
+      const parts = pathname.split('/');
+      const anomalyId = parts[parts.indexOf('financial-leaks') + 1];
+      const body = await readJsonBody(req);
+      const { action = 'RESOLVE', notes = '' } = body;
+
+      const updated = await resolveFinancialAnomaly(orgId, anomalyId, auth.user.id, action, notes);
+      if (!updated) {
+        return jsonResponse(res, 404, { error: 'Anomaly record not found or inaccessible.' });
+      }
+      return jsonResponse(res, 200, { success: true, anomaly: updated });
+    }
+
+    // ── CURRENT SUBSCRIPTION & BILLING (/api/v1/billing/current) ─────────────
+    if (method === 'GET' && pathname === '/api/v1/billing/current') {
+      const billing = await getTenantBillingDetails(orgId);
+      return jsonResponse(res, 200, billing);
+    }
+
+    // ── RISK INTELLIGENCE (/api/v1/records/risks) ───────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/records/risks') {
+      const category = parsedUrl.searchParams.get('category');
+      const result = await getTenantRisks(orgId, category);
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/records/risks/') && pathname.endsWith('/mitigate')) {
+      const parts = pathname.split('/');
+      const riskId = parts[parts.indexOf('risks') + 1];
+
+      const updated = await toggleRiskMitigation(orgId, riskId, auth.user.id);
+      if (!updated) {
+        return jsonResponse(res, 404, { error: 'Risk record not found.' });
+      }
+      return jsonResponse(res, 200, { success: true, risk: updated });
+    }
+
+    // ── PROJECT PERFORMANCE INTELLIGENCE (/api/v1/records/projects) ─────────
+    if (method === 'GET' && pathname === '/api/v1/records/projects') {
+      const health = parsedUrl.searchParams.get('health');
+      const result = await getTenantProjects(orgId, health);
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/records/projects/') && pathname.endsWith('/verify-claims')) {
+      const parts = pathname.split('/');
+      const projectId = parts[parts.indexOf('projects') + 1];
+
+      const updated = await verifyProjectClaims(orgId, projectId, auth.user.id);
+      if (!updated) {
+        return jsonResponse(res, 404, { error: 'Project not found.' });
+      }
+      return jsonResponse(res, 200, { success: true, project: updated });
+    }
+
+    // ── SUPPLIER INTELLIGENCE (/api/v1/records/suppliers) ───────────────────
+    if (method === 'GET' && pathname === '/api/v1/records/suppliers') {
+      const status = parsedUrl.searchParams.get('status');
+      const result = await getTenantSuppliers(orgId, status);
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/records/suppliers/') && pathname.endsWith('/audit')) {
+      const parts = pathname.split('/');
+      const supplierId = parts[parts.indexOf('suppliers') + 1];
+
+      const updated = await auditTenantSupplier(orgId, supplierId, auth.user.id);
+      if (!updated) {
+        return jsonResponse(res, 404, { error: 'Supplier not found.' });
+      }
+      return jsonResponse(res, 200, { success: true, supplier: updated });
+    }
+
+    // ── CUSTOMER INTELLIGENCE (/api/v1/records/customers) ───────────────────
+    if (method === 'GET' && pathname === '/api/v1/records/customers') {
+      const result = await getTenantCustomers(orgId);
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/records/customers/') && pathname.endsWith('/review')) {
+      const parts = pathname.split('/');
+      const customerId = parts[parts.indexOf('customers') + 1];
+
+      const updated = await scheduleCustomerReview(orgId, customerId, auth.user.id);
+      if (!updated) {
+        return jsonResponse(res, 404, { error: 'Customer record not found.' });
+      }
+      return jsonResponse(res, 200, { success: true, customer: updated });
+    }
+
+    // ── DATA QUALITY INTELLIGENCE (/api/v1/data-quality) ─────────────────────
+    if (method === 'GET' && pathname === '/api/v1/data-quality/audits') {
+      const result = await getDataQualityAudits(orgId);
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'POST' && pathname === '/api/v1/data-quality/scan') {
+      const result = await runDataQualityScan(orgId, auth.user.id, auth.user.email);
+      return jsonResponse(res, 200, result);
+    }
+
+    // ── AI BUSINESS ASSISTANT ENGINE (/api/v1/assistant/chat) ────────────────
+    if (method === 'POST' && pathname === '/api/v1/assistant/chat') {
+      const body = await readJsonBody(req);
+      const { query: queryText, locale = 'ar' } = body;
+
+      if (!queryText || !queryText.trim()) {
+        return jsonResponse(res, 400, { error: 'Query text is required.' });
+      }
+
+      const result = await processAssistantQuery(orgId, auth.user.id, queryText, locale);
+      return jsonResponse(res, 200, {
+        success: true,
+        ...result
       });
     }
 

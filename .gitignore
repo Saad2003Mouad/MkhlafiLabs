@@ -29,3 +29,7 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Datasets (Large CSV benchmarks - downloaded via script)
+data/benchmark/*.csv
+data/*.csv

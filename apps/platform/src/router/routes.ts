@@ -38,10 +38,20 @@ export const ROUTES = {
     BILLING: '/app/billing',
     SETTINGS: '/app/settings',
     FINANCE: '/app/finance'
+  },
+
+  // ── Platform Operator Control Center ──────────────────────────────────────
+  ADMIN: {
+    ROOT: '/admin',
+    OVERVIEW: '/admin',
+    ORGANIZATIONS: '/admin/organizations',
+    USERS: '/admin/users',
+    LEADS: '/admin/leads',
+    AUDIT: '/admin/audit'
   }
 } as const;
 
-export type RouteCategory = 'public' | 'auth' | 'app' | 'not-found';
+export type RouteCategory = 'public' | 'auth' | 'app' | 'admin' | 'not-found';
 
 export interface RouteMatch {
   category: RouteCategory;
@@ -53,15 +63,31 @@ export function parseRoute(pathname: string): RouteMatch {
   const normalized = pathname.toLowerCase().replace(/\/+$/, '') || '/';
 
   // Auth routes
-  if (normalized === '/login') return { category: 'auth', path: normalized, matchedRoute: ROUTES.AUTH.LOGIN };
-  if (normalized === '/register') return { category: 'auth', path: normalized, matchedRoute: ROUTES.AUTH.REGISTER };
+  if (normalized === '/login' || normalized === '/signin' || normalized === '/sign-in' || normalized === '/auth/login') {
+    return { category: 'auth', path: normalized, matchedRoute: ROUTES.AUTH.LOGIN };
+  }
+  if (normalized === '/register' || normalized === '/signup' || normalized === '/sign-up' || normalized === '/auth/register') {
+    return { category: 'auth', path: normalized, matchedRoute: ROUTES.AUTH.REGISTER };
+  }
 
-  // Protected Customer Application routes
-  if (normalized === '/app' || normalized === '/app/overview') {
+  // Platform Administration routes (/admin/*)
+  if (normalized === '/admin' || normalized === '/admin/overview' || normalized === '/admin/dashboard' || normalized === '/admin/control') {
+    return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.OVERVIEW };
+  }
+  if (normalized === '/admin/organizations' || normalized === '/admin/tenants') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.ORGANIZATIONS };
+  if (normalized === '/admin/users' || normalized === '/admin/members') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.USERS };
+  if (normalized === '/admin/leads' || normalized === '/admin/inquiries') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.LEADS };
+  if (normalized === '/admin/audit' || normalized === '/admin/logs') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.AUDIT };
+  if (normalized.startsWith('/admin')) {
+    return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.OVERVIEW };
+  }
+
+  // Protected Customer Application routes (/app/*)
+  if (normalized === '/app' || normalized === '/app/overview' || normalized === '/app/dashboard' || normalized === '/app/cockpit') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ROOT };
   }
-  if (normalized === '/app/decisions') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DECISIONS };
-  if (normalized === '/app/risk') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.RISK };
+  if (normalized === '/app/decisions' || normalized === '/app/decision') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DECISIONS };
+  if (normalized === '/app/risk' || normalized === '/app/risks') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.RISK };
   if (normalized === '/app/projects' || normalized === '/app/project') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.PROJECTS };
   }
@@ -71,8 +97,10 @@ export function parseRoute(pathname: string): RouteMatch {
   if (normalized === '/app/customers' || normalized === '/app/customer') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.CUSTOMERS };
   }
-  if (normalized === '/app/data-quality') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DATA_QUALITY };
-  if (normalized === '/app/assistant') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ASSISTANT };
+  if (normalized === '/app/data-quality' || normalized === '/app/quality') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DATA_QUALITY };
+  if (normalized === '/app/assistant' || normalized === '/app/ai' || normalized === '/app/chat' || normalized === '/app/copilot') {
+    return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ASSISTANT };
+  }
   if (normalized === '/app/reports' || normalized === '/app/report') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.REPORTS };
   }
@@ -85,16 +113,35 @@ export function parseRoute(pathname: string): RouteMatch {
   if (normalized === '/app/workflows' || normalized === '/app/workflow') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.WORKFLOWS };
   }
-  if (normalized === '/app/organization' || normalized === '/app/branch') {
+  if (normalized === '/app/organization' || normalized === '/app/organizations' || normalized === '/app/branch' || normalized === '/app/branches') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ORGANIZATION };
   }
-  if (normalized === '/app/billing') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.BILLING };
+  if (normalized === '/app/billing' || normalized === '/app/subscription') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.BILLING };
   if (normalized === '/app/settings' || normalized === '/app/setting') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.SETTINGS };
   }
-  if (normalized === '/app/finance' || normalized === '/app/detail') {
+  if (normalized === '/app/finance' || normalized === '/app/financial' || normalized === '/app/detail') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.FINANCE };
   }
+
+  // Direct top-level workspace aliases (e.g., /finance, /decisions, /risk, /projects, /suppliers, etc.)
+  // Resolves directly into customer application view or prompts authentication seamlessly
+  if (normalized === '/finance' || normalized === '/financial') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.FINANCE };
+  if (normalized === '/decisions' || normalized === '/decision') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DECISIONS };
+  if (normalized === '/risk' || normalized === '/risks') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.RISK };
+  if (normalized === '/projects' || normalized === '/project') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.PROJECTS };
+  if (normalized === '/suppliers' || normalized === '/supplier') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.SUPPLIERS };
+  if (normalized === '/customers' || normalized === '/customer') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.CUSTOMERS };
+  if (normalized === '/data-quality' || normalized === '/quality') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DATA_QUALITY };
+  if (normalized === '/assistant' || normalized === '/ai' || normalized === '/chat' || normalized === '/copilot') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ASSISTANT };
+  if (normalized === '/reports' || normalized === '/report') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.REPORTS };
+  if (normalized === '/alerts' || normalized === '/alert') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ALERTS };
+  if (normalized === '/integrations' || normalized === '/integration') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.INTEGRATIONS };
+  if (normalized === '/workflows' || normalized === '/workflow') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.WORKFLOWS };
+  if (normalized === '/organization' || normalized === '/organizations' || normalized === '/branches' || normalized === '/branch') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ORGANIZATION };
+  if (normalized === '/billing' || normalized === '/subscription') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.BILLING };
+  if (normalized === '/settings' || normalized === '/setting') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.SETTINGS };
+  if (normalized === '/dashboard' || normalized === '/cockpit') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ROOT };
 
   // Legacy platform redirects to /app routes if bookmarked
   if (normalized === '/platform/decisions') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.DECISIONS };
@@ -113,14 +160,14 @@ export function parseRoute(pathname: string): RouteMatch {
   if (normalized === '/platform/settings') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.SETTINGS };
   if (normalized === '/platform/finance') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.FINANCE };
 
-  // Public Marketing routes
-  if (normalized === '/') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.HOME };
-  if (normalized === '/about') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.ABOUT };
-  if (normalized === '/platform') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.PLATFORM };
-  if (normalized === '/solutions') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.SOLUTIONS };
-  if (normalized === '/industries') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.INDUSTRIES };
-  if (normalized === '/pricing') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.PRICING };
-  if (normalized === '/contact') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.CONTACT };
+  // Public Marketing routes and common aliases
+  if (normalized === '/' || normalized === '/home') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.HOME };
+  if (normalized === '/about' || normalized === '/about-us' || normalized === '/aboutus') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.ABOUT };
+  if (normalized === '/platform' || normalized === '/features' || normalized === '/architecture') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.PLATFORM };
+  if (normalized === '/solutions' || normalized === '/services' || normalized === '/service') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.SOLUTIONS };
+  if (normalized === '/industries' || normalized === '/sectors') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.INDUSTRIES };
+  if (normalized === '/pricing' || normalized === '/plans' || normalized === '/packages') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.PRICING };
+  if (normalized === '/contact' || normalized === '/contact-us' || normalized === '/contactus') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.CONTACT };
 
   // Unknown route -> 404
   return { category: 'not-found', path: normalized, matchedRoute: normalized };

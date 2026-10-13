@@ -283,3 +283,6 @@ export const IconPlus: React.FC<IconProps> = ({ size = 18, className, style }) =
     <line x1="5" x2="19" y1="12" y2="12" />
   </svg>
 );
+
+export const IconAlertTriangle = IconRisk;
+export const IconRefreshCw = IconRefresh;

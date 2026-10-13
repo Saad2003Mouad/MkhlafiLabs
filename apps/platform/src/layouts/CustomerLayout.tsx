@@ -361,6 +361,24 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
             >
               <span>{isAr ? '🌐 الموقع التعريفي' : '🌐 Public Site'}</span>
             </button>
+
+            {/* Platform Admin Privileged Link (Only visible if isPlatformAdmin = true) */}
+            {user?.isPlatformAdmin && (
+              <button
+                onClick={() => onNavigate(ROUTES.ADMIN.OVERVIEW)}
+                className="ctrl-btn"
+                style={{
+                  fontSize: '11px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  color: '#f87171',
+                  fontWeight: 700
+                }}
+                title={isAr ? 'الانتقال إلى لوحة تحكم إدارة المنظومة' : 'Switch to Platform Admin Control Center'}
+              >
+                <span>🛡️ {isAr ? 'لوحة تحكم الإدارة' : 'Admin Panel'}</span>
+              </button>
+            )}
           </div>
 
           <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

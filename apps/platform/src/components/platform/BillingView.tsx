@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
 import { IconCreditCard, IconCheck, IconDownload } from '../Icons';
+import { api } from '../../api/client';
 
 interface BillingViewProps {
   locale: LocaleMode;
@@ -9,11 +10,33 @@ interface BillingViewProps {
 export const BillingView: React.FC<BillingViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
+  const [billingData, setBillingData] = useState<any>(null);
+
+  const fetchBilling = async () => {
+    try {
+      const res = await api.getBillingDetails();
+      setBillingData(res);
+    } catch {
+      // Fallback
+    }
+  };
+
+  useEffect(() => {
+    fetchBilling();
+  }, []);
 
   const handleDownloadInvoice = (num: string) => {
     setDownloadNotice(isAr ? `تم تنزيل الفاتورة الضريبية ZATCA (${num}) بنجاح.` : `Tax invoice (${num}) downloaded successfully.`);
     setTimeout(() => setDownloadNotice(null), 3500);
   };
+
+  const planName = isAr
+    ? (billingData?.subscription?.package_name_ar || 'باقة المؤسسات الشاملة')
+    : (billingData?.subscription?.package_name_en || 'Enterprise Suite');
+
+  const recordsUsed = billingData?.usage?.monthlyRecordsUsed || 5510000;
+  const recordsLimit = billingData?.subscription?.monthly_record_limit || 10000000;
+  const percentage = Math.min(100, Math.round((recordsUsed / recordsLimit) * 100));
 
   return (
     <div className="platform-page-container">
@@ -40,7 +63,7 @@ export const BillingView: React.FC<BillingViewProps> = ({ locale }) => {
 
         <div className="kpi-micro-badge">
           <span className="label">{isAr ? 'الخطة الحالية' : 'Current Tier'}</span>
-          <span className="value">{isAr ? 'باقة المؤسسات الشاملة' : 'Enterprise Suite'}</span>
+          <span className="value">{planName}</span>
         </div>
       </div>
 
@@ -58,10 +81,10 @@ export const BillingView: React.FC<BillingViewProps> = ({ locale }) => {
             {isAr ? 'السجلات المحاسبية المفحوصة شهرياً' : 'Monthly Ledger Audited Records'}
           </span>
           <div style={{ fontSize: '24px', fontWeight: 800, margin: '8px 0', color: 'var(--text-primary)' }}>
-            5.51M <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>/ 10.0M</span>
+            {(recordsUsed / 1e6).toFixed(2)}M <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>/ {(recordsLimit / 1e6).toFixed(1)}M</span>
           </div>
           <div style={{ height: '6px', background: 'var(--border-subtle)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ width: '55.1%', height: '100%', background: 'var(--accent-base)' }} />
+            <div style={{ width: `${percentage}%`, height: '100%', background: 'var(--accent-base)' }} />
           </div>
         </div>
 

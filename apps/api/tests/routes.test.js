@@ -180,7 +180,7 @@ describe('Master Refactoring & Route Architecture Verification Suite', () => {
         email: testEmail,
         password: 'Password123!',
         nameEn: 'Route Test Admin',
-        orgNameEn: 'Route Test Organization'
+        orgNameEn: `Route Test Organization ${Date.now()}`
       });
       assert.equal(regRes.status, 201);
       assert.ok(regRes.data.user);

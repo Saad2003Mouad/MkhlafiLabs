@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { LocaleMode, RiskItem } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { LocaleMode } from '../../types';
 import { MOCK_RISKS } from '../../data/mockData';
 import { IconRisk, IconShield, IconCheck } from '../Icons';
+import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 interface RiskViewProps {
   locale: LocaleMode;
@@ -9,19 +11,64 @@ interface RiskViewProps {
 
 export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [risks] = useState<RiskItem[]>(MOCK_RISKS);
+  const { isAuthenticated } = useAuth();
+  const [risks, setRisks] = useState<any[]>(MOCK_RISKS);
+  const [totalExposureSAR, setTotalExposureSAR] = useState<number>(1710000);
   const [selectedRiskCategory, setSelectedRiskCategory] = useState<string>('all');
   const [simulatedMitigations, setSimulatedMitigations] = useState<{ [key: string]: boolean }>({});
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
 
-  const toggleMitigation = (riskId: string) => {
+  const fetchRisks = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await api.getRisks();
+      if (res.risks && res.risks.length > 0) {
+        setRisks(res.risks);
+        setTotalExposureSAR(res.totalMonitoredExposureSAR);
+        const map: { [key: string]: boolean } = {};
+        res.risks.forEach((r: any) => {
+          map[r.id] = !!r.is_mitigated;
+        });
+        setSimulatedMitigations(map);
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  useEffect(() => {
+    fetchRisks();
+  }, [isAuthenticated]);
+
+  const toggleMitigation = async (riskId: string) => {
+    if (isAuthenticated) {
+      try {
+        const res = await api.toggleRiskMitigation(riskId);
+        const nextMitigated = res.risk?.is_mitigated;
+        setSimulatedMitigations((prev) => ({ ...prev, [riskId]: nextMitigated }));
+        const risk = risks.find((r) => r.id === riskId);
+        const code = risk?.code || res.risk?.code;
+        const msg = nextMitigated
+          ? (isAr ? `تم تفعيل خطة التحوط للمخاطر (${code}) وتحديث السجلات في PostgreSQL.` : `Mitigation plan activated for ${code} & recorded in PostgreSQL.`)
+          : (isAr ? `تمت إعادة مؤشر المخاطر (${code}) للوضع النشط.` : `Risk indicator ${code} reset to active baseline.`);
+        setBannerNotice(msg);
+        setTimeout(() => setBannerNotice(null), 3500);
+        await fetchRisks();
+        return;
+      } catch (err: any) {
+        setBannerNotice(err.message || 'Error updating risk');
+        setTimeout(() => setBannerNotice(null), 3500);
+      }
+    }
+
+    // Demo fallback for unauthenticated
     setSimulatedMitigations((prev) => {
       const updated = { ...prev, [riskId]: !prev[riskId] };
       const risk = risks.find((r) => r.id === riskId);
       const isNowMitigated = updated[riskId];
       const msg = isNowMitigated
-        ? (isAr ? `تمت محاكاة تفعيل خطة التحوط للمخاطر (${risk?.code}). تم خفض التعرض المالي التقديري.` : `Mitigation plan simulated for ${risk?.code}. Exposure reduced.`)
-        : (isAr ? `تمت إعادة مؤشر المخاطر (${risk?.code}) للوضع النشط.` : `Risk indicator ${risk?.code} reset to active baseline.`);
+        ? (isAr ? `(عرض تجريبي) تمت محاكاة تفعيل خطة التحوط للمخاطر (${risk?.code}).` : `(Demo) Mitigation plan simulated for ${risk?.code}.`)
+        : (isAr ? `(عرض تجريبي) تمت إعادة مؤشر المخاطر (${risk?.code}) للوضع النشط.` : `(Demo) Risk indicator ${risk?.code} reset.`);
       setBannerNotice(msg);
       setTimeout(() => setBannerNotice(null), 3500);
       return updated;
@@ -30,7 +77,8 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
 
   const filteredRisks = risks.filter((r) => {
     if (selectedRiskCategory === 'all') return true;
-    return r.categoryEn.toLowerCase().includes(selectedRiskCategory);
+    const cat = (r.category_en || r.categoryEn || '').toLowerCase();
+    return cat.includes(selectedRiskCategory);
   });
 
   return (
@@ -59,7 +107,7 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
         {/* Aggregate Exposure Pill */}
         <div className="kpi-micro-badge warning">
           <span className="label">{isAr ? 'إجمالي التعرض المالي المرصود' : 'Aggregate Monitored Exposure'}</span>
-          <span className="value">1,710,000 SAR</span>
+          <span className="value">{totalExposureSAR.toLocaleString()} SAR</span>
         </div>
       </div>
 
@@ -78,7 +126,7 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
             onClick={() => setSelectedRiskCategory('all')}
             className={`filter-chip ${selectedRiskCategory === 'all' ? 'active' : ''}`}
           >
-            {isAr ? 'كافة القطاعات (3)' : 'All Domains (3)'}
+            {isAr ? `كافة القطاعات (${risks.length})` : `All Domains (${risks.length})`}
           </button>
           <button
             onClick={() => setSelectedRiskCategory('supply')}
@@ -87,8 +135,8 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
             {isAr ? 'سلاسل الإمداد' : 'Supply Chain'}
           </button>
           <button
-            onClick={() => setSelectedRiskCategory('liquidity')}
-            className={`filter-chip ${selectedRiskCategory === 'liquidity' ? 'active' : ''}`}
+            onClick={() => setSelectedRiskCategory('liquid')}
+            className={`filter-chip ${selectedRiskCategory === 'liquid' ? 'active' : ''}`}
           >
             {isAr ? 'السيولة والتدفقات' : 'Liquidity & Cash'}
           </button>
@@ -112,36 +160,43 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
       <div className="decisions-grid">
         {filteredRisks.map((risk) => {
           const isMitigated = simulatedMitigations[risk.id];
+          const severity = risk.severity || 'high';
+          const code = risk.code;
+          const title = isAr ? (risk.title_ar || risk.titleAr) : (risk.title_en || risk.titleEn);
+          const category = isAr ? (risk.category_ar || risk.categoryAr) : (risk.category_en || risk.categoryEn);
+          const exposure = risk.exposure_formatted || (risk.financial_exposure_sar ? `${parseFloat(risk.financial_exposure_sar).toLocaleString()} SAR` : risk.impactSAR);
+          const mitigationPlan = isAr ? (risk.mitigation_plan_ar || risk.mitigationPlanAr) : (risk.mitigation_plan_en || risk.mitigationPlanEn);
+
           return (
-            <div key={risk.id} className={`decision-card ${isMitigated ? 'mitigated' : `priority-${risk.severity}`}`}>
+            <div key={risk.id} className={`decision-card ${isMitigated ? 'mitigated' : `priority-${severity}`}`}>
               <div className="decision-card-header">
                 <div className="badge-row">
-                  <span className={`severity-tag ${isMitigated ? 'optimal' : risk.severity}`}>
-                    {isMitigated ? (isAr ? 'تم التحوط' : 'MITIGATED') : risk.severity.toUpperCase()}
+                  <span className={`severity-tag ${isMitigated ? 'optimal' : severity}`}>
+                    {isMitigated ? (isAr ? 'تم التحوط' : 'MITIGATED') : severity.toUpperCase()}
                   </span>
-                  <span className="decision-code">{risk.code}</span>
-                  <span className="category-pill">{isAr ? risk.categoryAr : risk.categoryEn}</span>
+                  <span className="decision-code">{code}</span>
+                  <span className="category-pill">{category}</span>
                 </div>
                 <div className="decision-financial">
                   <span className="label">{isAr ? 'التعرض المالي المحسوب' : 'Exposure Estimate'}</span>
                   <span className="amount" style={{ textDecoration: isMitigated ? 'line-through' : 'none' }}>
-                    {risk.impactSAR}
+                    {exposure}
                   </span>
                 </div>
               </div>
 
               <h3 className="decision-title">
-                {isAr ? risk.titleAr : risk.titleEn}
+                {title}
               </h3>
 
               <div className="risk-metric-strip">
                 <div className="risk-metric-box">
                   <span className="k">{isAr ? 'الاحتمالية المحسوبة' : 'Calculated Probability'}</span>
-                  <span className="v">{risk.probability.toUpperCase()}</span>
+                  <span className="v">{(risk.probability || 'MEDIUM').toUpperCase()}</span>
                 </div>
                 <div className="risk-metric-box">
                   <span className="k">{isAr ? 'مستوى الخطورة' : 'Severity Level'}</span>
-                  <span className="v">{risk.severity.toUpperCase()}</span>
+                  <span className="v">{severity.toUpperCase()}</span>
                 </div>
                 <div className="risk-metric-box">
                   <span className="k">{isAr ? 'طريقة الرصد' : 'Detection Signal'}</span>
@@ -157,7 +212,7 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
                   </span>
                 </div>
                 <p className="mitigation-text">
-                  {isAr ? risk.mitigationPlanAr : risk.mitigationPlanEn}
+                  {mitigationPlan}
                 </p>
               </div>
 
@@ -170,8 +225,8 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
                   <IconShield size={14} />
                   <span>
                     {isMitigated
-                      ? (isAr ? 'إلغاء المحاكاة والعودة للأساس' : 'Reset Baseline Exposure')
-                      : (isAr ? 'محاكاة تفعيل خطة التحوط' : 'Simulate Mitigation Action')}
+                      ? (isAr ? 'إلغاء التحوط وإعادة التعرض المالي' : 'Reset Baseline Exposure')
+                      : (isAr ? 'تفعيل خطة التحوط المؤسسية' : 'Activate Mitigation Plan')}
                   </span>
                 </button>
               </div>

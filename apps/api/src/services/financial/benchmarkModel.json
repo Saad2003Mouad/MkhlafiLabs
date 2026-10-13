@@ -1,0 +1,125 @@
+{
+  "metadata": {
+    "datasetName": "Schreyer SAP ERP Accounting Anomalies Benchmark (v2)",
+    "citation": "Marco Schreyer et al., Univ. of St. Gallen & NVIDIA Research",
+    "trainedAt": "2026-10-13T18:29:08.786Z",
+    "totalRows": 533009,
+    "regularRows": 532909,
+    "globalAnomalies": 70,
+    "localAnomalies": 30,
+    "trainingDurationMs": 1425
+  },
+  "parameters": {
+    "meanAmount": 922668.2721672248,
+    "stdAmount": 2152288.8771891887,
+    "optimalThreshold": 65,
+    "accountCategories": 73,
+    "postingKeyCategories": 73,
+    "transactionKeyCategories": 79,
+    "profitCenterCategories": 157,
+    "companyCodeCategories": 158
+  },
+  "empiricalValidation": {
+    "precision": 46.67,
+    "recall": 70,
+    "f1Score": 0.56,
+    "accuracy": 99.79,
+    "falsePositiveRate": 0.1501,
+    "truePositives": 70,
+    "falsePositives": 80,
+    "trueNegatives": 53212,
+    "falseNegatives": 30
+  },
+  "topDetectedAnomalies": [
+    {
+      "documentId": "532942",
+      "companyCode": "C13",
+      "account": "Q99",
+      "postingKey": "I05",
+      "amount": 92445515.6116,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532967",
+      "companyCode": "S42",
+      "account": "Z01",
+      "postingKey": "O49",
+      "amount": 92445529.3506,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532917",
+      "companyCode": "Q22",
+      "account": "K27",
+      "postingKey": "Y19",
+      "amount": 92445534.656,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532923",
+      "companyCode": "R47",
+      "account": "D68",
+      "postingKey": "I81",
+      "amount": 92445523.241,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532958",
+      "companyCode": "S54",
+      "account": "S06",
+      "postingKey": "Y42",
+      "amount": 92445529.9899,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532939",
+      "companyCode": "O64",
+      "account": "L79",
+      "postingKey": "H15",
+      "amount": 92445518.3706,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532934",
+      "companyCode": "B37",
+      "account": "M13",
+      "postingKey": "N50",
+      "amount": 92445521.0005,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532955",
+      "companyCode": "M90",
+      "account": "N95",
+      "postingKey": "S15",
+      "amount": 92445512.7124,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532932",
+      "companyCode": "U18",
+      "account": "K77",
+      "postingKey": "K79",
+      "amount": 92445516.5836,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    },
+    {
+      "documentId": "532964",
+      "companyCode": "G45",
+      "account": "U45",
+      "postingKey": "A49",
+      "amount": 92445503.8262,
+      "anomalyType": "global",
+      "anomalyScore": 100
+    }
+  ]
+}

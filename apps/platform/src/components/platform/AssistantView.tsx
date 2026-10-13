@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { LocaleMode } from '../../types';
 import { IconAssistant, IconArrowRight } from '../Icons';
+import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 interface AssistantViewProps {
   locale: LocaleMode;
@@ -16,6 +18,7 @@ interface Message {
 
 export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
+  const { isAuthenticated } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'm-1',
@@ -32,31 +35,58 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
 
   const suggestedQueries = isAr
     ? [
+        'لماذا انخفض حجم الخسائر هذا العام وما هي الأسباب والحلول؟',
         'ما هي أبرز حالات الهدر المالي التي تحتاج قراراً هذا الأسبوع؟',
         'هل يوجد تفاوت سعري غير مبرر في عقود توريد حديد التسليح؟',
-        'ما هي المشاريع التي تواجه انحرافاً في التكلفة يتجاوز 100 ألف ريال؟'
+        'ما هي المشاريع التي تواجه انحرافاً في التكلفة يتجاوز 100 ألف ريال؟',
+        'ما هي أبرز المخاطر التشغيلية المرصودة في المؤسسة؟',
+        'أعطني ملخصاً تنفيذياً شاملاً لجميع محركات الذكاء'
       ]
     : [
+        'Why did losses decrease this year, and what are the root causes and solutions?',
         'What are the highest-impact financial leaks requiring action this week?',
         'Is there unexplainable price creep in structural steel procurement contracts?',
-        'Which active projects have cost overruns exceeding 100,000 SAR?'
+        'Which active projects have cost overruns exceeding 100,000 SAR?',
+        'What are the top monitored operational risks in the organization?',
+        'Provide an executive summary across all intelligence engines'
       ];
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const q = textToSend || inputVal;
     if (!q.trim()) return;
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const userMsg: Message = {
       id: `u-${Date.now()}`,
       sender: 'user',
       text: q,
-      timestamp: '09:12'
+      timestamp: timeStr
     };
 
     setMessages((prev) => [...prev, userMsg]);
     if (!textToSend) setInputVal('');
     setIsThinking(true);
 
+    if (isAuthenticated) {
+      try {
+        const res = await api.askAssistant(q, locale);
+        const botMsg: Message = {
+          id: `a-${Date.now()}`,
+          sender: 'assistant',
+          text: res.response,
+          citations: res.citations,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        setIsThinking(false);
+        return;
+      } catch (err: any) {
+        console.error('Assistant error:', err);
+      }
+    }
+
+    // Demo fallback for unauthenticated
     setTimeout(() => {
       let respText = isAr
         ? 'بناءً على فحص سجل المدفوعات في SAP S/4HANA: تم رصد صرف مكرر بقيمة 48,500 ريال تحت أمر الشراء PO-8921 بتاريخ 10 أكتوبر 2026. القرار الموصى به: تجميد الدفعة الثانية لحين استلام إشعار المطابقة من المورد.'
@@ -76,12 +106,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
           { source: 'SAP S/4HANA (GL-4029)', docId: 'INV-8840', confidence: '99.4%' },
           { source: 'Contract Repository', docId: 'CTR-04-V2', confidence: '96.8%' }
         ],
-        timestamp: '09:12'
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
       setMessages((prev) => [...prev, botMsg]);
       setIsThinking(false);
-    }, 1000);
+    }, 900);
   };
 
   return (
@@ -150,13 +180,13 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
               <span>{m.timestamp}</span>
             </div>
 
-            <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.6 }}>{m.text}</p>
+            <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{m.text}</p>
 
             {/* Verifiable Evidence Citations */}
-            {m.citations && (
+            {m.citations && m.citations.length > 0 && (
               <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '10px', color: 'var(--accent-light)', fontWeight: 700 }}>
-                  {isAr ? '📎 السندات المحاسبية الموثقة:' : '📎 Verifiable Ledger Citations:'}
+                  {isAr ? '📎 السندات المحاسبية الموثقة من قاعدة البيانات:' : '📎 Verifiable Ledger Citations:'}
                 </span>
                 {m.citations.map((c, ci) => (
                   <div key={ci} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
@@ -171,7 +201,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
 
         {isThinking && (
           <div style={{ alignSelf: 'flex-start', padding: '10px 14px', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            <span>{isAr ? 'جارِ فحص وتدقيق القيود المحاسبية...' : 'Auditing ledger records...'}</span>
+            <span>{isAr ? 'جارِ فحص وتدقيق القيود المحاسبية في PostgreSQL...' : 'Auditing ledger records in PostgreSQL...'}</span>
           </div>
         )}
       </div>
@@ -202,6 +232,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
         />
         <button
           type="submit"
+          disabled={isThinking}
           className="btn-primary"
           style={{ padding: '0 20px', fontSize: '13px' }}
         >

@@ -13,10 +13,36 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ locale }) => {
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
 
   const handleExport = (format: string) => {
+    if (format === 'CSV') {
+      // Generate actual RFC 4180 CSV with UTF-8 BOM for Microsoft Excel compatibility
+      const headers = ['ID', 'Actor', 'Action_AR', 'Action_EN', 'Target_Record', 'Timestamp', 'SHA256_Hash'];
+      const rows = logs.map(l => [
+        l.id,
+        `"${l.actor.replace(/"/g, '""')}"`,
+        `"${(l.actionAr || '').replace(/"/g, '""')}"`,
+        `"${(l.actionEn || '').replace(/"/g, '""')}"`,
+        `"${(l.targetRecord || '').replace(/"/g, '""')}"`,
+        `"${l.timestamp}"`,
+        `"${l.hash}"`
+      ]);
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `mikhlafi-labs-audit-trail-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else if (format === 'PDF') {
+      window.print();
+    }
+
     setDownloadNotice(
       isAr
-        ? `تم تجهيز وتنزيل التقرير التنفيذي بصيغة (${format}) موثقاً بالختم الرقمي SHA-256.`
-        : `Executive brief (${format}) generated with verifiable SHA-256 ledger seals.`
+        ? `تم تصدير وتنزيل التقرير التنفيذي بصيغة (${format}) موثقاً بالختم الرقمي SHA-256 بنجاح.`
+        : `Executive audit log (${format}) exported with verifiable SHA-256 cryptographic hashes.`
     );
     setTimeout(() => setDownloadNotice(null), 4000);
   };

@@ -57,19 +57,28 @@ const server = http.createServer((req, res) => {
   // ── 2. Assets (/assets/*) ────────────────────────────────────────────────
   if (urlPath.startsWith('/assets/')) {
     const assetSub = urlPath.slice('/assets/'.length);
-    const distAssetPath = path.join(PLATFORM_DIST, 'assets', path.normalize(assetSub));
+    const safeDistBase = path.resolve(PLATFORM_DIST, 'assets');
+    const safeDistPath = path.resolve(safeDistBase, '.' + path.normalize('/' + assetSub));
+    const safeRootBase = path.resolve(__dirname, 'assets');
+    const safeRootPath = path.resolve(safeRootBase, '.' + path.normalize('/' + assetSub));
 
-    fs.stat(distAssetPath, (err, stats) => {
-      if (!err && stats.isFile()) {
-        serveFile(res, distAssetPath);
+    // Reject any path escaping the allowed asset directories
+    if (!safeDistPath.startsWith(safeDistBase) && !safeRootPath.startsWith(safeRootBase)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Access Denied: Path traversal detected.');
+      return;
+    }
+
+    fs.stat(safeDistPath, (err, stats) => {
+      if (!err && stats.isFile() && safeDistPath.startsWith(safeDistBase)) {
+        serveFile(res, safeDistPath);
         return;
       }
 
       // Root images/assets fallback
-      const rootAssetPath = path.join(__dirname, 'assets', path.normalize(assetSub));
-      fs.stat(rootAssetPath, (rootErr, rootStats) => {
-        if (!rootErr && rootStats.isFile()) {
-          serveFile(res, rootAssetPath);
+      fs.stat(safeRootPath, (rootErr, rootStats) => {
+        if (!rootErr && rootStats.isFile() && safeRootPath.startsWith(safeRootBase)) {
+          serveFile(res, safeRootPath);
         } else {
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
           res.end('Asset Not Found');
@@ -82,7 +91,8 @@ const server = http.createServer((req, res) => {
   // ── 3. Main React Application Routes (SPA) ───────────────────────────────
   // Serves apps/platform/dist/index.html for:
   // - / (Redesigned Public Homepage)
-  // - /platform, /platform/* (Customer Application & 16 Sub-Pages)
+  // - /platform, /solutions, /industries, /pricing, /about, /contact
+  // - /app, /app/* (Customer Application & Protected Sub-Pages)
   const spaIndex = path.join(PLATFORM_DIST, 'index.html');
   fs.stat(spaIndex, (err, stats) => {
     if (!err && stats.isFile()) {
@@ -100,7 +110,8 @@ runMigrations().then(() => {
     console.log(`  MIKHLAFI LABS — Enterprise Decision Intelligence Platform`);
     console.log(`  INTELLIGENCE · SYSTEMS · INNOVATION`);
     console.log(`  Public Website:          http://localhost:${PORT}/`);
-    console.log(`  Customer Platform:       http://localhost:${PORT}/platform`);
+    console.log(`  Customer Workspace:      http://localhost:${PORT}/app`);
+    console.log(`  Product Overview:        http://localhost:${PORT}/platform`);
     console.log(`  REST API Gateway:        http://localhost:${PORT}/api/v1`);
     console.log(`  Database Status:         PostgreSQL Schema Initialized`);
     console.log(`=============================================================\n`);

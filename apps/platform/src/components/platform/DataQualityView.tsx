@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { LocaleMode, DataQualityCheck } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { LocaleMode } from '../../types';
 import { MOCK_DATA_QUALITY } from '../../data/mockData';
 import { IconDataQuality, IconCheck, IconRefresh } from '../Icons';
+import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 interface DataQualityViewProps {
   locale: LocaleMode;
@@ -9,12 +11,54 @@ interface DataQualityViewProps {
 
 export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [checks, setChecks] = useState<DataQualityCheck[]>(MOCK_DATA_QUALITY);
+  const { isAuthenticated } = useAuth();
+  const [checks, setChecks] = useState<any[]>(MOCK_DATA_QUALITY);
+  const [overallScore, setOverallScore] = useState<number>(97.4);
   const [isScanning, setIsScanning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const handleRunScan = () => {
+  const fetchAudits = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await api.getDataQualityAudits();
+      if (res.audits && res.audits.length > 0) {
+        setChecks(res.audits);
+        setOverallScore(res.overallComplianceScore);
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  useEffect(() => {
+    fetchAudits();
+  }, [isAuthenticated]);
+
+  const handleRunScan = async () => {
     setIsScanning(true);
+    if (isAuthenticated) {
+      try {
+        const res = await api.runDataQualityScan();
+        if (res.audits) {
+          setChecks(res.audits);
+          setOverallScore(res.overallComplianceScore);
+        }
+        setNotice(
+          isAr
+            ? `اكتمل فحص تكامل وسلامة القيود عبر كافة الأنظمة في PostgreSQL. نسبة الامتثال الكلية: ${res.overallComplianceScore}%.`
+            : `System-wide ledger integrity scan complete in PostgreSQL. Overall compliance: ${res.overallComplianceScore}%.`
+        );
+        setTimeout(() => setNotice(null), 4000);
+      } catch (err: any) {
+        setNotice(err.message || 'Error running scan');
+        setTimeout(() => setNotice(null), 4000);
+      } finally {
+        setIsScanning(false);
+      }
+      return;
+    }
+
+    // Demo fallback
     setTimeout(() => {
       setIsScanning(false);
       setChecks((prev) =>
@@ -23,7 +67,7 @@ export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
           lastChecked: isAr ? 'الآن (محدث)' : 'Just now (Synced)'
         }))
       );
-      setNotice(isAr ? 'اكتمل فحص تكامل وسلامة القيود عبر كافة الأنظمة. نسبة الامتثال الكلية: 97.4%.' : 'System-wide ledger integrity scan complete. Overall compliance: 97.4%.');
+      setNotice(isAr ? 'اكتمل فحص تكامل وسلامة القيود (عرض تجريبي). نسبة الامتثال الكلية: 97.4%.' : 'System-wide scan complete (demo).');
       setTimeout(() => setNotice(null), 4000);
     }, 1200);
   };
@@ -69,49 +113,65 @@ export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
         </div>
       )}
 
+      {/* Compliance Overview Badge */}
+      <div className="page-filter-bar">
+        <div className="filter-group">
+          <span className="filter-label">{isAr ? 'معدل الامتثال الكلي:' : 'Overall Compliance:'}</span>
+          <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--status-success)' }}>
+            {overallScore}%
+          </span>
+        </div>
+        <div className="meta-stats">
+          <span>{isAr ? 'فحص حتمي مطابق لمعايير ZATCA & IFRS' : 'Deterministic ZATCA & IFRS Validation'}</span>
+        </div>
+      </div>
+
       {/* Overview Cards */}
       <div className="decisions-grid">
-        {checks.map((check) => (
-          <div key={check.id} className="decision-card">
-            <div className="decision-card-header">
-              <div className="badge-row">
-                <span className={`severity-tag ${check.status === 'passed' ? 'optimal' : 'medium'}`}>
-                  {check.status.toUpperCase()}
-                </span>
-                <span className="category-pill">{check.sourceSystem}</span>
+        {checks.map((check) => {
+          const ruleName = check.rule_name || check.ruleName;
+          const source = check.source_system || check.sourceSystem;
+          const compliance = check.compliance_rate ?? check.complianceRate ?? 99;
+          const unmapped = check.unmapped_records ?? check.unmappedRecords ?? 0;
+          const lastChecked = check.last_checked || check.lastChecked || 'الآن';
+          const isPassed = check.status === 'passed' || check.status === 'PASS';
+
+          return (
+            <div key={check.id} className="decision-card">
+              <div className="decision-card-header">
+                <div className="badge-row">
+                  <span className={`severity-tag ${isPassed ? 'optimal' : 'medium'}`}>
+                    {isPassed ? (isAr ? 'سليم ومطابق' : 'PASSED') : (isAr ? 'تنبيه تدقيق' : 'WARNING')}
+                  </span>
+                  <span className="category-pill">{source}</span>
+                </div>
+                <div className="decision-financial">
+                  <span className="label">{isAr ? 'معدل الامتثال' : 'Compliance Rate'}</span>
+                  <span className="amount" style={{ color: isPassed ? 'var(--status-success)' : 'var(--status-warning)' }}>
+                    {compliance}%
+                  </span>
+                </div>
               </div>
-              <div className="decision-financial">
-                <span className="label">{isAr ? 'نسبة الامتثال' : 'Compliance'}</span>
-                <span className="amount" style={{ color: check.complianceRate > 95 ? 'var(--status-success)' : 'var(--status-warning)' }}>
-                  {check.complianceRate}%
-                </span>
+
+              <h3 className="decision-title">
+                {ruleName}
+              </h3>
+
+              <div className="risk-metric-strip">
+                <div className="risk-metric-box">
+                  <span className="k">{isAr ? 'القيود غير المتطابقة' : 'Unmapped Records'}</span>
+                  <span className="v" style={{ color: unmapped > 0 ? 'var(--status-warning)' : 'var(--status-success)' }}>
+                    {unmapped} {isAr ? 'قيود' : 'records'}
+                  </span>
+                </div>
+                <div className="risk-metric-box">
+                  <span className="k">{isAr ? 'آخر تدقيق' : 'Last Checked'}</span>
+                  <span className="v">{lastChecked}</span>
+                </div>
               </div>
             </div>
-
-            <h3 className="decision-title">
-              {check.ruleName}
-            </h3>
-
-            <div className="risk-metric-strip">
-              <div className="risk-metric-box">
-                <span className="k">{isAr ? 'السجلات غير المعايرة' : 'Unmapped Records'}</span>
-                <span className="v" style={{ color: check.unmappedRecords > 5 ? 'var(--status-danger)' : 'var(--text-primary)' }}>
-                  {check.unmappedRecords} {isAr ? 'سجل' : 'rows'}
-                </span>
-              </div>
-              <div className="risk-metric-box">
-                <span className="k">{isAr ? 'آخر فحص تدقيق' : 'Last Audited'}</span>
-                <span className="v">{check.lastChecked}</span>
-              </div>
-            </div>
-
-            <div className="decision-actions-row">
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                {isAr ? 'النظام المصدر: قراءة آمنة فقط (Read-Only Telemetry)' : 'Source: Non-Invasive Read-Only Telemetry'}
-              </span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

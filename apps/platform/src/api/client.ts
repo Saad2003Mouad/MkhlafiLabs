@@ -8,6 +8,7 @@ export interface UserProfile {
   nameAr?: string;
   phone?: string;
   status: string;
+  isPlatformAdmin?: boolean;
 }
 
 export interface TenantContext {
@@ -172,6 +173,11 @@ class ApiClient {
     });
   }
 
+  // ── Executive Dashboard Summary ───────────────────────────────────────────
+  async getDashboardSummary(): Promise<DashboardSummaryResponse> {
+    return this.request('/dashboard/summary', { method: 'GET' });
+  }
+
   // ── Operational Decisions ─────────────────────────────────────────────────
   async getDecisions(status?: string): Promise<{
     organizationId: string;
@@ -201,9 +207,188 @@ class ApiClient {
     });
   }
 
-  // ── Dashboard Summary ─────────────────────────────────────────────────────
-  async getDashboardSummary(): Promise<DashboardSummaryResponse> {
-    return this.request('/dashboard/summary', { method: 'GET' });
+  // ── Financial Leak Detection (Service 01) ─────────────────────────────────
+  async getFinancialLeaks(filters?: { severity?: string; status?: string }): Promise<{
+    organizationId: string;
+    totalCases: number;
+    activeLeakageSAR: number;
+    protectedAmountSAR: number;
+    highSeverityCount: number;
+    anomalies: Array<{
+      id: string;
+      case_number: string;
+      rule_code: string;
+      severity: string;
+      confidence_pct: number;
+      target_vendor: string;
+      flagged_amount: number;
+      currency: string;
+      narrative_en: string;
+      narrative_ar: string;
+      status: string;
+      created_at: string;
+      resolved_at?: string;
+    }>;
+  }> {
+    const params = new URLSearchParams();
+    if (filters?.severity) params.set('severity', filters.severity);
+    if (filters?.status) params.set('status', filters.status);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/records/financial-leaks${qs}`, { method: 'GET' });
+  }
+
+  async resolveFinancialLeak(
+    anomalyId: string,
+    action: 'FREEZE' | 'LEGITIMATE' | 'RESOLVE',
+    notes = ''
+  ): Promise<{ success: boolean; anomaly: any }> {
+    return this.request(`/records/financial-leaks/${anomalyId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes })
+    });
+  }
+
+  // ── Customer Billing & Subscriptions ──────────────────────────────────────
+  async getBillingDetails(): Promise<{
+    subscription: any;
+    usage: {
+      monthlyRecordsUsed: number;
+      activeEnginesCount: number;
+      totalEnginesCount: number;
+    };
+  }> {
+    return this.request('/billing/current', { method: 'GET' });
+  }
+
+  // ── Inbound Lead Inquiries (Public) ───────────────────────────────────────
+  async submitLeadInquiry(params: {
+    name: string;
+    email: string;
+    companyName?: string;
+    phone?: string;
+    message?: string;
+    inquiryType?: string;
+  }): Promise<{ success: boolean; message: string; inquiry: any }> {
+    return this.request('/inquiries', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  // ── Platform Administration (/api/v1/admin/*) ──────────────────────────
+  async getAdminOverview(): Promise<{
+    organizations: { total: number; active: number; suspended: number };
+    users: { total: number };
+    subscriptions: any[];
+    financialIntelligence: { totalCases: number; totalFlaggedSAR: number };
+    leads: { total: number; new: number };
+    platformStatus: string;
+  }> {
+    return this.request('/admin/overview', { method: 'GET' });
+  }
+
+  async getAdminTenants(): Promise<{ organizations: any[] }> {
+    return this.request('/admin/organizations', { method: 'GET' });
+  }
+
+  async updateTenantStatus(tenantId: string, status: string, reason?: string): Promise<{ success: boolean; organization: any }> {
+    return this.request(`/admin/organizations/${tenantId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, reason })
+    });
+  }
+
+  async getAdminUsers(): Promise<{ users: any[] }> {
+    return this.request('/admin/users', { method: 'GET' });
+  }
+
+  async getAdminLeads(): Promise<{ leads: any[] }> {
+    return this.request('/admin/leads', { method: 'GET' });
+  }
+
+  async getAdminAuditLogs(): Promise<{ auditLogs: any[] }> {
+    return this.request('/admin/audit', { method: 'GET' });
+  }
+
+  // ── Operational Intelligence Engines (Services 03-08) ────────────────────
+  async getRisks(): Promise<{
+    organizationId: string;
+    count: number;
+    totalMonitoredExposureSAR: number;
+    risks: any[];
+  }> {
+    return this.request('/records/risks', { method: 'GET' });
+  }
+
+  async toggleRiskMitigation(riskId: string): Promise<{ success: boolean; risk: any }> {
+    return this.request(`/records/risks/${riskId}/mitigate`, { method: 'POST' });
+  }
+
+  async getProjects(): Promise<{
+    organizationId: string;
+    count: number;
+    totalCapitalBudgetSAR: number;
+    projects: any[];
+  }> {
+    return this.request('/records/projects', { method: 'GET' });
+  }
+
+  async verifyProjectClaims(projectId: string): Promise<{ success: boolean; project: any }> {
+    return this.request(`/records/projects/${projectId}/verify-claims`, { method: 'POST' });
+  }
+
+  async getSuppliers(): Promise<{
+    organizationId: string;
+    count: number;
+    totalMonitoredContractsSAR: number;
+    suppliers: any[];
+  }> {
+    return this.request('/records/suppliers', { method: 'GET' });
+  }
+
+  async auditSupplier(supplierId: string): Promise<{ success: boolean; supplier: any }> {
+    return this.request(`/records/suppliers/${supplierId}/audit`, { method: 'POST' });
+  }
+
+  async getCustomers(): Promise<{
+    organizationId: string;
+    count: number;
+    totalRevenueAtRiskSAR: number;
+    customers: any[];
+  }> {
+    return this.request('/records/customers', { method: 'GET' });
+  }
+
+  async reviewCustomer(customerId: string): Promise<{ success: boolean; customer: any }> {
+    return this.request(`/records/customers/${customerId}/review`, { method: 'POST' });
+  }
+
+  async getDataQualityAudits(): Promise<{
+    organizationId: string;
+    overallComplianceScore: number;
+    audits: any[];
+  }> {
+    return this.request('/data-quality/audits', { method: 'GET' });
+  }
+
+  async runDataQualityScan(): Promise<{
+    success: boolean;
+    message: string;
+    overallComplianceScore: number;
+    audits: any[];
+  }> {
+    return this.request('/data-quality/scan', { method: 'POST' });
+  }
+
+  async askAssistant(queryText: string, locale = 'ar'): Promise<{
+    success: boolean;
+    response: string;
+    citations: Array<{ source: string; docId: string; confidence: string }>;
+  }> {
+    return this.request('/assistant/chat', {
+      method: 'POST',
+      body: JSON.stringify({ query: queryText, locale })
+    });
   }
 }
 
