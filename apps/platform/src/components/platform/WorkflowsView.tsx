@@ -1,79 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { IconWorkflow, IconCheck } from '../Icons';
+import { IconWorkflow, IconCheck, IconRefresh } from '../Icons';
+import { api } from '../../api/client';
 
 interface WorkflowsViewProps {
   locale: LocaleMode;
 }
 
-interface WorkflowRule {
-  id: string;
-  nameAr: string;
-  nameEn: string;
-  triggerAr: string;
-  triggerEn: string;
-  actionAr: string;
-  actionEn: string;
-  active: boolean;
-  executionsCount: number;
-}
-
 export const WorkflowsView: React.FC<WorkflowsViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [workflows, setWorkflows] = useState<WorkflowRule[]>([
-    {
-      id: 'wf-1',
-      nameAr: 'تجميد مدفوعات الفواتير المكررة فورياً',
-      nameEn: 'Instant Freeze on Suspected Duplicate Invoices',
-      triggerAr: 'رصد تشابه رقم الفاتورة وتاريخ الصرف لنفس المورد بمبلغ يتجاوز 10,000 ريال',
-      triggerEn: 'Detection of matching invoice/date disbursement exceeding 10,000 SAR',
-      actionAr: 'تجميد أمر الدفع في ERP وإرسال تنبيه عاجل لمدير التدقيق',
-      actionEn: 'Block ERP disbursement queue and escalate to Audit Director',
-      active: true,
-      executionsCount: 14
-    },
-    {
-      id: 'wf-2',
-      nameAr: 'تصعيد انحراف أسعار عقود التوريد',
-      nameEn: 'Escalation for Supplier Price Variance',
-      triggerAr: 'تجاوز سعر الوحدة المفوتر بنسبة +10% عن العقد الأساسي المسجل',
-      triggerEn: 'Unit invoice price exceeding contractual baseline by +10%',
-      actionAr: 'إدراج بند مراجعة أسعار في طابور قرارات المشتريات',
-      actionEn: 'Create mandatory price review item in Procurement Decision Queue',
-      active: true,
-      executionsCount: 8
-    },
-    {
-      id: 'wf-3',
-      nameAr: 'إنذار تأخر مستخلصات المشاريع الحرجة',
-      nameEn: 'Early Warning on Critical Project Progress Slippage',
-      triggerAr: 'تأخر الإنجاز الفعلي عن المخطط بأكثر من 10% على المسار الحرج',
-      triggerEn: 'Actual milestone lagging contractual schedule by >10%',
-      actionAr: 'توليد إنذار مبكر لمدير العمليات التنفيذي',
-      actionEn: 'Dispatch early warning notification to Operations Director',
-      active: false,
-      executionsCount: 3
-    }
-  ]);
-
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const toggleWorkflow = (id: string) => {
-    setWorkflows((prev) =>
-      prev.map((w) => {
-        if (w.id === id) {
-          const newState = !w.active;
-          const msg = newState
-            ? (isAr ? `تم تفعيل سياسة الحوكمة (${w.nameAr}) بنجاح.` : `Policy (${w.nameEn}) activated.`)
-            : (isAr ? `تم تعطيل سياسة الحوكمة (${w.nameAr}).` : `Policy (${w.nameEn}) paused.`);
-          setFeedback(msg);
-          setTimeout(() => setFeedback(null), 3000);
-          return { ...w, active: newState };
-        }
-        return w;
-      })
-    );
+  const fetchWorkflows = async () => {
+    try {
+      setLoading(true);
+      const res = await api.getWorkflows();
+      setWorkflows(res.workflows || []);
+    } catch {
+      // Fallback
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    fetchWorkflows();
+  }, []);
+
+  const toggleWorkflow = async (id: string, nameAr: string, nameEn: string) => {
+    setTogglingId(id);
+    try {
+      const res = await api.toggleWorkflow(id);
+      if (res.success) {
+        setWorkflows((prev) =>
+          prev.map((w) => (w.id === id ? { ...w, active: res.workflow.active, executions_count: res.workflow.executions_count } : w))
+        );
+        const name = isAr ? nameAr : nameEn;
+        const msg = res.workflow.active
+          ? (isAr ? `تم تفعيل سياسة الحوكمة (${name}) بنجاح.` : `Policy (${name}) activated.`)
+          : (isAr ? `تم تعطيل سياسة الحوكمة (${name}).` : `Policy (${name}) paused.`);
+        setFeedback(msg);
+      }
+    } catch (err: any) {
+      setFeedback(err.message || 'Toggle failed.');
+    } finally {
+      setTogglingId(null);
+      setTimeout(() => setFeedback(null), 3000);
+    }
+  };
+
+  const totalInterventions = workflows.reduce((sum, w) => sum + parseInt(w.executions_count || 0, 10), 0);
 
   return (
     <div className="platform-page-container">
@@ -93,14 +72,25 @@ export const WorkflowsView: React.FC<WorkflowsViewProps> = ({ locale }) => {
           </h1>
           <p className="page-subtitle">
             {isAr
-              ? 'برمجة قواعد التحوط الإداري والمالي لتنفيذ إجراءات وقائية فور رصد الانحرافات المحاسبية تلقائياً.'
+              ? 'برمجة قواعد التحوط الإداري والمالي لتنفيذ إجراءات وقائية فور رصد الانحرافات المحاسبية تلقائياً في دفتر الأستاذ.'
               : 'Deterministic policy rules executing precautionary governance actions upon signal detection.'}
           </p>
         </div>
 
-        <div className="kpi-micro-badge">
-          <span className="label">{isAr ? 'إجمالي التدخلات الوقائية' : 'Automated Interventions'}</span>
-          <span className="value">25 Actions</span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={fetchWorkflows}
+            disabled={loading}
+            className="btn-secondary"
+            style={{ fontSize: '12px', padding: '7px 12px' }}
+          >
+            <IconRefresh size={14} className={loading ? 'spinning' : ''} />
+            <span>{loading ? (isAr ? 'جارِ التحديث...' : 'Updating...') : (isAr ? 'تحديث' : 'Refresh')}</span>
+          </button>
+          <div className="kpi-micro-badge">
+            <span className="label">{isAr ? 'إجمالي التدخلات الوقائية' : 'Automated Interventions'}</span>
+            <span className="value">{totalInterventions} Actions</span>
+          </div>
         </div>
       </div>
 
@@ -113,47 +103,66 @@ export const WorkflowsView: React.FC<WorkflowsViewProps> = ({ locale }) => {
 
       {/* Workflows Grid */}
       <div className="decisions-grid">
-        {workflows.map((wf) => (
-          <div key={wf.id} className="decision-card">
-            <div className="decision-card-header">
-              <div className="badge-row">
-                <span className={`severity-tag ${wf.active ? 'optimal' : 'medium'}`}>
-                  {wf.active ? (isAr ? 'نشط ومفعل' : 'ACTIVE') : (isAr ? 'متوقف مؤقتاً' : 'PAUSED')}
-                </span>
-                <span className="category-pill">
-                  {wf.executionsCount} {isAr ? 'تدخلات سابقة' : 'Triggers'}
-                </span>
+        {workflows.map((wf) => {
+          const isToggling = togglingId === wf.id;
+          const name = isAr ? wf.name_ar : wf.name_en;
+          const trigger = isAr ? wf.trigger_ar : wf.trigger_en;
+          const action = isAr ? wf.action_ar : wf.action_en;
+
+          return (
+            <div key={wf.id} className="decision-card">
+              <div className="decision-card-header">
+                <div className="badge-row">
+                  <span className={`severity-tag ${wf.active ? 'optimal' : 'medium'}`}>
+                    {wf.active ? (isAr ? 'مفعل — حماية حية' : 'ACTIVE — LIVE') : (isAr ? 'معطل مؤقتاً' : 'PAUSED')}
+                  </span>
+                  <span className="category-pill">{wf.code || 'GOVERNANCE'}</span>
+                </div>
+                <div className="decision-financial">
+                  <span className="label">{isAr ? 'مرات التنفيذ' : 'Executions'}</span>
+                  <span className="amount">{wf.executions_count || 0}</span>
+                </div>
+              </div>
+
+              <h3 className="decision-title">{name}</h3>
+
+              <div className="decision-narrative-strip" style={{ margin: '12px 0' }}>
+                <div style={{ marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    {isAr ? 'شرط الإطلاق (الاستشعار الذكي):' : 'Trigger Condition:'}
+                  </span>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-primary)' }}>
+                    {trigger}
+                  </p>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    {isAr ? 'الإجراء الوقائي المنفذ:' : 'Precautionary Action:'}
+                  </span>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--status-success)' }}>
+                    {action}
+                  </p>
+                </div>
+              </div>
+
+              <div className="decision-actions-row">
+                <button
+                  onClick={() => toggleWorkflow(wf.id, wf.name_ar, wf.name_en)}
+                  disabled={isToggling}
+                  className={wf.active ? 'btn-secondary' : 'btn-primary'}
+                  style={{ fontSize: '12px', padding: '8px 14px' }}
+                >
+                  <span>
+                    {isToggling
+                      ? (isAr ? 'جارِ التحديث...' : 'Updating...')
+                      : (wf.active ? (isAr ? 'تعطيل السياسة' : 'Pause Policy') : (isAr ? 'تفعيل السياسة' : 'Activate Policy'))}
+                  </span>
+                </button>
               </div>
             </div>
-
-            <h3 className="decision-title">{isAr ? wf.nameAr : wf.nameEn}</h3>
-
-            <div style={{ margin: '12px 0', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{isAr ? 'شرط الإطلاق (Trigger):' : 'Trigger Rule:'} </span>
-                <span>{isAr ? wf.triggerAr : wf.triggerEn}</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--accent-light)', fontWeight: 600 }}>{isAr ? 'الإجراء الآلي (Action):' : 'Automated Action:'} </span>
-                <span>{isAr ? wf.actionAr : wf.actionEn}</span>
-              </div>
-            </div>
-
-            <div className="decision-actions-row">
-              <button
-                onClick={() => toggleWorkflow(wf.id)}
-                className={wf.active ? 'btn-secondary' : 'btn-primary'}
-                style={{ fontSize: '12px', padding: '8px 14px' }}
-              >
-                <span>
-                  {wf.active
-                    ? (isAr ? 'إيقاف السياسة مؤقتاً' : 'Pause Policy')
-                    : (isAr ? 'تفعيل السياسة' : 'Activate Policy')}
-                </span>
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

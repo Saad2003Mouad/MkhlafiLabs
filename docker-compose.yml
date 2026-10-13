@@ -1,0 +1,102 @@
+# ==============================================================================
+# MIKHLAFI LABS — Enterprise Platform Orchestration (Docker Compose)
+# Architected for Cloud Edition & Private Edition (Air-Gapped On-Premises)
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # ── 1. Application Runtime (Unified Web & API Engine) ──────────────────────
+  mikhlafi-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mikhlafi-labs/platform:latest
+    container_name: mikhlafi-platform-runtime
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mikhlafi_user}:${POSTGRES_PASSWORD:-ChangeMeSecurePass2026!}@mikhlafi-db:5432/${POSTGRES_DB:-mikhlafi_platform}?sslmode=disable
+      - SESSION_SECRET=${SESSION_SECRET:-MikhlafiEnterpriseProductionSecretKey64CharsLongRandom2026!}
+      - LICENSE_SIGNING_SECRET=${LICENSE_SIGNING_SECRET:-MikhlafiMasterOfflineLicenseKeyHMAC2026!}
+      - AI_PROVIDER=${AI_PROVIDER:-local_deterministic} # options: local_deterministic, local_ollama, external_api
+      - AI_OLLAMA_ENDPOINT=http://mikhlafi-ollama:11434
+      - AI_OLLAMA_MODEL=llama3.1
+      - DEFAULT_CURRENCY=SAR
+      - DEFAULT_LOCALE=ar
+    volumes:
+      # Isolated per-tenant operational data & backups mount
+      - mikhlafi-tenant-data:/app/data/tenants
+    depends_on:
+      mikhlafi-db:
+        condition: service_healthy
+    networks:
+      - mikhlafi-internal
+    deploy:
+      resources:
+        limits:
+          cpus: '4.00'
+          memory: 4096M
+        reservations:
+          cpus: '1.00'
+          memory: 1024M
+
+  # ── 2. Primary Relational Database (PostgreSQL 16) ──────────────────────────
+  mikhlafi-db:
+    image: postgres:16-alpine
+    container_name: mikhlafi-postgres-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mikhlafi_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMeSecurePass2026!}
+      POSTGRES_DB: ${POSTGRES_DB:-mikhlafi_platform}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - mikhlafi-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mikhlafi_user} -d ${POSTGRES_DB:-mikhlafi_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mikhlafi-internal
+    deploy:
+      resources:
+        limits:
+          cpus: '4.00'
+          memory: 8192M
+        reservations:
+          cpus: '1.00'
+          memory: 2048M
+
+  # ── 3. Air-Gapped Local AI Engine (Optional - Ollama Local Inference) ──────
+  mikhlafi-ollama:
+    image: ollama/ollama:latest
+    container_name: mikhlafi-local-ai
+    restart: unless-stopped
+    profiles:
+      - local-ai
+    volumes:
+      - mikhlafi-ollama-models:/root/.ollama
+    networks:
+      - mikhlafi-internal
+    deploy:
+      resources:
+        limits:
+          cpus: '8.00'
+          memory: 16384M
+
+volumes:
+  mikhlafi-tenant-data:
+    driver: local
+  mikhlafi-postgres-data:
+    driver: local
+  mikhlafi-ollama-models:
+    driver: local
+
+networks:
+  mikhlafi-internal:
+    driver: bridge

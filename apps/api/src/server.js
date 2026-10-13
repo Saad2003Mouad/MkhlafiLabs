@@ -16,8 +16,12 @@ import {
   authenticateRequest,
   resolveTenantContext,
   hasPermission,
+  hasCapability,
   recordAuditEvent
 } from './middleware/tenant.js';
+import { rateLimiter } from './middleware/rateLimiter.js';
+import { tenantManager } from './db/tenantManager.js';
+import { licenseManager } from './services/billing/licenseManager.js';
 import {
   getFinancialAnomalies,
   resolveFinancialAnomaly,
@@ -56,12 +60,24 @@ import {
   getTenantBillingDetails
 } from './services/billing/billingEngine.js';
 import {
+  getTenantIntegrations,
+  syncTenantIntegration,
+  getTenantWorkflows,
+  toggleTenantWorkflow,
+  getTenantAlerts,
+  toggleAlertAcknowledge,
+  getTenantSettings,
+  updateTenantSettings,
+  ingestJournalEntries
+} from './services/operations/operationsEngine.js';
+import {
   getPlatformOverview,
   listTenants,
   updateTenantStatus,
   listPlatformUsers,
   listLeadInquiries,
-  listPlatformAuditLogs
+  listPlatformAuditLogs,
+  confirmOrganizationPayment
 } from './services/admin/adminEngine.js';
 
 export function getAllowedOrigin(incomingOrigin) {
@@ -85,6 +101,10 @@ export function jsonResponse(res, statusCode, data, headers = {}) {
   const allowedOrigin = res._allowedOrigin || (headers['Access-Control-Allow-Origin'] !== '*' ? headers['Access-Control-Allow-Origin'] : null);
   const responseHeaders = {
     'Content-Type': 'application/json; charset=utf-8',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     'Vary': 'Origin',
     ...headers
   };
@@ -158,6 +178,15 @@ export async function handleApiRequest(req, res) {
 
     // ── PUBLIC: INBOUND LEAD INQUIRIES (/api/v1/inquiries) ──────────────────
     if (method === 'POST' && pathname === '/api/v1/inquiries') {
+      const clientKey = rateLimiter.getClientKey(req, 'inquiries');
+      const limitCheck = rateLimiter.isRateLimited(clientKey, 15, 60000);
+      if (limitCheck.limited) {
+        return jsonResponse(res, 429, {
+          error: 'Too many inquiry requests. Please wait before submitting another request.',
+          retryAfter: limitCheck.retryAfterSeconds
+        }, { 'Retry-After': String(limitCheck.retryAfterSeconds) });
+      }
+
       const body = await readJsonBody(req);
       const { name, email, companyName, phone, message, inquiryType = 'demo_request' } = body;
       if (!name || !email) {
@@ -190,6 +219,15 @@ export async function handleApiRequest(req, res) {
 
     // ── AUTHENTICATION: REGISTER ───────────────────────────────────────────
     if (method === 'POST' && pathname === '/api/v1/auth/register') {
+      const clientKey = rateLimiter.getClientKey(req, 'register');
+      const limitCheck = rateLimiter.isRateLimited(clientKey, 10, 60000);
+      if (limitCheck.limited) {
+        return jsonResponse(res, 429, {
+          error: 'Too many registration requests. Please wait before retrying.',
+          retryAfter: limitCheck.retryAfterSeconds
+        }, { 'Retry-After': String(limitCheck.retryAfterSeconds) });
+      }
+
       const body = await readJsonBody(req);
       const { email, password, nameEn, nameAr, orgNameEn, orgNameAr } = body;
 
@@ -214,7 +252,8 @@ export async function handleApiRequest(req, res) {
 
       let user, org, sessionInfo;
 
-      await transaction(async (tx) => {
+      try {
+        await transaction(async (tx) => {
         // 1. Create User
         const userRes = await tx.query(
           `INSERT INTO users (email, password_hash, name_en, name_ar, is_verified, status)
@@ -270,6 +309,21 @@ export async function handleApiRequest(req, res) {
           [org.id]
         );
       });
+      } catch (regErr) {
+        if (regErr.code === '23505' || regErr.message?.includes('duplicate key') || regErr.message?.includes('unique constraint')) {
+          return jsonResponse(res, 409, {
+            error: 'An account or organization with these details already exists.'
+          });
+        }
+        throw regErr;
+      }
+
+      // Provision isolated tenant storage namespace
+      try {
+        await tenantManager.provisionTenantStorage(org.id);
+      } catch (storageErr) {
+        console.error('[Tenant Storage Allocation Warning]:', storageErr.message);
+      }
 
       // 6. Create Session
       sessionInfo = await createSession(user.id, {
@@ -302,6 +356,15 @@ export async function handleApiRequest(req, res) {
 
     // ── AUTHENTICATION: LOGIN ──────────────────────────────────────────────
     if (method === 'POST' && pathname === '/api/v1/auth/login') {
+      const clientKey = rateLimiter.getClientKey(req, 'login');
+      const limitCheck = rateLimiter.isRateLimited(clientKey, 20, 60000);
+      if (limitCheck.limited) {
+        return jsonResponse(res, 429, {
+          error: 'Too many login attempts. Please wait before retrying.',
+          retryAfter: limitCheck.retryAfterSeconds
+        }, { 'Retry-After': String(limitCheck.retryAfterSeconds) });
+      }
+
       const body = await readJsonBody(req);
       const { email, password } = body;
 
@@ -463,6 +526,55 @@ export async function handleApiRequest(req, res) {
       if (method === 'GET' && pathname === '/api/v1/admin/audit') {
         const auditLogs = await listPlatformAuditLogs();
         return jsonResponse(res, 200, { auditLogs });
+      }
+
+      // Operator: Confirm Manual Payment for Tenant
+      if (method === 'POST' && pathname.startsWith('/api/v1/admin/organizations/') && pathname.endsWith('/confirm-payment')) {
+        const parts = pathname.split('/');
+        const targetOrgId = parts[parts.indexOf('organizations') + 1];
+        const body = await readJsonBody(req);
+        const { amount, referenceNumber, notes } = body;
+        const sub = await confirmOrganizationPayment(targetOrgId, {
+          amount,
+          referenceNumber,
+          notes,
+          operatorId: auth.user.id,
+          remoteIp: req.socket.remoteAddress
+        });
+        if (!sub) return jsonResponse(res, 404, { error: 'Organization subscription not found.' });
+        return jsonResponse(res, 200, { success: true, subscription: sub });
+      }
+
+      // Operator: Issue Cryptographic Offline License for Private Edition
+      if (method === 'POST' && pathname === '/api/v1/admin/licenses/issue') {
+        const body = await readJsonBody(req);
+        const { customerSlug, customerName, edition = 'PRIVATE_EDITION', tier = 'enterprise', licensedCapabilities, maxMembers = 100 } = body;
+        if (!customerSlug || !customerName) {
+          return jsonResponse(res, 400, { error: 'customerSlug and customerName are required.' });
+        }
+        const signedLicense = licenseManager.generateSignedLicense({
+          customerSlug,
+          customerName,
+          edition,
+          tier,
+          licensedCapabilities,
+          maxMembers
+        });
+        await recordAuditEvent({
+          userId: auth.user.id,
+          action: 'OFFLINE_LICENSE_ISSUED',
+          entityType: 'LICENSE',
+          entityId: signedLicense.licenseId,
+          details: { customerSlug, tier, edition }
+        });
+        return jsonResponse(res, 201, { success: true, license: signedLicense });
+      }
+
+      // Operator: Verify Offline License File
+      if (method === 'POST' && pathname === '/api/v1/admin/licenses/verify') {
+        const body = await readJsonBody(req);
+        const verification = licenseManager.verifyOfflineLicense(body);
+        return jsonResponse(res, 200, verification);
       }
     }
 
@@ -789,12 +901,18 @@ export async function handleApiRequest(req, res) {
 
     // ── RISK INTELLIGENCE (/api/v1/records/risks) ───────────────────────────
     if (method === 'GET' && pathname === '/api/v1/records/risks') {
+      if (!hasCapability(tenant, 'risk-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Risk Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const category = parsedUrl.searchParams.get('category');
       const result = await getTenantRisks(orgId, category);
       return jsonResponse(res, 200, result);
     }
 
     if (method === 'POST' && pathname.startsWith('/api/v1/records/risks/') && pathname.endsWith('/mitigate')) {
+      if (!hasCapability(tenant, 'risk-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Risk Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const parts = pathname.split('/');
       const riskId = parts[parts.indexOf('risks') + 1];
 
@@ -807,12 +925,18 @@ export async function handleApiRequest(req, res) {
 
     // ── PROJECT PERFORMANCE INTELLIGENCE (/api/v1/records/projects) ─────────
     if (method === 'GET' && pathname === '/api/v1/records/projects') {
+      if (!hasCapability(tenant, 'project-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Project Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const health = parsedUrl.searchParams.get('health');
       const result = await getTenantProjects(orgId, health);
       return jsonResponse(res, 200, result);
     }
 
     if (method === 'POST' && pathname.startsWith('/api/v1/records/projects/') && pathname.endsWith('/verify-claims')) {
+      if (!hasCapability(tenant, 'project-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Project Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const parts = pathname.split('/');
       const projectId = parts[parts.indexOf('projects') + 1];
 
@@ -825,12 +949,18 @@ export async function handleApiRequest(req, res) {
 
     // ── SUPPLIER INTELLIGENCE (/api/v1/records/suppliers) ───────────────────
     if (method === 'GET' && pathname === '/api/v1/records/suppliers') {
+      if (!hasCapability(tenant, 'supplier-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Supplier Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const status = parsedUrl.searchParams.get('status');
       const result = await getTenantSuppliers(orgId, status);
       return jsonResponse(res, 200, result);
     }
 
     if (method === 'POST' && pathname.startsWith('/api/v1/records/suppliers/') && pathname.endsWith('/audit')) {
+      if (!hasCapability(tenant, 'supplier-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Supplier Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const parts = pathname.split('/');
       const supplierId = parts[parts.indexOf('suppliers') + 1];
 
@@ -843,11 +973,17 @@ export async function handleApiRequest(req, res) {
 
     // ── CUSTOMER INTELLIGENCE (/api/v1/records/customers) ───────────────────
     if (method === 'GET' && pathname === '/api/v1/records/customers') {
+      if (!hasCapability(tenant, 'customer-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Customer Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const result = await getTenantCustomers(orgId);
       return jsonResponse(res, 200, result);
     }
 
     if (method === 'POST' && pathname.startsWith('/api/v1/records/customers/') && pathname.endsWith('/review')) {
+      if (!hasCapability(tenant, 'customer-intelligence')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Customer Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const parts = pathname.split('/');
       const customerId = parts[parts.indexOf('customers') + 1];
 
@@ -860,17 +996,26 @@ export async function handleApiRequest(req, res) {
 
     // ── DATA QUALITY INTELLIGENCE (/api/v1/data-quality) ─────────────────────
     if (method === 'GET' && pathname === '/api/v1/data-quality/audits') {
+      if (!hasCapability(tenant, 'data-quality')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Data Quality Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const result = await getDataQualityAudits(orgId);
       return jsonResponse(res, 200, result);
     }
 
     if (method === 'POST' && pathname === '/api/v1/data-quality/scan') {
+      if (!hasCapability(tenant, 'data-quality')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: Data Quality Intelligence is not enabled for your subscription tier. Upgrade required.' });
+      }
       const result = await runDataQualityScan(orgId, auth.user.id, auth.user.email);
       return jsonResponse(res, 200, result);
     }
 
     // ── AI BUSINESS ASSISTANT ENGINE (/api/v1/assistant/chat) ────────────────
     if (method === 'POST' && pathname === '/api/v1/assistant/chat') {
+      if (!hasCapability(tenant, 'ai-assistant')) {
+        return jsonResponse(res, 403, { error: 'Forbidden: AI Business Assistant is not enabled for your subscription tier. Upgrade required.' });
+      }
       const body = await readJsonBody(req);
       const { query: queryText, locale = 'ar' } = body;
 
@@ -883,6 +1028,71 @@ export async function handleApiRequest(req, res) {
         success: true,
         ...result
       });
+    }
+
+    // ── ERP INTEGRATIONS (/api/v1/integrations) ─────────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/integrations') {
+      const integrations = await getTenantIntegrations(orgId);
+      return jsonResponse(res, 200, { organizationId: orgId, integrations });
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/integrations/') && pathname.endsWith('/sync')) {
+      const parts = pathname.split('/');
+      const integrationId = parts[parts.indexOf('integrations') + 1];
+      const synced = await syncTenantIntegration(orgId, integrationId);
+      if (!synced) return jsonResponse(res, 404, { error: 'Integration source not found.' });
+      return jsonResponse(res, 200, { success: true, integration: synced });
+    }
+
+    // ── AUTOMATED WORKFLOWS (/api/v1/workflows) ─────────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/workflows') {
+      const workflows = await getTenantWorkflows(orgId);
+      return jsonResponse(res, 200, { organizationId: orgId, workflows });
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/workflows/') && pathname.endsWith('/toggle')) {
+      const parts = pathname.split('/');
+      const workflowId = parts[parts.indexOf('workflows') + 1];
+      const toggled = await toggleTenantWorkflow(orgId, workflowId);
+      if (!toggled) return jsonResponse(res, 404, { error: 'Workflow policy not found.' });
+      return jsonResponse(res, 200, { success: true, workflow: toggled });
+    }
+
+    // ── REAL-TIME ALERTS (/api/v1/alerts) ───────────────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/alerts') {
+      const alerts = await getTenantAlerts(orgId);
+      return jsonResponse(res, 200, { organizationId: orgId, alerts });
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/alerts/') && pathname.endsWith('/acknowledge')) {
+      const parts = pathname.split('/');
+      const alertId = parts[parts.indexOf('alerts') + 1];
+      const updated = await toggleAlertAcknowledge(orgId, alertId, auth.user.id);
+      if (!updated) return jsonResponse(res, 404, { error: 'Alert not found.' });
+      return jsonResponse(res, 200, { success: true, alert: updated });
+    }
+
+    // ── WORKSPACE SETTINGS (/api/v1/organization/settings) ──────────────────
+    if (method === 'GET' && pathname === '/api/v1/organization/settings') {
+      const settings = await getTenantSettings(orgId);
+      return jsonResponse(res, 200, settings);
+    }
+
+    if (method === 'PUT' && pathname === '/api/v1/organization/settings') {
+      const body = await readJsonBody(req);
+      const settings = await updateTenantSettings(orgId, body);
+      return jsonResponse(res, 200, { success: true, settings });
+    }
+
+    // ── ERP JOURNAL ENTRY INGESTION (/api/v1/ingest/journal-entries) ────────
+    if (method === 'POST' && pathname === '/api/v1/ingest/journal-entries') {
+      const body = await readJsonBody(req);
+      const { entries, batchId } = body;
+      if (!entries || !Array.isArray(entries)) {
+        return jsonResponse(res, 400, { error: 'entries must be an array of journal records.' });
+      }
+      const result = await ingestJournalEntries(orgId, entries, batchId);
+      return jsonResponse(res, 201, result);
     }
 
     // 404 for unknown API paths

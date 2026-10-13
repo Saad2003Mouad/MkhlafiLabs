@@ -1,7 +1,5 @@
-// MIKHLAFI LABS — Platform Administration & Operator Service
-// Domain service for platform overview, tenant lifecycle management, and operator audit trails
-
 import { query } from '../../db/connection.js';
+import { tenantManager } from '../../db/tenantManager.js';
 
 export async function getPlatformOverview() {
   const orgStats = await query(
@@ -75,6 +73,14 @@ export async function updateTenantStatus(targetOrgId, status, reason, operatorId
     return null;
   }
 
+  if (status === 'suspended') {
+    try {
+      await tenantManager.suspendTenantEnvironment(targetOrgId);
+    } catch (e) {
+      console.error('[Tenant Suspension Warning]:', e.message);
+    }
+  }
+
   await query(
     `INSERT INTO platform_audit_logs (operator_id, action, target_tenant_id, details, ip_address)
      VALUES ($1, 'ORGANIZATION_STATUS_CHANGED', $2, $3, $4)`,
@@ -113,4 +119,24 @@ export async function listPlatformAuditLogs(limit = 100) {
   );
 
   return auditRes.rows;
+}
+
+export async function confirmOrganizationPayment(orgId, { amount = 0, referenceNumber = 'MANUAL-WIRE', notes = '', operatorId, remoteIp }) {
+  const subUpdate = await query(
+    `UPDATE organization_subscriptions
+     SET status = 'active',
+         current_period_end = now() + interval '365 days',
+         updated_at = now()
+     WHERE organization_id = $1
+     RETURNING id, package_id, status, current_period_end`,
+    [orgId]
+  );
+
+  await query(
+    `INSERT INTO platform_audit_logs (operator_id, action, target_tenant_id, details, ip_address)
+     VALUES ($1, 'MANUAL_PAYMENT_CONFIRMED', $2, $3, $4)`,
+    [operatorId, orgId, JSON.stringify({ amount, referenceNumber, notes, confirmedAt: new Date().toISOString() }), remoteIp]
+  );
+
+  return subUpdate.rows[0] || null;
 }

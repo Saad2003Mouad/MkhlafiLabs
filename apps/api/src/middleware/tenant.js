@@ -106,6 +106,21 @@ export async function resolveTenantContext(req, user) {
 
   const permissions = permissionsRes.rows.map(r => r.permission_id);
 
+  // 4. Resolve enabled service capabilities for this tenant from active subscription
+  const capabilitiesRes = await query(
+    `SELECT pc.capability_id
+     FROM organization_subscriptions os
+     JOIN package_capabilities pc ON pc.package_id = os.package_id
+     WHERE os.organization_id = $1 AND os.status = 'active'`,
+    [activeMembership.organization_id]
+  );
+
+  let capabilities = capabilitiesRes.rows.map(r => r.capability_id);
+  if (capabilities.length === 0) {
+    // Default fallback: Starter suite capabilities
+    capabilities = ['financial-intelligence', 'executive-decisions', 'data-quality'];
+  }
+
   return {
     hasTenant: true,
     tenant: {
@@ -119,6 +134,7 @@ export async function resolveTenantContext(req, user) {
       role: activeMembership.role,
       branchId: activeMembership.branch_id,
       permissions,
+      capabilities,
       availableOrganizations: availableOrgs
     }
   };
@@ -127,6 +143,11 @@ export async function resolveTenantContext(req, user) {
 export function hasPermission(tenantContext, permission) {
   if (!tenantContext || !tenantContext.permissions) return false;
   return tenantContext.permissions.includes(permission);
+}
+
+export function hasCapability(tenantContext, capabilityId) {
+  if (!tenantContext || !tenantContext.capabilities) return false;
+  return tenantContext.capabilities.includes(capabilityId);
 }
 
 export async function recordAuditEvent({

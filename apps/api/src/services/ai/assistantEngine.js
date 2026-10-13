@@ -1,11 +1,10 @@
-// MIKHLAFI LABS — Enterprise AI Business Assistant Engine
-// Provides evidence-grounded responses querying verified tenant records with row-level citations
-
 import { query } from '../../db/connection.js';
+import { getAIProvider } from './aiProvider.js';
 
 export async function processAssistantQuery(orgId, userId, queryText, locale = 'ar') {
   const isAr = locale === 'ar';
   const qLower = queryText.toLowerCase().trim();
+  const provider = getAIProvider();
 
   // 1. Fetch live tenant context across all operational tables
   const [anomaliesRes, decisionsRes, risksRes, projectsRes, suppliersRes, customersRes] = await Promise.all([
@@ -206,6 +205,11 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
 
   return {
     response: answerText,
-    citations
+    citations,
+    aiProvider: {
+      name: provider.name,
+      isLocal: true,
+      sovereignty: 'AIR_GAPPED_OR_LOCAL'
+    }
   };
 }

@@ -42,6 +42,13 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
   const [branches, setBranches] = useState<any[]>(fallbackBranches);
   const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
 
+  // Invite Modal State
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
   useEffect(() => {
     let isMounted = true;
     if (isAuthenticated) {
@@ -64,9 +71,43 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
     };
   }, [isAuthenticated, tenant?.organizationId]);
 
-  const handleInvite = () => {
-    setInviteFeedback(isAr ? 'تم إرسال دعوة انضمام بريدية مع رابط التحقق الثنائي.' : 'Invitation sent with 2FA verification link.');
-    setTimeout(() => setInviteFeedback(null), 3500);
+  const openInviteModal = () => {
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
+    setInviteEmail('');
+    setInviteRole('viewer');
+    setInviteError(null);
+    setIsInviteModalOpen(true);
+  };
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) {
+      setInviteError(isAr ? 'يرجى إدخال البريد الإلكتروني.' : 'Email is required.');
+      return;
+    }
+
+    setInviteSubmitting(true);
+    setInviteError(null);
+
+    try {
+      await api.inviteMember(inviteEmail.trim().toLowerCase(), inviteRole);
+      const mRes = await api.getMembers();
+      setMembers(mRes.members || []);
+      setIsInviteModalOpen(false);
+      setInviteFeedback(
+        isAr
+          ? `تم اعتماد دعوة ${inviteEmail} بصلاحية ${inviteRole.toUpperCase()} بنجاح.`
+          : `Successfully invited ${inviteEmail} with ${inviteRole.toUpperCase()} role.`
+      );
+      setTimeout(() => setInviteFeedback(null), 5000);
+    } catch (err: any) {
+      setInviteError(err.message || (isAr ? 'فشل إرسال الدعوة. تأكد من الصلاحيات.' : 'Failed to send invitation.'));
+    } finally {
+      setInviteSubmitting(false);
+    }
   };
 
   return (
@@ -92,7 +133,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
           </p>
         </div>
 
-        <button onClick={handleInvite} className="btn-primary" style={{ fontSize: '12px', padding: '9px 14px' }}>
+        <button onClick={openInviteModal} className="btn-primary" style={{ fontSize: '12px', padding: '9px 14px' }}>
           <IconPlus size={14} />
           <span>{isAr ? 'دعوة قيادي جديد' : 'Invite Executive Member'}</span>
         </button>
@@ -102,6 +143,131 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
         <div className="alert-feedback-banner success">
           <IconCheck size={16} />
           <span>{inviteFeedback}</span>
+        </div>
+      )}
+
+      {/* Invite Member Modal */}
+      {isInviteModalOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '520px',
+            padding: '24px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' }}>
+              {isAr ? 'دعوة عضو قيادي أو مدقق جديد' : 'Invite Executive Team Member'}
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
+              {isAr
+                ? 'سيتم منح العضو حق الوصول المشروط إلى سجلات هذه المؤسسة فقط وفق نموذج عزل المستأجرين الصارم.'
+                : 'The invited member will receive scoped access exclusively to this tenant organization environment.'}
+            </p>
+
+            <form onSubmit={handleSendInvite}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  {isAr ? 'البريد الإلكتروني المهني' : 'Corporate Email Address'}
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="executive@enterprise.com"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  {isAr ? 'الدور ونطاق الصلاحيات (RBAC)' : 'Role & Permission Scope'}
+                </label>
+                <select
+                  value={inviteRole}
+                  onChange={(e) => setInviteRole(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="viewer">
+                    {isAr ? 'مستطلع / مدقق خارجي (Viewer — استعراض فقط)' : 'Viewer (Read-only auditor)'}
+                  </option>
+                  <option value="analyst">
+                    {isAr ? 'محلل مالي وتشغيلي (Analyst — تدقيق ورصد مؤشرات)' : 'Analyst (Audit & financial forensics)'}
+                  </option>
+                  <option value="manager">
+                    {isAr ? 'مدير تنفيذي (Manager — اعتماد قرارات وتوجيه)' : 'Manager (Decisions & operations)'}
+                  </option>
+                  <option value="org_admin">
+                    {isAr ? 'مسؤول مؤسسي (Admin — إدارة الأعضاء والإعدادات)' : 'Administrator (Full organization control)'}
+                  </option>
+                </select>
+              </div>
+
+              {inviteError && (
+                <div style={{
+                  padding: '10px 12px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid var(--status-critical)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--status-critical)',
+                  fontSize: '12px',
+                  marginBottom: '14px'
+                }}>
+                  {inviteError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(false)}
+                  disabled={inviteSubmitting}
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '8px 16px' }}
+                >
+                  <span>{isAr ? 'إلغاء' : 'Cancel'}</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={inviteSubmitting}
+                  className="btn-primary"
+                  style={{ fontSize: '12px', padding: '8px 18px' }}
+                >
+                  <span>{inviteSubmitting ? (isAr ? 'جارِ الإرسال...' : 'Sending...') : (isAr ? 'إرسال وتفعيل' : 'Send Invitation')}</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

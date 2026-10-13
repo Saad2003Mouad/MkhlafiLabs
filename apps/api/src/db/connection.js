@@ -21,6 +21,13 @@ export async function getDb() {
 
   const databaseUrl = process.env.DATABASE_URL;
 
+  if (process.env.NODE_ENV === 'production' && !databaseUrl && !process.env.ALLOW_EMBEDDED_IN_PROD) {
+    throw new Error(
+      '[FATAL SECURITY CONFIGURATION]: NODE_ENV is set to production but DATABASE_URL is not configured. ' +
+      'Silent fallback to an in-process disposable database in production is prohibited to protect data integrity.'
+    );
+  }
+
   if (databaseUrl && !process.env.USE_EMBEDDED_PG) {
     // Live PostgreSQL connection via pg.Pool
     pool = new pg.Pool({

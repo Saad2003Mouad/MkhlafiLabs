@@ -33,3 +33,4 @@ Thumbs.db
 # Datasets (Large CSV benchmarks - downloaded via script)
 data/benchmark/*.csv
 data/*.csv
+data/tenants/

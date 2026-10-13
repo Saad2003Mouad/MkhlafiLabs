@@ -155,10 +155,16 @@ class ApiClient {
     return this.request('/organizations/members', { method: 'GET' });
   }
 
-  async inviteMember(email: string, role = 'viewer'): Promise<{ success: boolean; membership: any }> {
+  async inviteMember(
+    emailOrParams: string | { email: string; role?: string; branchId?: string | null },
+    role = 'viewer'
+  ): Promise<{ success: boolean; membership: any }> {
+    const payload = typeof emailOrParams === 'string'
+      ? { email: emailOrParams, role }
+      : emailOrParams;
     return this.request('/organizations/members', {
       method: 'POST',
-      body: JSON.stringify({ email, role })
+      body: JSON.stringify(payload)
     });
   }
 
@@ -166,7 +172,7 @@ class ApiClient {
     return this.request('/branches', { method: 'GET' });
   }
 
-  async createBranch(params: { nameEn: string; nameAr?: string; code?: string; city?: string }): Promise<{ success: boolean; branch: any }> {
+  async createBranch(params: { nameEn: string; nameAr?: string; code?: string; city?: string; isMainHq?: boolean }): Promise<{ success: boolean; branch: any }> {
     return this.request('/branches', {
       method: 'POST',
       body: JSON.stringify(params)
@@ -384,10 +390,62 @@ class ApiClient {
     success: boolean;
     response: string;
     citations: Array<{ source: string; docId: string; confidence: string }>;
+    aiProvider?: { name: string; isLocal: boolean; sovereignty: string };
   }> {
     return this.request('/assistant/chat', {
       method: 'POST',
       body: JSON.stringify({ query: queryText, locale })
+    });
+  }
+
+
+  // ── Operations: Integrations Hub ──────────────────────────────────────────
+  async getIntegrations(): Promise<{ organizationId: string; integrations: any[] }> {
+    return this.request('/integrations', { method: 'GET' });
+  }
+
+  async syncIntegration(id: string): Promise<{ success: boolean; integration: any }> {
+    return this.request(`/integrations/${id}/sync`, { method: 'POST' });
+  }
+
+  // ── Operations: Workflows ─────────────────────────────────────────────────
+  async getWorkflows(): Promise<{ organizationId: string; workflows: any[] }> {
+    return this.request('/workflows', { method: 'GET' });
+  }
+
+  async toggleWorkflow(id: string): Promise<{ success: boolean; workflow: any }> {
+    return this.request(`/workflows/${id}/toggle`, { method: 'POST' });
+  }
+
+  // ── Operations: Alerts ────────────────────────────────────────────────────
+  async getAlerts(): Promise<{ organizationId: string; alerts: any[] }> {
+    return this.request('/alerts', { method: 'GET' });
+  }
+
+  async toggleAlert(id: string): Promise<{ success: boolean; alert: any }> {
+    return this.request(`/alerts/${id}/acknowledge`, { method: 'POST' });
+  }
+
+  // ── Operations: Workspace Settings ────────────────────────────────────────
+  async getSettings(): Promise<any> {
+    return this.request('/organization/settings', { method: 'GET' });
+  }
+
+  async updateSettings(params: { currency?: string; calendar?: string; retention?: string; dataClassification?: string }): Promise<{ success: boolean; settings: any }> {
+    return this.request('/organization/settings', { method: 'PUT', body: JSON.stringify(params) });
+  }
+
+  // ── Operations: ERP Journal Entry Ingestion ───────────────────────────────
+  async ingestJournalEntries(entries: any[], batchId?: string): Promise<{
+    success: boolean;
+    batchId: string;
+    totalIngested: number;
+    flaggedCount: number;
+    flaggedItems: any[];
+  }> {
+    return this.request('/ingest/journal-entries', {
+      method: 'POST',
+      body: JSON.stringify({ entries, batchId })
     });
   }
 }
