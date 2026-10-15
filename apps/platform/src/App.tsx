@@ -21,6 +21,7 @@ import { WebsiteHome } from './components/website/WebsiteHome';
 import { AboutPage } from './pages/public/AboutPage';
 import { PlatformOverviewPage } from './pages/public/PlatformOverviewPage';
 import { SolutionsPage } from './pages/public/SolutionsPage';
+import { ServiceDetailPage } from './pages/public/ServiceDetailPage';
 import { IndustriesPage } from './pages/public/IndustriesPage';
 import { PricingPage } from './pages/public/PricingPage';
 import { ContactPage } from './pages/public/ContactPage';
@@ -273,12 +274,23 @@ const AppRouterContent: React.FC = () => {
             onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
           />
         );
+      case ROUTES.PUBLIC.SERVICE_DETAIL:
+        return (
+          <ServiceDetailPage
+            serviceId={routeMatch.params?.serviceId || 'financial-leak-detection'}
+            locale={locale}
+            onNavigate={navigate}
+            onRequestDemo={(svcName) => navigate(`${ROUTES.PUBLIC.CONTACT}?service=${encodeURIComponent(svcName || '')}`)}
+            onLaunchPlatform={() => navigate(ROUTES.PUBLIC.PLATFORM)}
+          />
+        );
       case ROUTES.PUBLIC.SOLUTIONS:
         return (
           <SolutionsPage
             locale={locale}
+            onNavigate={navigate}
             onNavigateRegister={() => navigate(ROUTES.AUTH.REGISTER)}
-            onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
+            onRequestDemo={(svcName) => navigate(`${ROUTES.PUBLIC.CONTACT}?service=${encodeURIComponent(svcName || '')}`)}
           />
         );
       case ROUTES.PUBLIC.INDUSTRIES:
@@ -309,8 +321,12 @@ const AppRouterContent: React.FC = () => {
           <WebsiteHome
             locale={locale}
             onNavigatePlatform={() => navigate(ROUTES.PUBLIC.PLATFORM)}
-            onNavigateDetail={() => {
-              navigate(ROUTES.PUBLIC.SOLUTIONS);
+            onNavigateDetail={(moduleId) => {
+              if (moduleId) {
+                navigate(`/services/${moduleId}`);
+              } else {
+                navigate(ROUTES.PUBLIC.SOLUTIONS);
+              }
             }}
           />
         );

@@ -6,6 +6,7 @@ import { LocaleMode, PricingPackage } from '../../types';
 import { HeroSection } from './HeroSection';
 import { ChallengesSection } from './ChallengesSection';
 import { IntelligenceSuiteSection } from './IntelligenceSuiteSection';
+import { RoiCalculatorSection } from './RoiCalculatorSection';
 import { HowItWorksSection } from './HowItWorksSection';
 import { PhilosophySection } from './PhilosophySection';
 import { IntegrationsSection } from './IntegrationsSection';
@@ -50,6 +51,12 @@ export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
       <IntelligenceSuiteSection
         locale={locale}
         onSelectModule={(modId) => onNavigateDetail(modId)}
+      />
+
+      {/* Interactive Margin Leak & ROI Simulator */}
+      <RoiCalculatorSection
+        locale={locale}
+        onRequestAudit={() => handleOpenDemo()}
       />
 
       {/* 4-Step Deterministic Forensic Methodology */}

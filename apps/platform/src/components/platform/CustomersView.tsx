@@ -3,6 +3,7 @@ import { LocaleMode } from '../../types';
 import { IconCustomer, IconCheck, IconClock } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { CustomerRiskWorkbench } from '../customers/CustomerRiskWorkbench';
 
 interface CustomersViewProps {
   locale: LocaleMode;
@@ -11,6 +12,7 @@ interface CustomersViewProps {
 export const CustomersView: React.FC<CustomersViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
+  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
   const [customers, setCustomers] = useState<any[]>([]);
   const [totalRevenueAtRiskSAR, setTotalRevenueAtRiskSAR] = useState<number>(0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -117,15 +119,48 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ locale }) => {
         </div>
       </div>
 
-      {notice && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{notice}</span>
-        </div>
-      )}
+      {/* View Switcher Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
+        <button
+          onClick={() => setViewMode('workbench')}
+          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: viewMode === 'workbench' ? 800 : 500,
+            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(236, 72, 153, 0.25), rgba(219, 39, 119, 0.15))' : undefined,
+            borderColor: viewMode === 'workbench' ? '#EC4899' : undefined,
+            color: viewMode === 'workbench' ? '#F472B6' : undefined
+          }}
+        >
+          {isAr ? '🔬 رادار صحة العملاء ومحاكي الاستبقاء (Workbench)' : '🔬 Customer Health & Retention Workbench'}
+        </button>
+        <button
+          onClick={() => setViewMode('database')}
+          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
+          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
+        >
+          {isAr
+            ? `📋 سجل عملاء المنشأة والمديونيات (${customers.length})`
+            : `📋 Enterprise Accounts Ledger (${customers.length})`}
+        </button>
+      </div>
 
-      {/* Empty State */}
-      {!loading && customers.length === 0 && (
+      {viewMode === 'workbench' ? (
+        <CustomerRiskWorkbench
+          locale={locale}
+          initialScenario="b2b_tech"
+          isEmbeddedInPublicPage={false}
+        />
+      ) : (
+        <>
+          {notice && (
+            <div className="alert-feedback-banner success">
+              <IconCheck size={16} />
+              <span>{notice}</span>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && customers.length === 0 && (
         <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
           <IconCustomer size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
           <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
@@ -207,6 +242,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ locale }) => {
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 };

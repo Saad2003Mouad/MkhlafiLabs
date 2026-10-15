@@ -297,6 +297,84 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, 
         ))}
       </div>
 
+      {/* Onboarding Callout — shown only when authenticated but no data ingested yet */}
+      {isAuthenticated && !isLoadingLive && liveSummary &&
+        liveSummary.kpis.pendingDecisionsCount === 0 &&
+        liveSummary.kpis.auditEventsLogged === 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(135,108,54,0.12), rgba(135,108,54,0.04))',
+          border: '1px solid var(--border-glow)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '28px 32px',
+          display: 'flex',
+          gap: '24px',
+          alignItems: 'flex-start',
+          marginBottom: '24px'
+        }}>
+          <span style={{ fontSize: '40px', flexShrink: 0 }}>🚀</span>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>
+              {isAr
+                ? `مرحباً بك في مؤسستك، ${tenant?.orgNameAr || tenant?.orgNameEn} — ابدأ رحلة الذكاء التشغيلي`
+                : `Welcome to ${tenant?.orgNameEn} Workspace — Start Your Intelligence Journey`}
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.7 }}>
+              {isAr
+                ? 'مساحة عملك جاهزة وآمنة. للبدء، ارفع قيودك المحاسبية عبر ملف CSV وسيقوم المحرك فوراً بكشف الانحرافات المالية وتوليد توصيات تنفيذية.'
+                : 'Your workspace is ready and secure. To begin, upload your accounting ledger via CSV — the engine will instantly detect financial anomalies and generate executive recommendations.'}
+            </p>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <a href="/app/integrations" style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                background: 'var(--accent-base)',
+                color: '#fff',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '13px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                border: 'none',
+                cursor: 'pointer'
+              }}>
+                <span>📊</span>
+                <span>{isAr ? 'رفع بيانات CSV الآن ←' : 'Upload CSV Data Now →'}</span>
+              </a>
+              <a href="/app/decisions" style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                background: 'var(--bg-surface-elevated)',
+                color: 'var(--text-primary)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '13px',
+                fontWeight: 600,
+                textDecoration: 'none',
+                border: '1px solid var(--border-default)',
+                cursor: 'pointer'
+              }}>
+                <span>⚖️</span>
+                <span>{isAr ? 'استعراض نموذج القرارات' : 'Preview Decision Examples'}</span>
+              </a>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+            {[
+              { step: '1', textAr: 'رفع CSV', textEn: 'Upload CSV', done: false },
+              { step: '2', textAr: 'كشف الشذوذ', textEn: 'Detect Anomalies', done: false },
+              { step: '3', textAr: 'قرارات تنفيذية', textEn: 'Get Decisions', done: false }
+            ].map((s) => (
+              <div key={s.step} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800, color: 'var(--accent-light)', flexShrink: 0 }}>{s.step}</span>
+                <span>{isAr ? s.textAr : s.textEn}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Bento Grid: Trend Chart & Executive Action Queue */}
       <div className="bento-grid">
         {/* Trend Chart Panel */}

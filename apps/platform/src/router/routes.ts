@@ -8,6 +8,8 @@ export const ROUTES = {
     ABOUT: '/about',
     PLATFORM: '/platform', // Public product architecture & capability showcase (NOT customer dashboard!)
     SOLUTIONS: '/solutions',
+    SERVICES: '/services',
+    SERVICE_DETAIL: '/services/:serviceId',
     INDUSTRIES: '/industries',
     PRICING: '/pricing',
     CONTACT: '/contact'
@@ -59,6 +61,7 @@ export interface RouteMatch {
   category: RouteCategory;
   path: string;
   matchedRoute: string;
+  params?: Record<string, string>;
 }
 
 export function parseRoute(pathname: string): RouteMatch {
@@ -163,6 +166,26 @@ export function parseRoute(pathname: string): RouteMatch {
   if (normalized === '/platform/billing') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.BILLING };
   if (normalized === '/platform/settings') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.SETTINGS };
   if (normalized === '/platform/finance') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.FINANCE };
+
+  // Dedicated Service Pages (/services/:serviceId or /solutions/:serviceId)
+  if (normalized.startsWith('/services/') && normalized.length > '/services/'.length) {
+    const serviceId = normalized.replace('/services/', '').split('/')[0];
+    return {
+      category: 'public',
+      path: normalized,
+      matchedRoute: ROUTES.PUBLIC.SERVICE_DETAIL,
+      params: { serviceId }
+    };
+  }
+  if (normalized.startsWith('/solutions/') && normalized.length > '/solutions/'.length) {
+    const serviceId = normalized.replace('/solutions/', '').split('/')[0];
+    return {
+      category: 'public',
+      path: normalized,
+      matchedRoute: ROUTES.PUBLIC.SERVICE_DETAIL,
+      params: { serviceId }
+    };
+  }
 
   // Public Marketing routes and common aliases
   if (normalized === '/' || normalized === '/home') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.HOME };

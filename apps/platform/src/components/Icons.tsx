@@ -5,6 +5,7 @@ interface IconProps {
   size?: number;
   className?: string;
   style?: React.CSSProperties;
+  color?: string;
 }
 
 export const IconDashboard: React.FC<IconProps> = ({ size = 18, className, style }) => (
@@ -286,3 +287,13 @@ export const IconPlus: React.FC<IconProps> = ({ size = 18, className, style }) =
 
 export const IconAlertTriangle = IconRisk;
 export const IconRefreshCw = IconRefresh;
+export const IconTruck = IconSupplier;
+export const IconUsers = IconCustomer;
+export const IconBot = IconAssistant;
+export const IconDatabase = IconDataQuality;
+
+export const IconChevronDown: React.FC<IconProps> = ({ size = 18, className, style, color }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={{ color, ...style }}>
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);

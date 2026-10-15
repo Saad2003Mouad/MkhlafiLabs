@@ -4,6 +4,7 @@ import { MOCK_DECISIONS } from '../../data/mockData';
 import { IconDecisions, IconCheck, IconClock, IconFilter, IconArrowRight } from '../Icons';
 import { useAuth } from '../../context/AuthContext';
 import { api, RealDecisionItem } from '../../api/client';
+import { ExecutiveDecisionWorkbench } from '../decisions/ExecutiveDecisionWorkbench';
 
 interface DecisionsViewProps {
   locale: LocaleMode;
@@ -13,6 +14,7 @@ interface DecisionsViewProps {
 export const DecisionsView: React.FC<DecisionsViewProps> = ({ locale, onNavigateDetail }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated, tenant, openAuthModal } = useAuth();
+  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
   const [decisions, setDecisions] = useState<DecisionItem[]>(MOCK_DECISIONS);
   const [realDecisions, setRealDecisions] = useState<RealDecisionItem[]>([]);
   const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -126,13 +128,46 @@ export const DecisionsView: React.FC<DecisionsViewProps> = ({ locale, onNavigate
         </div>
       </div>
 
-      {/* Action Feedback Banner */}
-      {actionFeedback && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{actionFeedback}</span>
-        </div>
-      )}
+      {/* View Switcher Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
+        <button
+          onClick={() => setViewMode('workbench')}
+          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: viewMode === 'workbench' ? 800 : 500,
+            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(16, 185, 129, 0.15))' : undefined,
+            borderColor: viewMode === 'workbench' ? '#38BDF8' : undefined,
+            color: viewMode === 'workbench' ? '#38BDF8' : undefined
+          }}
+        >
+          {isAr ? '🔬 محطة توجيه رأس المال وخوارزميات المفاضلة (Workbench)' : '🔬 Capital Allocation & Decision Mesh'}
+        </button>
+        <button
+          onClick={() => setViewMode('database')}
+          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
+          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
+        >
+          {isAr
+            ? `📋 سجل القرارات المعتمدة (${isAuthenticated && realDecisions.length > 0 ? realDecisions.length : decisions.length})`
+            : `📋 Tenant Decision Records (${isAuthenticated && realDecisions.length > 0 ? realDecisions.length : decisions.length})`}
+        </button>
+      </div>
+
+      {viewMode === 'workbench' ? (
+        <ExecutiveDecisionWorkbench
+          locale={locale}
+          initialScenario="retail"
+          isEmbeddedInPublicPage={false}
+        />
+      ) : (
+        <>
+          {/* Action Feedback Banner */}
+          {actionFeedback && (
+            <div className="alert-feedback-banner success">
+              <IconCheck size={16} />
+              <span>{actionFeedback}</span>
+            </div>
+          )}
 
       {/* Tenant Isolation & Mode Banner */}
       {isAuthenticated ? (
@@ -391,6 +426,8 @@ export const DecisionsView: React.FC<DecisionsViewProps> = ({ locale, onNavigate
           ))
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

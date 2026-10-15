@@ -87,15 +87,23 @@ export const IntelligenceSuiteSection: React.FC<IntelligenceSuiteSectionProps> =
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '12px',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  borderRadius: 'var(--radius-xs)',
+                  background: 'var(--bg-surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '12.5px',
                   color: 'var(--accent-light)',
                   fontWeight: 700,
-                  marginTop: '6px'
+                  marginTop: '10px',
+                  cursor: 'pointer',
+                  width: '100%',
+                  transition: 'all 0.15s ease'
                 }}
+                className="engine-card-cta"
               >
-                <span>{isAr ? 'استعراض المحرك في المنصة' : 'Inspect in Platform'}</span>
-                <IconArrowRight size={13} />
+                <span>{isAr ? 'شرح المحرك والمحاكاة الحية' : 'Full Engine Specs & Demo'}</span>
+                <IconArrowRight size={14} />
               </button>
             </div>
           ))}

@@ -1563,3 +1563,93 @@ button {
   animation: spinAnim 1s linear infinite;
 }
 
+/* ==========================================================================
+   Visual WOW & Enterprise Micro-Interactions System
+   ========================================================================== */
+
+.dropdown-service-item {
+  transition: all var(--transition-fast) ease-in-out;
+}
+
+.dropdown-service-item:hover {
+  border-color: var(--accent-light) !important;
+  background: var(--bg-surface-elevated) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.solution-card {
+  transition: transform var(--transition-smooth), border-color var(--transition-smooth), box-shadow var(--transition-smooth);
+}
+
+.solution-card:hover {
+  border-color: var(--accent-light) !important;
+  transform: translateY(-4px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), 0 0 24px rgba(163, 133, 71, 0.18) !important;
+}
+
+.engine-card-cta {
+  transition: all var(--transition-fast);
+}
+
+.engine-card-cta:hover {
+  border-color: var(--accent-light) !important;
+  background: var(--accent-subtle) !important;
+  transform: translateY(-1px);
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.85;
+    filter: drop-shadow(0 0 12px var(--accent-glow));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 25px var(--accent-light));
+  }
+}
+
+.pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+/* Range input styling for ROI Calculator */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--border-default);
+  border-radius: 999px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--accent-glow);
+  border: 2px solid #fff;
+  transition: transform var(--transition-fast);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Responsive Navigation Breakpoints */
+@media (max-width: 992px) {
+  .nav-links {
+    display: none !important;
+  }
+  .mobile-menu-toggle {
+    display: flex !important;
+  }
+  .site-navbar .navbar-inner {
+    padding: 0 16px;
+  }
+}
+

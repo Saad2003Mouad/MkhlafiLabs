@@ -347,6 +347,48 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ locale }) =>
         </div>
       )}
 
+      {/* Integration Readiness Status — Transparent capability disclosure */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '12px',
+        marginBottom: '20px'
+      }}>
+        <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'rgba(16,185,129,0.08)', border: '1px solid var(--status-success)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+          <span style={{ fontSize: '18px' }}>✅</span>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-success)', marginBottom: '2px' }}>
+              {isAr ? 'متاح الآن — CSV Import' : 'Available Now — CSV Import'}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+              {isAr ? 'رفع الفواتير والقيود يدوياً بصيغة CSV للتدقيق الفوري.' : 'Upload invoices and ledger entries via CSV for instant forensic audit.'}
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'rgba(245,158,11,0.08)', border: '1px solid var(--status-warning)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+          <span style={{ fontSize: '18px' }}>⚠️</span>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-warning)', marginBottom: '2px' }}>
+              {isAr ? 'يتطلب إعداد — ERP Connectors' : 'Requires Setup — ERP Connectors'}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+              {isAr ? 'يتطلب إدخال شهادات API أو mTLS لضمان الاتصال الحي مع SAP/Oracle.' : 'Requires API credentials or mTLS certificates for live SAP/Oracle connection.'}
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'rgba(56,189,248,0.06)', border: '1px solid var(--status-info)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+          <span style={{ fontSize: '18px' }}>🚧</span>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-info)', marginBottom: '2px' }}>
+              {isAr ? 'قادم قريباً — ZATCA و BI-Directional ERP' : 'Coming Soon — ZATCA & Bi-Directional ERP'}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+              {isAr ? 'ربط ZATCA للفواتير الإلكترونية ومزامنة ERP ثنائية الاتجاه في الخارطة لعام 2027.' : 'ZATCA e-invoicing and full bi-directional ERP sync on 2027 roadmap.'}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Integration Sources Grid */}
       <div className="decisions-grid">
         {sources.map((src) => {

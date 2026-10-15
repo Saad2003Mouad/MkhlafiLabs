@@ -3,6 +3,7 @@ import { LocaleMode } from '../../types';
 import { IconDataQuality, IconCheck, IconRefresh } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { DataQualityWorkbench } from '../governance/DataQualityWorkbench';
 
 interface DataQualityViewProps {
   locale: LocaleMode;
@@ -11,6 +12,7 @@ interface DataQualityViewProps {
 export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
+  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
   const [checks, setChecks] = useState<any[]>([]);
   const [overallScore, setOverallScore] = useState<number>(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -105,6 +107,36 @@ export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
         </button>
       </div>
 
+      {/* View Switcher Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
+        <button
+          onClick={() => setViewMode('workbench')}
+          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: viewMode === 'workbench' ? 800 : 500,
+            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(20, 184, 166, 0.25), rgba(13, 148, 136, 0.15))' : undefined,
+            borderColor: viewMode === 'workbench' ? '#14B8A6' : undefined,
+            color: viewMode === 'workbench' ? '#2DD4BF' : undefined
+          }}
+        >
+          {isAr ? '🔬 منصة حوكمة وجودة الدفاتر (Workbench)' : '🔬 Data Governance & Quality Workbench'}
+        </button>
+        <button
+          onClick={() => setViewMode('database')}
+          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
+          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
+        >
+          {isAr ? '📊 جدول الفحوصات والامتثال المباشر (Direct Ledger Audits)' : '📊 Direct Ledger Audits'}
+        </button>
+      </div>
+
+      {viewMode === 'workbench' ? (
+        <DataQualityWorkbench
+          locale={locale}
+          initialScenario="retail_distribution"
+        />
+      ) : (
+        <>
       {notice && (
         <div className="alert-feedback-banner success">
           <IconCheck size={16} />
@@ -195,6 +227,8 @@ export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
         })
       )}
       </div>
+      </>
+      )}
     </div>
   );
 };

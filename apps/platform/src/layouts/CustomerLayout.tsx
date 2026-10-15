@@ -198,12 +198,7 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
             className={`nav-item ${isActive(ROUTES.APP.FINANCE) ? 'active' : ''}`}
           >
             <IconFinance size={16} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <span>{isAr ? 'الذكاء المالي وكشف الشذوذ' : 'Financial Intelligence'}</span>
-              <span className="severity-tag high" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                7 {isAr ? 'حالات' : 'flags'}
-              </span>
-            </div>
+            <span>{isAr ? 'الذكاء المالي وكشف الشذوذ' : 'Financial Intelligence'}</span>
           </button>
 
           <button
@@ -211,12 +206,7 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
             className={`nav-item ${isActive(ROUTES.APP.DECISIONS) ? 'active' : ''}`}
           >
             <IconDecisions size={16} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <span>{isAr ? 'مركز القرارات التنفيذية' : 'Decision Center'}</span>
-              <span className="severity-tag critical" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                3 {isAr ? 'أولويات' : 'critical'}
-              </span>
-            </div>
+            <span>{isAr ? 'مركز القرارات التنفيذية' : 'Decision Center'}</span>
           </button>
 
           <button
@@ -224,12 +214,7 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
             className={`nav-item ${isActive(ROUTES.APP.RISK) ? 'active' : ''}`}
           >
             <IconRisk size={16} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <span>{isAr ? 'التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence'}</span>
-              <span className="severity-tag medium" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                1.7M SAR
-              </span>
-            </div>
+            <span>{isAr ? 'التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence'}</span>
           </button>
 
           <button

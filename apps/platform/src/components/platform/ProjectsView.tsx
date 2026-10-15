@@ -3,6 +3,7 @@ import { LocaleMode } from '../../types';
 import { IconProjects, IconCheck, IconFileText, IconAlertTriangle } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { ProjectMarginWorkbench } from '../projects/ProjectMarginWorkbench';
 
 interface ProjectsViewProps {
   locale: LocaleMode;
@@ -11,6 +12,7 @@ interface ProjectsViewProps {
 export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
+  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
   const [projects, setProjects] = useState<any[]>([]);
   const [totalBudgetSAR, setTotalBudgetSAR] = useState<number>(0);
   const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
@@ -128,15 +130,48 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
         </div>
       </div>
 
-      {notice && (
-        <div className={`alert-feedback-banner ${notice.type === 'error' ? 'error' : notice.type === 'warning' ? 'warning' : 'success'}`}>
-          {notice.type === 'error' || notice.type === 'warning' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
-          <span>{notice.message}</span>
-        </div>
-      )}
+      {/* View Switcher Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
+        <button
+          onClick={() => setViewMode('workbench')}
+          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: viewMode === 'workbench' ? 800 : 500,
+            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(99, 102, 241, 0.15))' : undefined,
+            borderColor: viewMode === 'workbench' ? '#8B5CF6' : undefined,
+            color: viewMode === 'workbench' ? '#C4B5FD' : undefined
+          }}
+        >
+          {isAr ? '🔬 رادار إدارة القيمة المكتسبة (EVM) وتدقيق أوامر التغيير (Workbench)' : '🔬 Project EVM & Variation Order Assurance Workbench'}
+        </button>
+        <button
+          onClick={() => setViewMode('database')}
+          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
+          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
+        >
+          {isAr
+            ? `📋 سجل عقود ومشاريع المنشأة الحالية (${projects.length})`
+            : `📋 Enterprise Active Project Contracts (${projects.length})`}
+        </button>
+      </div>
 
-      {/* Filter Bar */}
-      <div className="page-filter-bar">
+      {viewMode === 'workbench' ? (
+        <ProjectMarginWorkbench
+          locale={locale}
+          initialScenario="infrastructure"
+          isEmbeddedInPublicPage={false}
+        />
+      ) : (
+        <>
+          {notice && (
+            <div className={`alert-feedback-banner ${notice.type === 'error' ? 'error' : notice.type === 'warning' ? 'warning' : 'success'}`}>
+              {notice.type === 'error' || notice.type === 'warning' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
+              <span>{notice.message}</span>
+            </div>
+          )}
+
+          {/* Filter Bar */}
+          <div className="page-filter-bar">
         <div className="filter-group">
           <span className="filter-label">{isAr ? 'حالة المشروع:' : 'Health Status:'}</span>
           <button
@@ -295,6 +330,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
         })
       )}
       </div>
+      </>
+      )}
     </div>
   );
 };

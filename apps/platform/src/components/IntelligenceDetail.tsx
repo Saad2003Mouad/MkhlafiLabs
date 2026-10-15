@@ -6,6 +6,7 @@ import { LocaleMode } from '../types';
 import { api } from '../api/client';
 import { IconCheckCircle, IconShield, IconRefreshCw, IconAlertTriangle } from './Icons';
 import { FinancialCharts } from './financial/FinancialCharts';
+import { ForensicAuditWorkbench } from './financial/ForensicAuditWorkbench';
 
 interface IntelligenceDetailProps {
   locale: LocaleMode;
@@ -31,7 +32,7 @@ interface FinancialAnomaly {
 export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, onBack }) => {
   const isAr = locale === 'ar';
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'charts' | 'causes_solutions' | 'anomalies' | 'reconciliation' | 'audit'>('charts');
+  const [activeTab, setActiveTab] = useState<'workbench' | 'charts' | 'causes_solutions' | 'anomalies' | 'reconciliation' | 'audit'>('workbench');
 
   const [anomalies, setAnomalies] = useState<FinancialAnomaly[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
@@ -186,6 +187,17 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
       {/* Domain Navigation Tabs */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px', overflowX: 'auto' }}>
         <button
+          onClick={() => setActiveTab('workbench')}
+          className={`ctrl-btn ${activeTab === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: activeTab === 'workbench' ? 700 : 500,
+            background: activeTab === 'workbench' ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(16, 185, 129, 0.2))' : undefined,
+            borderColor: activeTab === 'workbench' ? 'var(--accent-base)' : undefined
+          }}
+        >
+          {isAr ? '🔬 محطة التدقيق الجنائي التفاعلية (Workbench)' : '🔬 Forensic Audit Workbench'}
+        </button>
+        <button
           onClick={() => setActiveTab('charts')}
           className={`ctrl-btn ${activeTab === 'charts' ? 'active' : ''}`}
           style={{ fontWeight: activeTab === 'charts' ? 700 : 500 }}
@@ -219,7 +231,18 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
         </button>
       </div>
 
-      {/* TAB 0: FINANCIAL CHARTS & ANALYTICS */}
+      {/* TAB 0: ADVANCED FORENSIC AUDIT WORKBENCH */}
+      {activeTab === 'workbench' && (
+        <div style={{ marginTop: '16px' }}>
+          <ForensicAuditWorkbench
+            locale={locale}
+            initialScenario="contracting"
+            isEmbeddedInPublicPage={false}
+          />
+        </div>
+      )}
+
+      {/* TAB 1: FINANCIAL CHARTS & ANALYTICS */}
       {activeTab === 'charts' && (
         <FinancialCharts locale={locale} analytics={analytics} isLoading={isLoading} />
       )}

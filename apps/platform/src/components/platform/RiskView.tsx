@@ -3,6 +3,7 @@ import { LocaleMode } from '../../types';
 import { IconRisk, IconShield, IconCheck } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { PredictiveRiskWorkbench } from '../risk/PredictiveRiskWorkbench';
 
 interface RiskViewProps {
   locale: LocaleMode;
@@ -11,6 +12,7 @@ interface RiskViewProps {
 export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
+  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
   const [risks, setRisks] = useState<any[]>([]);
   const [totalExposureSAR, setTotalExposureSAR] = useState<number>(0);
   const [selectedRiskCategory, setSelectedRiskCategory] = useState<string>('all');
@@ -136,12 +138,45 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
         </div>
       </div>
 
-      {bannerNotice && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{bannerNotice}</span>
-        </div>
-      )}
+      {/* View Switcher Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
+        <button
+          onClick={() => setViewMode('workbench')}
+          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: viewMode === 'workbench' ? 800 : 500,
+            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.15))' : undefined,
+            borderColor: viewMode === 'workbench' ? '#F59E0B' : undefined,
+            color: viewMode === 'workbench' ? '#F59E0B' : undefined
+          }}
+        >
+          {isAr ? '🔬 رادار التنبؤ التفاعلي ومحاكي السيولة لـ 13 أسبوعاً (Workbench)' : '🔬 Predictive Risk Workbench & 13-Week Cash Runway'}
+        </button>
+        <button
+          onClick={() => setViewMode('database')}
+          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
+          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
+        >
+          {isAr
+            ? `📋 سجل مؤشرات المخاطر المسجلة (${risks.length})`
+            : `📋 Tenant Risk Records (${risks.length})`}
+        </button>
+      </div>
+
+      {viewMode === 'workbench' ? (
+        <PredictiveRiskWorkbench
+          locale={locale}
+          initialScenario="contracting"
+          isEmbeddedInPublicPage={false}
+        />
+      ) : (
+        <>
+          {bannerNotice && (
+            <div className="alert-feedback-banner success">
+              <IconCheck size={16} />
+              <span>{bannerNotice}</span>
+            </div>
+          )}
 
       {/* Category Pills & Matrix Summary */}
       <div className="page-filter-bar">
@@ -297,6 +332,8 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
         })
       )}
       </div>
+        </>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { LocaleMode } from '../../types';
 import { IconSupplier, IconCheck, IconTrendingUp } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { SupplierRiskWorkbench } from '../suppliers/SupplierRiskWorkbench';
 
 interface SuppliersViewProps {
   locale: LocaleMode;
@@ -11,6 +12,7 @@ interface SuppliersViewProps {
 export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
+  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [totalSpendSAR, setTotalSpendSAR] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -124,15 +126,48 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
         </div>
       </div>
 
-      {notice && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{notice}</span>
-        </div>
-      )}
+      {/* View Switcher Tabs */}
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
+        <button
+          onClick={() => setViewMode('workbench')}
+          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
+          style={{
+            fontWeight: viewMode === 'workbench' ? 800 : 500,
+            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(8, 145, 178, 0.15))' : undefined,
+            borderColor: viewMode === 'workbench' ? '#06B6D4' : undefined,
+            color: viewMode === 'workbench' ? '#67E8F9' : undefined
+          }}
+        >
+          {isAr ? '🔬 رادار ذكاء الموردين ومحاكي الشراء الموحد (Workbench)' : '🔬 Supplier Intelligence & Group Spend Workbench'}
+        </button>
+        <button
+          onClick={() => setViewMode('database')}
+          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
+          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
+        >
+          {isAr
+            ? `📋 سجل موردي المنشأة المسجلين (${suppliers.length})`
+            : `📋 Enterprise Vendor Records (${suppliers.length})`}
+        </button>
+      </div>
 
-      {/* Filter Bar */}
-      <div className="page-filter-bar">
+      {viewMode === 'workbench' ? (
+        <SupplierRiskWorkbench
+          locale={locale}
+          initialScenario="fmcg_retail"
+          isEmbeddedInPublicPage={false}
+        />
+      ) : (
+        <>
+          {notice && (
+            <div className="alert-feedback-banner success">
+              <IconCheck size={16} />
+              <span>{notice}</span>
+            </div>
+          )}
+
+          {/* Filter Bar */}
+          <div className="page-filter-bar">
         <div className="filter-group">
           <span className="filter-label">{isAr ? 'تصنيف المورد:' : 'Supplier Risk:'}</span>
           <button
@@ -245,6 +280,8 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
           );
         })}
       </div>
+      </>
+      )}
     </div>
   );
 };
