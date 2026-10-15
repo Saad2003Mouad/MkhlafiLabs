@@ -3,30 +3,53 @@ import { LocaleMode } from '../types';
 
 interface ChartProps {
   locale: LocaleMode;
+  dataPoints?: Array<{ label: string; val: number }>;
 }
 
-export const ChartPreview: React.FC<ChartProps> = ({ locale }) => {
+export const ChartPreview: React.FC<ChartProps> = ({ locale, dataPoints }) => {
   const isAr = locale === 'ar';
-  
-  // Clean SVG responsive trend chart
-  const points = [
-    { label: isAr ? 'يناير' : 'Jan', val: 32 },
-    { label: isAr ? 'فبراير' : 'Feb', val: 45 },
-    { label: isAr ? 'مارس' : 'Mar', val: 41 },
-    { label: isAr ? 'أبريل' : 'Apr', val: 62 },
-    { label: isAr ? 'مايو' : 'May', val: 58 },
-    { label: isAr ? 'يونيو' : 'Jun', val: 78 },
-    { label: isAr ? 'يوليو' : 'Jul', val: 89 }
-  ];
 
-  const maxVal = 100;
+  const hasData = dataPoints && dataPoints.length > 0;
+
+  if (!hasData) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '180px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg-surface-elevated)',
+          borderRadius: 'var(--radius-sm)',
+          border: '1px dashed var(--border-subtle)',
+          padding: '20px',
+          textAlign: 'center'
+        }}
+      >
+        <span style={{ fontSize: '24px', marginBottom: '8px' }}>📊</span>
+        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+          {isAr ? 'لا تتوفر قيود ربعية كافية لتوليد المنحنى البياني' : 'No Quarterly Ledger Data Available'}
+        </span>
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '380px' }}>
+          {isAr
+            ? 'يتم رسم منحنى الاستقرار التشغيلي ومعدل الهدر تلقائياً بمجرد استيراد القيود المحاسبية عبر CSV أو تفعيل قنوات ERP.'
+            : 'Operational trend curves generate dynamically upon ledger ingestion or ERP integration.'}
+        </span>
+      </div>
+    );
+  }
+
+  const points = dataPoints;
+  const maxVal = Math.max(...points.map((p) => p.val), 10);
   const svgWidth = 500;
   const svgHeight = 180;
   const padding = 30;
 
   const pointsString = points
     .map((p, idx) => {
-      const x = padding + (idx * (svgWidth - 2 * padding)) / (points.length - 1);
+      const x = padding + (idx * (svgWidth - 2 * padding)) / Math.max(points.length - 1, 1);
       const y = svgHeight - padding - (p.val / maxVal) * (svgHeight - 2 * padding);
       return `${x},${y}`;
     })
@@ -63,7 +86,7 @@ export const ChartPreview: React.FC<ChartProps> = ({ locale }) => {
 
         {/* Data points */}
         {points.map((p, idx) => {
-          const x = padding + (idx * (svgWidth - 2 * padding)) / (points.length - 1);
+          const x = padding + (idx * (svgWidth - 2 * padding)) / Math.max(points.length - 1, 1);
           const y = svgHeight - padding - (p.val / maxVal) * (svgHeight - 2 * padding);
           return (
             <g key={idx}>

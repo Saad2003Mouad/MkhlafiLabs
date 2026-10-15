@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { MOCK_DATA_QUALITY } from '../../data/mockData';
 import { IconDataQuality, IconCheck, IconRefresh } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -12,8 +11,8 @@ interface DataQualityViewProps {
 export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
-  const [checks, setChecks] = useState<any[]>(MOCK_DATA_QUALITY);
-  const [overallScore, setOverallScore] = useState<number>(97.4);
+  const [checks, setChecks] = useState<any[]>([]);
+  const [overallScore, setOverallScore] = useState<number>(0);
   const [isScanning, setIsScanning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -128,7 +127,29 @@ export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
 
       {/* Overview Cards */}
       <div className="decisions-grid">
-        {checks.map((check) => {
+        {checks.length === 0 ? (
+          <div
+            className="content-panel"
+            style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              padding: '48px 20px',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>🔍</span>
+            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
+              {isAr ? 'لم يتم تشغيل فحص جودة البيانات حتى الآن' : 'No Data Quality Audits Run Yet'}
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+              {isAr
+                ? 'انقر على "تشغيل فحص شامل وتدقيق النزاهة" أعلاه للتحقق من سلامة القيود والامتثال لمعايير ZATCA و IFRS.'
+                : 'Click "Run Quality Audit Scan" above to verify ledger integrity against ZATCA & IFRS rules.'}
+            </p>
+          </div>
+        ) : (
+          checks.map((check) => {
           const ruleName = check.rule_name || check.ruleName;
           const source = check.source_system || check.sourceSystem;
           const compliance = check.compliance_rate ?? check.complianceRate ?? 99;
@@ -165,13 +186,14 @@ export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
                   </span>
                 </div>
                 <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'آخر تدقيق' : 'Last Checked'}</span>
+                  <span className="k">{isAr ? 'آخر تدقيق' : 'Last Check'}</span>
                   <span className="v">{lastChecked}</span>
                 </div>
               </div>
             </div>
           );
-        })}
+        })
+      )}
       </div>
     </div>
   );

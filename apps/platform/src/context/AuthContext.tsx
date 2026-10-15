@@ -77,6 +77,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         api.setActiveOrganizationId(res.activeTenant.organizationId);
       }
       setIsAuthModalOpen(false);
+      // Ensure latest /auth/me state is fully synchronized
+      try {
+        const me = await api.getMe();
+        if (me?.user) {
+          setUser(me.user);
+          setTenant(me.tenant);
+        }
+      } catch (_) {}
     } catch (err: any) {
       setError(err.message || 'Login failed');
       throw err;

@@ -6,7 +6,7 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
   const qLower = queryText.toLowerCase().trim();
   const provider = getAIProvider();
 
-  // 1. Fetch live tenant context across all operational tables
+  // 1. Fetch live tenant context across operational tables
   const [anomaliesRes, decisionsRes, risksRes, projectsRes, suppliersRes, customersRes] = await Promise.all([
     query('SELECT * FROM financial_anomalies WHERE organization_id = $1 ORDER BY flagged_amount DESC', [orgId]),
     query('SELECT * FROM tenant_decisions WHERE organization_id = $1 ORDER BY impact_amount DESC', [orgId]),
@@ -23,171 +23,182 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
   const suppliers = suppliersRes.rows;
   const customers = customersRes.rows;
 
-  let answerText = '';
+  const totalLeakageSAR = anomalies.reduce((sum, a) => sum + parseFloat(a.flagged_amount || 0), 0);
+  const frozenAnomalies = anomalies.filter(a => a.status === 'FROZEN');
+  const frozenAmountSAR = frozenAnomalies.reduce((sum, a) => sum + parseFloat(a.flagged_amount || 0), 0);
+  const pendingDecisions = decisions.filter(d => d.status === 'PENDING');
+  const pendingImpactSAR = pendingDecisions.reduce((sum, d) => sum + parseFloat(d.impact_amount || 0), 0);
+
   const citations = [];
 
-  // Match queries based on semantic domain
-  if (
-    qLower.includes('لماذا') ||
-    qLower.includes('سبب') ||
-    qLower.includes('أسباب') ||
-    qLower.includes('فسر') ||
-    qLower.includes('تفسير') ||
-    qLower.includes('خسائر') ||
-    qLower.includes('خسارة') ||
-    qLower.includes('قلت') ||
-    qLower.includes('انخفضت') ||
-    qLower.includes('حلول') ||
-    qLower.includes('حل') ||
-    qLower.includes('why') ||
-    qLower.includes('cause') ||
-    qLower.includes('reason') ||
-    qLower.includes('explain') ||
-    qLower.includes('solution')
-  ) {
-    const frozenCount = anomalies.filter(a => a.status === 'FROZEN').length;
-    const frozenAmount = anomalies.filter(a => a.status === 'FROZEN').reduce((sum, a) => sum + parseFloat(a.flagged_amount || 0), 0);
-    const auditedClaimsCount = projects.filter(p => p.contractor_claims_audited).length;
-
+  // Add factual citations based on actual tenant tables
+  if (anomalies.length > 0) {
     citations.push({
-      source: 'Annual Financial Variance & Ledger Reconciliation',
-      docId: 'GL-ANNUAL-VAR-2026',
-      confidence: '99.2%'
+      source: 'Forensic Financial Anomalies Ledger',
+      docId: anomalies[0].case_number || 'CASE-LIVE',
+      confidence: `${anomalies[0].confidence_pct || 95.0}%`
     });
+  }
+  if (decisions.length > 0) {
     citations.push({
-      source: 'Forensic Audit & Fraud Mitigation Trail',
-      docId: 'AUD-MITIGATION-TRAIL',
-      confidence: '98.5%'
+      source: 'Tenant Executive Decision Pipeline',
+      docId: `DEC-${decisions[0].id.substring(0, 6)}`,
+      confidence: '99.0%'
     });
-    citations.push({
-      source: 'Procurement Benchmark & Contract Drift Index',
-      docId: 'PO-PRICE-DRIFT-INDEX',
-      confidence: '96.4%'
+  }
+
+  // 2. Prepare structured context for LLM execution
+  const dbContextSummary = isAr
+    ? `سياق قاعدة بيانات المؤسسة الحالية (PostgreSQL):
+- معرف المؤسسة: ${orgId}
+- إجمالي حالات الشذوذ والتسرب المالي: ${anomalies.length} حالة (المبلغ المرصود: ${totalLeakageSAR.toLocaleString()} ر.س، المجمد: ${frozenAmountSAR.toLocaleString()} ر.س).
+- تفاصيل الحالات المرصودة:
+${anomalies.map(a => `  * القضية ${a.case_number}: المورد "${a.target_vendor}" بمبلغ ${parseFloat(a.flagged_amount).toLocaleString()} ر.س، الحالة: ${a.status}، التوصيف: ${a.narrative_ar || a.narrative_en}`).join('\n')}
+- القرارات التنفيذية: ${decisions.length} قرار (معلقة: ${pendingDecisions.length}، الأثر المالي: ${pendingImpactSAR.toLocaleString()} ر.س).
+- المخاطر التشغيلية والمالية: ${risks.length} مخاطر (إجمالي التعرض: ${risks.reduce((s, r) => s + parseFloat(r.financial_exposure_sar || 0), 0).toLocaleString()} ر.س).
+- المشاريع الرأسمالية: ${projects.length} مشاريع (المشاريع تحت الخطر: ${projects.filter(p => p.health === 'at-risk').length}).
+- شبكة الموردين: ${suppliers.length} موردين (موردين في وضع حرج: ${suppliers.filter(s => s.risk_status === 'critical').length}).
+- العملاء ومخاطر الإيراد: ${customers.length} عملاء (عملاء في خطر فقدان مرتفع: ${customers.filter(c => c.churn_probability > 0.5).length}).`
+    : `TENANT OPERATIONAL DATABASE CONTEXT:
+- Organization ID: ${orgId}
+- Total Financial Anomalies: ${anomalies.length} (Total Flagged: ${totalLeakageSAR.toLocaleString()} SAR, Frozen: ${frozenAmountSAR.toLocaleString()} SAR)
+- Active Anomaly Cases: ${JSON.stringify(anomalies.map(a => ({ case: a.case_number, vendor: a.target_vendor, amount: a.flagged_amount, severity: a.severity, rule: a.rule_code, status: a.status })))}
+- Executive Decisions: ${decisions.length} (Pending: ${pendingDecisions.length}, Impact: ${pendingImpactSAR.toLocaleString()} SAR)
+- Monitored Risks: ${risks.length} (Total Exposure: ${risks.reduce((s, r) => s + parseFloat(r.financial_exposure_sar || 0), 0).toLocaleString()} SAR)
+- Capital Projects: ${projects.length} (At-Risk: ${projects.filter(p => p.health === 'at-risk').length})
+- Suppliers: ${suppliers.length} (Critical Price Creep: ${suppliers.filter(s => s.risk_status === 'critical').length})
+- Customers: ${customers.length} (High Churn Risk: ${customers.filter(c => c.churn_probability > 0.5).length}).`;
+
+  const systemPrompt = isAr
+    ? `أنت المساعد الذكي للقرارات التنفيذية في منصة مخلافي لابس (MIKHLAFI LABS).
+أنت تقدم إجابات تنفيذية ودقيقة وحسابية مبنية حصرياً على سياق قاعدة بيانات المؤسسة أدناه.
+القواعد الصارمة:
+1. أجب باللغة العربية بأسلوب تنفيذي موجز ومنظم بنقاط واضحة.
+2. اذكر الأرقام والمبالغ بالريال السعودي وأسماء الموردين والقضايا كما هي في البيانات دون اختلاق أو تزييف.
+3. قدم توصيات وإجراءات تنفيذية وقائية وعلاجية مباشرة.
+
+${dbContextSummary}`
+    : `You are MIKHLAFI LABS Executive Decision Intelligence Assistant.
+You provide executive, factual, and mathematically rigorous answers to business questions based STRICTLY on the tenant's PostgreSQL database context provided.
+RULES:
+1. Always answer in English.
+2. If there are 0 records in the database for the requested category, state clearly and honestly that no records exist yet.
+3. NEVER invent fake numbers or hallucinate metrics not present in the database context.
+4. Format responses clearly with executive bullet points.
+
+${dbContextSummary}`;
+
+  // Try real AI generation (Gemini or Ollama)
+  let answerText = '';
+  let providerUsedName = provider.name;
+  let isLocal = true;
+
+  try {
+    const aiResult = await provider.generate({
+      prompt: queryText,
+      systemPrompt,
+      locale
     });
 
-    answerText = isAr
-      ? `📊 التفسير التنفيذي والتحليل السببي (الأسباب، التفسير، والحلول):
+    if (aiResult && aiResult.text) {
+      answerText = aiResult.text;
+      providerUsedName = aiResult.provider;
+      isLocal = aiResult.isLocal;
+    }
+  } catch (err) {
+    console.warn('[AI Generation error, falling back to deterministic synthesis]:', err.message);
+  }
 
-1️⃣ التغير المرصود في الأرقام:
-• انخفض حجم الخسائر المالية والتسربات التشغيلية هذا العام بنسبة 38.4% (من 1,420,000 ريال إلى 875,000 ريال)، مع حماية وفر نقدي محقق قدره ${(frozenAmount > 0 ? frozenAmount : 545000).toLocaleString()} ريال سعودي في دفتر الأستاذ.
+  // 3. Fallback Deterministic Engine (Zero fake numbers, strictly computed from real rows)
+  if (!answerText) {
+    if (
+      qLower.includes('لماذا') ||
+      qLower.includes('سبب') ||
+      qLower.includes('أسباب') ||
+      qLower.includes('فسر') ||
+      qLower.includes('تفسير') ||
+      qLower.includes('خسائر') ||
+      qLower.includes('خسارة') ||
+      qLower.includes('قلت') ||
+      qLower.includes('انخفضت') ||
+      qLower.includes('حلول') ||
+      qLower.includes('حل') ||
+      qLower.includes('why') ||
+      qLower.includes('cause') ||
+      qLower.includes('reason') ||
+      qLower.includes('explain') ||
+      qLower.includes('solution')
+    ) {
+      if (anomalies.length === 0) {
+        answerText = isAr
+          ? `📊 التفسير التنفيذي والتحليل السببي:
+• بناءً على قاعدة بيانات مؤسستكم الحالية في PostgreSQL: لا توجد أي حالات تسرب مالي أو خسائر مرصودة حالياً.
+• لإجراء التحليل السببي واكتشاف الانحرافات، يرجى استيراد قيود دفتر الأستاذ العام (CSV) عبر شاشة التكاملات أو تفعيل قنوات الربط مع ERP.`
+          : `📊 Executive Causal Analysis:
+• Based on your current tenant database in PostgreSQL: Zero financial leakage cases or operational losses are recorded.
+• To generate empirical causal analysis and variance detection, import general ledger entries via CSV or connect ERP telemetry.`;
+      } else {
+        answerText = isAr
+          ? `📊 التفسير التنفيذي والتحليل السببي من واقع السجلات الحالية:
+1️⃣ المؤشرات المالية المرصودة:
+• إجمالي التسربات المالية المرصودة: ${totalLeakageSAR.toLocaleString()} ريال عبر ${anomalies.length} حالات شذوذ حسابي.
+• السيولة المحمية بالتجميد المباشر: ${frozenAmountSAR.toLocaleString()} ريال (${frozenAnomalies.length} حالات مجمدة).
 
-2️⃣ التفسير والأسباب الجذرية لهذا الانخفاض:
-• السبب الأول (إيقاف الصرف المكرر): رصد وتجميد ${frozenCount > 0 ? frozenCount : 3} فواتير مكررة ومشبوهة للموردين بنظام المطابقة الثلاثية قبل خروج الحوالات البنكية (وفر 280,000 ريال).
-• السبب الثاني (كبح تضخم أسعار التوريد): مقارنة فواتير الموردين بأسعار الأساس، مما أوقف تزايداً سعرياً خفياً بنسبة 14.2% لدى موردي المواد الخام (وفر 145,000 ريال).
-• السبب الثالث (تدقيق مطالبات المقاولين): مراجعة أوامر التغيير الإنشائية غير المعتمدة في ${auditedClaimsCount} مشاريع رئيسية وإسقاط المطالبات غير الموثقة بسندات إنجاز (وفر 120,000 ريال).
+2️⃣ الأسباب الجذرية الدقيقة:
+${anomalies.slice(0, 3).map((a, idx) => `• السبب 0${idx + 1} (${a.rule_code}): المورد "${a.target_vendor}" بمبلغ ${parseFloat(a.flagged_amount).toLocaleString()} ريال. الملاحظة: ${a.narrative_ar}`).join('\n')}
 
-3️⃣ الحلول والإجراءات التنفيذية الموصى بها لضمان استدامة النتائج:
-• الحل 1: استمرار تطبيق بوابة الاعتماد الإلزامية (Pre-payment Gate)؛ منع صرف أي مستخلص لا يحمل مطابقة سند الاستلام المخزني.
-• الحل 2: تثبيت سقف صلاحيات أوامر الشراء لمنع تجزئة المبالغ للتهرب من الاعتماد التنفيذي (Threshold Evasion).
-• الحل 3: جدولة مراجعات تعاقدية مسبقة بـ 60 يوماً مع العملاء المهددين بالتسرب لحماية تدفقات الإيرادات المتكررة.`
-      : `📊 Executive Causal Analysis (Root-Causes, Explanation & Prescriptive Solutions):
+3️⃣ الحلول والإجراءات التنفيذية المعتمدة:
+• تفعيل بوابة الاعتماد المسبقة (Pre-Payment Gate) للمطابقة الثلاثية (PO + GRN + Invoice).
+• حظر صرف المطالبات المعلقة حتى التحقق من سلامة القيود مع الإدارة المالية.`
+          : `📊 Executive Causal Analysis from Live Database Records:
+1️⃣ Detected Financial Metrics:
+• Total Flagged Leakage: ${totalLeakageSAR.toLocaleString()} SAR across ${anomalies.length} anomaly cases.
+• Protected Capital: ${frozenAmountSAR.toLocaleString()} SAR frozen across ${frozenAnomalies.length} disbursements.
 
-1️⃣ Observed Financial Shift:
-• Operational losses and financial leakage dropped by 38.4% this year (from 1,420,000 SAR down to 875,000 SAR), securing ${(frozenAmount > 0 ? frozenAmount : 545000).toLocaleString()} SAR in protected ledger liquidity.
+2️⃣ Identified Root Causes:
+${anomalies.slice(0, 3).map((a, idx) => `• Cause 0${idx + 1} (${a.rule_code}): Vendor "${a.target_vendor}" for ${parseFloat(a.flagged_amount).toLocaleString()} SAR (${a.narrative_en})`).join('\n')}
 
-2️⃣ Underlying Root Causes for the Reduction:
-• Cause 1 (Duplicate Payment Interception): 3-Way Match triangulation successfully flagged and froze duplicate vendor invoices before wire disbursement (280,000 SAR protected).
-• Cause 2 (Suppliers Price Creep Containment): PO-to-contract benchmark auditing halted an unauthorized 14.2% price drift on key raw material suppliers (145,000 SAR protected).
-• Cause 3 (Contractor Claims Audit): Rigorous forensic audit of unapproved change orders across active capital projects eliminated unearned claims (120,000 SAR protected).
-
-3️⃣ Prescriptive Executive Solutions to Sustain Protection:
-• Solution 1: Enforce mandatory pre-payment matching gate; disallow payouts lacking verified warehouse goods receipts.
-• Solution 2: Lock single purchase order authorization thresholds to prevent split-PO compliance evasion.
-• Solution 3: Schedule proactive executive reviews 60 days before contract expiry for churn-risk accounts.`;
-  } else if (qLower.includes('هدر') || qLower.includes('تسرب') || qLower.includes('فواتير') || qLower.includes('leak') || qLower.includes('invoice') || qLower.includes('anomaly')) {
-    const totalLeakage = anomalies.reduce((sum, a) => sum + parseFloat(a.flagged_amount || 0), 0);
-    const topCase = anomalies[0];
-
-    if (topCase) {
-      citations.push({
-        source: 'Forensic Ledger Anomaly Record',
-        docId: topCase.case_number || topCase.id,
-        confidence: `${topCase.confidence_pct || 94.2}%`
-      });
-      citations.push({
-        source: 'ERP General Ledger Feeds',
-        docId: topCase.vendor_invoice_ref || 'GL-8921',
-        confidence: '98.5%'
-      });
-
-      answerText = isAr
-        ? `بناءً على فحص السجلات المحاسبية وقاعدة بيانات التدقيق الجنائي: تم رصد ${anomalies.length} حالات شذوذ مالي بإجمالي مبالغ مرصودة تبلغ ${totalLeakage.toLocaleString()} ريال سعودي. أبرزها الحالة (${topCase.case_number}) للمورد "${topCase.target_vendor}" بمبلغ ${parseFloat(topCase.flagged_amount).toLocaleString()} ريال ناتجة عن "${topCase.narrative_ar}". الإجراء الموصى به: تجميد الدفعة فوراً لمنع خروج السيولة.`
-        : `Based on verified ledger records: ${anomalies.length} financial anomaly cases were detected totaling ${totalLeakage.toLocaleString()} SAR in flagged disbursements. The highest priority case is (${topCase.case_number}) for vendor "${topCase.target_vendor}" at ${parseFloat(topCase.flagged_amount).toLocaleString()} SAR (${topCase.narrative_en}). Recommended action: freeze disbursement immediately.`;
+3️⃣ Prescriptive Executive Solutions:
+• Enforce 3-way matching gate prior to wire disbursement.
+• Freeze flagged disbursements pending CFO forensic review.`;
+      }
+    } else if (qLower.includes('هدر') || qLower.includes('تسرب') || qLower.includes('فواتير') || qLower.includes('leak') || qLower.includes('invoice') || qLower.includes('anomaly')) {
+      if (anomalies.length === 0) {
+        answerText = isAr
+          ? 'تم فحص السجلات المحاسبية الحالية: لا توجد أي حالات تسرب مالي أو فواتير مشبوهة مسجلة في قاعدة البيانات.'
+          : 'Verified ledger records: Zero active financial leakage anomalies detected in the tenant database.';
+      } else {
+        const topCase = anomalies[0];
+        answerText = isAr
+          ? `تم رصد ${anomalies.length} حالات شذوذ مالي وتسرب بقيمة إجمالية ${totalLeakageSAR.toLocaleString()} ريال سعودي. أبرزها الحالة (${topCase.case_number}) للمورد "${topCase.target_vendor}" بمبلغ ${parseFloat(topCase.flagged_amount).toLocaleString()} ريال (${topCase.narrative_ar}).`
+          : `${anomalies.length} financial anomaly cases detected totaling ${totalLeakageSAR.toLocaleString()} SAR. Top case is (${topCase.case_number}) for vendor "${topCase.target_vendor}" at ${parseFloat(topCase.flagged_amount).toLocaleString()} SAR (${topCase.narrative_en}).`;
+      }
+    } else if (qLower.includes('قرار') || qLower.includes('قرارات') || qLower.includes('decision') || qLower.includes('action')) {
+      if (decisions.length === 0) {
+        answerText = isAr
+          ? 'لا توجد قرارات تنفيذية مسجلة حالياً في جدول tenant_decisions لمؤسستكم.'
+          : 'Zero executive decisions currently recorded in tenant_decisions for your organization.';
+      } else {
+        answerText = isAr
+          ? `يوجد ${pendingDecisions.length} قرارات تنفيذية معلقة بأثر مالي مستهدف قدره ${pendingImpactSAR.toLocaleString()} ريال سعودي. أهمها: "${decisions[0].title}" بقيمة ${parseFloat(decisions[0].impact_amount).toLocaleString()} ريال.`
+          : `${pendingDecisions.length} pending executive decisions recorded with target financial impact of ${pendingImpactSAR.toLocaleString()} SAR. Top decision: "${decisions[0].title}" (${parseFloat(decisions[0].impact_amount).toLocaleString()} SAR).`;
+      }
     } else {
+      // General factual overview
       answerText = isAr
-        ? 'تم فحص القيود المحاسبية، ولا توجد حالات تسرب مالي نشطة حالياً. جميع المدفوعات مطابقة للشروط.'
-        : 'Accounting ledgers audited. Zero active financial leakage anomalies detected.';
+        ? `ملخص الاستخبارات التنفيذية من واقع قاعدة البيانات الحقيقية:
+• الانحرافات المالية: ${anomalies.length} حالات مرصودة (إجمالي: ${totalLeakageSAR.toLocaleString()} ريال).
+• القرارات التنفيذية: ${pendingDecisions.length} قرارات معلقة (الأثر: ${pendingImpactSAR.toLocaleString()} ريال).
+• رادار المخاطر: ${risks.length} مخاطر مسجلة.
+• المشاريع: ${projects.length} مشاريع قيد المراقبة.
+• الموردون: ${suppliers.length} موردين مسجلين.`
+        : `Executive Decision Intelligence Brief from Live PostgreSQL:
+• Financial Anomalies: ${anomalies.length} flagged cases (${totalLeakageSAR.toLocaleString()} SAR).
+• Executive Decisions: ${pendingDecisions.length} pending actions (${pendingImpactSAR.toLocaleString()} SAR).
+• Operational Risks: ${risks.length} registered risks.
+• Capital Projects: ${projects.length} monitored.
+• Monitored Suppliers: ${suppliers.length} vendors.`;
     }
-  } else if (qLower.includes('حديد') || qLower.includes('مورد') || qLower.includes('موردين') || qLower.includes('steel') || qLower.includes('supplier') || qLower.includes('vendor')) {
-    const critSupplier = suppliers.find(s => s.risk_status === 'critical') || suppliers[0];
-    if (critSupplier) {
-      citations.push({
-        source: 'Procurement Contract Baseline',
-        docId: critSupplier.code || 'VND-702',
-        confidence: '96.2%'
-      });
-      citations.push({
-        source: 'Purchase Order Price Index',
-        docId: 'PO-PRICE-DRIFT-INDEX',
-        confidence: '92.0%'
-      });
-
-      answerText = isAr
-        ? `استناداً إلى سجلات المشتريات ومطابقة عروض الأسعار: يظهر المورد "${critSupplier.name_ar}" تصاعداً سعرياً غير متعاقد عليه بنسبة (${critSupplier.price_creep_rate}) مقارنة بأسعار الأساس، مع حجم عقود نشطة يبلغ ${parseFloat(critSupplier.active_contracts_val_sar).toLocaleString()} ريال ومعدل التزام بالمواعيد ${critSupplier.on_time_delivery_rate}. الملاحظات: ${critSupplier.last_audit_notes || 'يوصى بإعادة التفاوض المباشر بناءً على شروط العقد الأساسي.'}`
-        : `Based on procurement ledgers and PO variance tracking: Vendor "${critSupplier.name_en}" displays an uncontracted price creep of (${critSupplier.price_creep_rate}) vs baseline contract pricing, with active contract volume of ${parseFloat(critSupplier.active_contracts_val_sar).toLocaleString()} SAR and on-time delivery rate of ${critSupplier.on_time_delivery_rate}. Status: ${critSupplier.last_audit_notes || 'Direct price renegotiation recommended.'}`;
-    }
-  } else if (qLower.includes('مشروع') || qLower.includes('مشاريع') || qLower.includes('project') || qLower.includes('overrun') || qLower.includes('variance')) {
-    const atRiskProj = projects.find(p => p.health === 'at-risk') || projects[0];
-    if (atRiskProj) {
-      citations.push({
-        source: 'Project Management & Cost Baseline',
-        docId: atRiskProj.code,
-        confidence: '95.0%'
-      });
-      citations.push({
-        source: 'Contractor Payment Claims Ledger',
-        docId: `CLM-${atRiskProj.code}`,
-        confidence: '98.1%'
-      });
-
-      answerText = isAr
-        ? `بناءً على مؤشرات متابعة المشاريع الحية: المشروع (${atRiskProj.name_ar}) [${atRiskProj.code}] يواجه انحرافاً في التكلفة يقدر بـ ${parseFloat(atRiskProj.variance_sar).toLocaleString()} ريال مع نسبة إنجاز فعلي (${atRiskProj.actual_progress}%) متأخرة عن المخطط (${atRiskProj.planned_progress}%). كما سُجل عليه ${atRiskProj.change_orders_count} أوامر تغيير قيد التدقيق.`
-        : `Based on project performance metrics: Project (${atRiskProj.name_en}) [${atRiskProj.code}] faces an estimated budget variance of ${parseFloat(atRiskProj.variance_sar).toLocaleString()} SAR with actual progress at (${atRiskProj.actual_progress}%) lagging behind planned (${atRiskProj.planned_progress}%). ${atRiskProj.change_orders_count} unverified change orders are pending review.`;
-    }
-  } else if (qLower.includes('مخاطر') || qLower.includes('risk') || qLower.includes('انقطاع') || qLower.includes('سيولة')) {
-    const topRisk = risks[0];
-    if (topRisk) {
-      citations.push({
-        source: 'Enterprise Risk Registry',
-        docId: topRisk.code,
-        confidence: '94.5%'
-      });
-      answerText = isAr
-        ? `وفق رادار المخاطر المؤسسي: أعلى خطر مرصود هو (${topRisk.title_ar}) بكود [${topRisk.code}]. حجم التعرض المالي التقديري: ${parseFloat(topRisk.financial_exposure_sar).toLocaleString()} ريال. خطة التحوط المعتمدة: ${topRisk.mitigation_plan_ar}. المسؤول التنفيذي: ${topRisk.owner_name}.`
-        : `According to Enterprise Risk Registry: Top monitored risk is (${topRisk.title_en}) [${topRisk.code}]. Estimated financial exposure: ${parseFloat(topRisk.financial_exposure_sar).toLocaleString()} SAR. Mitigation plan: ${topRisk.mitigation_plan_en}. Owner: ${topRisk.owner_name}.`;
-    }
-  } else if (qLower.includes('عميل') || qLower.includes('عملاء') || qLower.includes('churn') || qLower.includes('customer')) {
-    const churnCust = customers.find(c => c.churn_probability > 0.5) || customers[0];
-    if (churnCust) {
-      citations.push({
-        source: 'Customer Revenue Velocity Index',
-        docId: churnCust.code,
-        confidence: '93.7%'
-      });
-      answerText = isAr
-        ? `بناءً على رادار الاحتفاظ بالعملاء: الحساب (${churnCust.account_name_ar}) يسجل مؤشر انكماش في حجم الطلبات بنسبة (${churnCust.volume_trend})، مع احتمالية فقدان تقدر بـ ${(churnCust.churn_probability * 100).toFixed(0)}% وقيمة إيرادات معرضة للمخاطر تبلغ ${parseFloat(churnCust.revenue_at_risk_sar).toLocaleString()} ريال قبل موعد التجديد في ${churnCust.renewal_date}. يوصى بجدولة مراجعة تنفيذية فورية.`
-        : `Based on Customer Churn Radar: Account (${churnCust.account_name_en}) indicates an order contraction velocity of (${churnCust.volume_trend}), with churn probability of ${(churnCust.churn_probability * 100).toFixed(0)}% and revenue at risk of ${parseFloat(churnCust.revenue_at_risk_sar).toLocaleString()} SAR before renewal on ${churnCust.renewal_date}. Executive review recommended.`;
-    }
-  } else {
-    // Default executive summary synthesizing the entire intelligence footprint
-    citations.push({
-      source: 'MIKHLAFI LABS Multi-Engine Synthesis',
-      docId: 'EXEC-SYNTH-SUMMARY',
-      confidence: '97.8%'
-    });
-    answerText = isAr
-      ? `ملخص الاستخبارات التنفيذية الشامل للمؤسسة:\n• كشف التسرب المالي: تم رصد ${anomalies.length} حالات بإجمالي ${anomalies.reduce((s, a) => s + parseFloat(a.flagged_amount || 0), 0).toLocaleString()} ريال.\n• القرارات التنفيذية: ${decisions.filter(d => d.status === 'PENDING').length} قرارات معلقة تتطلب التدخل.\n• رادار المخاطر: ${risks.length} مخاطر تشغيلية بإجمالي تعرض ${risks.reduce((s, r) => s + parseFloat(r.financial_exposure_sar || 0), 0).toLocaleString()} ريال.\n• أداء المشاريع: ${projects.length} مشاريع قيد المتابعة، منها ${projects.filter(p => p.health === 'at-risk').length} مشروع مصنف في دائرة الخطر.\n• سلاسل الإمداد: ${suppliers.length} موردين نشطين، مع رصد تزايد سعري لدى ${suppliers.filter(s => s.risk_status === 'critical').length} مورد رئيسي.`
-      : `Executive Decision Intelligence Brief:\n• Financial Leak Detection: ${anomalies.length} active cases flagged (${anomalies.reduce((s, a) => s + parseFloat(a.flagged_amount || 0), 0).toLocaleString()} SAR).\n• Executive Decisions: ${decisions.filter(d => d.status === 'PENDING').length} pending actions require intervention.\n• Risk Radar: ${risks.length} active risks with total exposure of ${risks.reduce((s, r) => s + parseFloat(r.financial_exposure_sar || 0), 0).toLocaleString()} SAR.\n• Projects: ${projects.length} monitored, ${projects.filter(p => p.health === 'at-risk').length} flagged at-risk.\n• Suppliers: ${suppliers.length} active vendors, with ${suppliers.filter(s => s.risk_status === 'critical').length} critical price drift alerts.`;
   }
 
   // Persist interaction to ai_assistant_logs
@@ -207,9 +218,9 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
     response: answerText,
     citations,
     aiProvider: {
-      name: provider.name,
-      isLocal: true,
-      sovereignty: 'AIR_GAPPED_OR_LOCAL'
+      name: providerUsedName,
+      isLocal,
+      sovereignty: isLocal ? 'AIR_GAPPED_OR_LOCAL' : 'CLOUD_MANAGED_AI'
     }
   };
 }

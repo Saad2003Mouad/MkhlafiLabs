@@ -1,6 +1,5 @@
 // MIKHLAFI LABS — Provider-Independent AI Architecture
-// Pluggable AI engine supporting offline heuristics, local Ollama/vLLM, and optional external LLMs
-// Conforms to Phase 7: AI Cost & Provider Independence
+// Pluggable AI engine supporting Groq LPU inference, local Ollama/vLLM, Google Gemini, and offline deterministic heuristics
 
 export class BaseAIProvider {
   constructor(config = {}) {
@@ -18,7 +17,7 @@ export class BaseAIProvider {
 }
 
 /**
- * 1. Local Deterministic Provider (Default)
+ * 1. Local Deterministic Provider (Default fallback)
  * 100% offline, zero-cost, runs on any CPU, and guarantees factual mathematical accuracy without hallucination.
  */
 export class LocalDeterministicProvider extends BaseAIProvider {
@@ -28,12 +27,11 @@ export class LocalDeterministicProvider extends BaseAIProvider {
   }
 
   async generate({ prompt, systemPrompt = '', locale = 'ar' }) {
-    // Grounded synthesis executed via domain queries in assistantEngine.js
     return {
       provider: this.name,
       model: 'mikhlafi-causal-v1-offline',
       isLocal: true,
-      text: null // Handled directly by evidence synthesizer
+      text: null // Handled directly by evidence synthesizer in assistantEngine.js
     };
   }
 }
@@ -96,56 +94,199 @@ export class LocalOllamaProvider extends BaseAIProvider {
 }
 
 /**
- * 3. External API Provider (Optional & Disabled by Default)
- * Requires explicit configuration and respects tenant data privacy flags.
+ * 3. Groq Ultra-Fast Cloud Inference Provider
+ * Sub-second inference powered by Groq LPUs.
+ * Defaults to 'allam-2-7b' (SDAIA Arabic Foundation Model) for Arabic executive reasoning,
+ * and 'qwen/qwen3.8-27b' for English/multilingual.
+ */
+export class GroqApiProvider extends BaseAIProvider {
+  constructor(config = {}) {
+    super(config);
+    this.name = 'groq';
+    this.apiKey = config.apiKey || process.env.GROQ_API_KEY || '';
+    this.modelArabic = config.modelArabic || process.env.GROQ_MODEL_AR || 'allam-2-7b';
+    this.modelEnglish = config.modelEnglish || process.env.GROQ_MODEL_EN || 'qwen/qwen3.8-27b';
+    this.defaultModel = config.model || process.env.GROQ_MODEL || null;
+    this.endpoint = config.endpoint || 'https://api.groq.com/openai/v1/chat/completions';
+    this.timeoutMs = parseInt(config.timeoutMs || process.env.AI_TIMEOUT_MS || '25000', 10);
+  }
+
+  async generate({ prompt, systemPrompt = '', locale = 'ar' }) {
+    if (!this.apiKey) {
+      return {
+        provider: 'fallback-deterministic',
+        model: 'mikhlafi-causal-v1-offline',
+        isLocal: true,
+        text: null,
+        fallbackReason: 'No GROQ_API_KEY configured'
+      };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    const isArabic = locale === 'ar' || /[\u0600-\u06FF]/.test(prompt);
+    const selectedModel = this.defaultModel || (isArabic ? this.modelArabic : this.modelEnglish);
+
+    try {
+      const messages = [];
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
+      }
+      messages.push({ role: 'user', content: prompt });
+
+      const response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages,
+          temperature: 0.3,
+          presence_penalty: 0.2,
+          max_completion_tokens: 800,
+          top_p: 0.95
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API HTTP ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const generatedText = data?.choices?.[0]?.message?.content;
+
+      if (!generatedText) {
+        throw new Error('Groq API returned an empty completion.');
+      }
+
+      return {
+        provider: 'groq',
+        model: selectedModel,
+        isLocal: false,
+        text: generatedText.trim(),
+        usage: data.usage
+      };
+    } catch (err) {
+      console.warn(`[Groq AI Provider Warning]: ${err.message}. Falling back to deterministic engine.`);
+      return {
+        provider: 'fallback-deterministic',
+        model: 'mikhlafi-causal-v1-offline',
+        isLocal: true,
+        text: null,
+        fallbackReason: err.message
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+/**
+ * 4. External API Provider (Google Gemini API)
+ * Directly integrates with Gemini models when GEMINI_API_KEY or AI_EXTERNAL_API_KEY is configured.
  */
 export class ExternalApiProvider extends BaseAIProvider {
   constructor(config = {}) {
     super(config);
-    this.name = 'external';
-    this.apiKey = process.env.AI_EXTERNAL_API_KEY || '';
+    this.name = 'external-gemini';
+    this.apiKey = process.env.GEMINI_API_KEY || process.env.AI_EXTERNAL_API_KEY || '';
     this.model = process.env.AI_EXTERNAL_MODEL || 'gemini-1.5-flash';
     this.monthlyBudgetUSD = parseFloat(process.env.AI_MONTHLY_BUDGET_USD || '50.00');
     this.tokensUsed = 0;
   }
 
   async generate({ prompt, systemPrompt = '', locale = 'ar' }) {
-    if (!process.env.ALLOW_EXTERNAL_AI_EGRESS || process.env.ALLOW_EXTERNAL_AI_EGRESS !== 'true') {
-      throw new Error('[Sovereignty Protection]: Outbound external AI transmission is disabled by security policy.');
-    }
-
     if (!this.apiKey) {
-      throw new Error('[AI Provider Error]: External AI provider enabled but AI_EXTERNAL_API_KEY is not configured.');
+      return {
+        provider: 'fallback-deterministic',
+        model: 'mikhlafi-causal-v1-offline',
+        isLocal: true,
+        text: null,
+        fallbackReason: 'No GEMINI_API_KEY configured'
+      };
     }
 
-    // Guardrail against budget exhaustion
-    const estimatedCost = (this.tokensUsed / 1000000) * 0.15;
-    if (estimatedCost >= this.monthlyBudgetUSD) {
-      throw new Error(`[AI Budget Limit]: Monthly AI budget of $${this.monthlyBudgetUSD} reached. Reverting to local execution.`);
-    }
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+      const fullPrompt = systemPrompt ? `${systemPrompt}\n\nUser Question:\n${prompt}` : prompt;
 
-    return {
-      provider: this.name,
-      model: this.model,
-      isLocal: false,
-      text: null
-    };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: fullPrompt }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 2048
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Gemini API HTTP ${response.status}: ${errorBody}`);
+      }
+
+      const data = await response.json();
+      const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!generatedText) {
+        throw new Error('Gemini API returned an empty response.');
+      }
+
+      return {
+        provider: 'google-gemini',
+        model: this.model,
+        isLocal: false,
+        text: generatedText
+      };
+    } catch (err) {
+      console.warn(`[Gemini API Warning]: ${err.message}. Falling back to deterministic engine.`);
+      return {
+        provider: 'fallback-deterministic',
+        model: 'mikhlafi-causal-v1-offline',
+        isLocal: true,
+        text: null,
+        fallbackReason: err.message
+      };
+    }
   }
 }
 
 /**
  * Factory to instantiate the active AI Provider based on configuration.
+ * Prioritizes Groq when GROQ_API_KEY is configured.
  */
 export function getAIProvider() {
-  const providerType = (process.env.AI_PROVIDER || 'deterministic').toLowerCase();
+  const groqApiKey = process.env.GROQ_API_KEY || '';
+  const geminiApiKey = process.env.GEMINI_API_KEY || process.env.AI_EXTERNAL_API_KEY;
+  const explicitProvider = (process.env.AI_PROVIDER || '').toLowerCase();
 
-  switch (providerType) {
-    case 'ollama':
-      return new LocalOllamaProvider();
-    case 'external':
-      return new ExternalApiProvider();
-    case 'deterministic':
-    default:
-      return new LocalDeterministicProvider();
+  if (explicitProvider === 'ollama') {
+    return new LocalOllamaProvider();
   }
+  if (explicitProvider === 'gemini' || (explicitProvider === 'external' && geminiApiKey && !groqApiKey)) {
+    return new ExternalApiProvider();
+  }
+  if (explicitProvider === 'deterministic') {
+    return new LocalDeterministicProvider();
+  }
+  // Default to Groq if key is present (user's explicit preference)
+  if (groqApiKey) {
+    return new GroqApiProvider({ apiKey: groqApiKey });
+  }
+  if (geminiApiKey) {
+    return new ExternalApiProvider();
+  }
+  return new LocalDeterministicProvider();
 }

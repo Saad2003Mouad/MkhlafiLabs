@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../types';
 import { api } from '../api/client';
 import { IconCheckCircle, IconShield, IconRefreshCw, IconAlertTriangle } from './Icons';
+import { FinancialCharts } from './financial/FinancialCharts';
 
 interface IntelligenceDetailProps {
   locale: LocaleMode;
@@ -30,9 +31,10 @@ interface FinancialAnomaly {
 export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, onBack }) => {
   const isAr = locale === 'ar';
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'causes_solutions' | 'anomalies' | 'reconciliation' | 'audit'>('causes_solutions');
+  const [activeTab, setActiveTab] = useState<'charts' | 'causes_solutions' | 'anomalies' | 'reconciliation' | 'audit'>('charts');
 
   const [anomalies, setAnomalies] = useState<FinancialAnomaly[]>([]);
+  const [analytics, setAnalytics] = useState<any>(null);
   const [activeLeakageSAR, setActiveLeakageSAR] = useState<number>(0);
   const [protectedAmountSAR, setProtectedAmountSAR] = useState<number>(0);
   const [highSeverityCount, setHighSeverityCount] = useState<number>(0);
@@ -42,17 +44,22 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [processingCaseId, setProcessingCaseId] = useState<string | null>(null);
 
-  const fetchAnomalies = useCallback(async () => {
+  const fetchAnomaliesAndAnalytics = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await api.getFinancialLeaks({
-        severity: selectedSeverity !== 'all' ? selectedSeverity : undefined
-      });
-      setAnomalies(res.anomalies || []);
-      setActiveLeakageSAR(res.activeLeakageSAR || 0);
-      setProtectedAmountSAR(res.protectedAmountSAR || 0);
-      setHighSeverityCount(res.highSeverityCount || 0);
+      const [leaksRes, analyticsRes] = await Promise.all([
+        api.getFinancialLeaks({
+          severity: selectedSeverity !== 'all' ? selectedSeverity : undefined
+        }),
+        api.getFinancialAnalytics()
+      ]);
+
+      setAnomalies(leaksRes.anomalies || []);
+      setActiveLeakageSAR(leaksRes.activeLeakageSAR || 0);
+      setProtectedAmountSAR(leaksRes.protectedAmountSAR || 0);
+      setHighSeverityCount(leaksRes.highSeverityCount || 0);
+      setAnalytics(analyticsRes);
     } catch (err: any) {
       console.error('[FinancialLeaks fetch error]:', err);
       setError(err.message || (isAr ? 'فشل تحميل بيانات التدقيق المالي.' : 'Failed to fetch financial audit data.'));
@@ -62,8 +69,8 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
   }, [selectedSeverity, isAr]);
 
   useEffect(() => {
-    fetchAnomalies();
-  }, [fetchAnomalies]);
+    fetchAnomaliesAndAnalytics();
+  }, [fetchAnomaliesAndAnalytics]);
 
   const handleResolve = async (anomalyId: string, action: 'FREEZE' | 'LEGITIMATE') => {
     setProcessingCaseId(anomalyId);
@@ -74,7 +81,7 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
         ? (isAr ? 'تم تجميد أمر الصرف وإحالة الفاتورة للتدقيق بنجاح.' : 'Disbursement frozen and invoice locked successfully.')
         : (isAr ? 'تم اعتماد المطالبة كمشروعة واستبعاد الشبهة.' : 'Case marked as legitimate and dismissed.');
       setActionSuccess(actionMsg);
-      await fetchAnomalies();
+      await fetchAnomaliesAndAnalytics();
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
       alert(err.message || (isAr ? 'تعذر تنفيذ الإجراء.' : 'Failed to execute action.'));
@@ -112,7 +119,7 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={fetchAnomalies} className="ctrl-btn" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title={isAr ? 'تحديث البيانات' : 'Refresh Data'}>
+            <button onClick={fetchAnomaliesAndAnalytics} className="ctrl-btn" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title={isAr ? 'تحديث البيانات' : 'Refresh Data'}>
               <IconRefreshCw size={14} />
               <span>{isAr ? 'تحديث حي' : 'Live Sync'}</span>
             </button>
@@ -177,7 +184,14 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
       )}
 
       {/* Domain Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
+      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px', overflowX: 'auto' }}>
+        <button
+          onClick={() => setActiveTab('charts')}
+          className={`ctrl-btn ${activeTab === 'charts' ? 'active' : ''}`}
+          style={{ fontWeight: activeTab === 'charts' ? 700 : 500 }}
+        >
+          {isAr ? '📈 التحليلات والرسوم البيانية' : '📈 Financial Charts & Trends'}
+        </button>
         <button
           onClick={() => setActiveTab('causes_solutions')}
           className={`ctrl-btn ${activeTab === 'causes_solutions' ? 'active' : ''}`}
@@ -205,185 +219,169 @@ export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, 
         </button>
       </div>
 
+      {/* TAB 0: FINANCIAL CHARTS & ANALYTICS */}
+      {activeTab === 'charts' && (
+        <FinancialCharts locale={locale} analytics={analytics} isLoading={isLoading} />
+      )}
+
       {/* TAB 1: CAUSAL ANALYSIS, EXPLANATIONS & SOLUTIONS */}
       {activeTab === 'causes_solutions' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '16px' }}>
-          {/* Executive Overview Banner */}
-          <div className="content-panel" style={{ border: '1px solid var(--accent-base)', background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)' }}>
-            <div className="panel-header">
-              <div>
-                <span className="severity-tag optimal" style={{ textTransform: 'uppercase', marginBottom: '6px', display: 'inline-block' }}>
-                  {isAr ? 'تقرير تحليلي تنفيذي' : 'EXECUTIVE CAUSAL INTELLIGENCE'}
-                </span>
-                <h2 className="panel-title" style={{ fontSize: '18px' }}>
-                  {isAr ? 'تفسير انخفاض الخسائر المالية والتسربات التشغيلية لعام 2026' : 'Explanation of Operational Loss Reduction for Fiscal 2026'}
-                </h2>
-              </div>
-              <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{isAr ? 'معدل التراجع الإجمالي' : 'Total Reduction Rate'}</span>
-                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>
-                  -38.4% YoY
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)', margin: '14px 0' }}>
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'خسائر العام السابق (2025)' : 'Prior Year Baseline Loss'}</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--status-danger)' }}>
-                  1,420,000 SAR
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'خسائر العام الحالي المرصودة (2026)' : 'Current Monitored Loss'}</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent-light)' }}>
-                  875,000 SAR
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'إجمالي السيولة المحمية والموفرة' : 'Protected Capital Savings'}</div>
-                <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--status-success)' }}>
-                  545,000 SAR
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'مستوى الثقة الإحصائية' : 'Confidence Level'}</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                  99.2% (Validated)
-                </div>
-              </div>
-            </div>
-
-            <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
+        anomalies.length === 0 ? (
+          <div className="content-panel" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '16px' }}>
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>📊</span>
+            <h3 style={{ fontSize: '16px', color: 'var(--text-primary)', marginBottom: '8px' }}>
+              {isAr ? 'لا تتوفر انحرافات مسجلة لتوليد التحليل السببي' : 'No Forensic Variance for Causal Analysis'}
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '580px', margin: '0 auto', lineHeight: '1.6' }}>
               {isAr
-                ? 'استناداً إلى تحليل دفاتر الأستاذ العام (General Ledger) وتتبع مسار تدفق الأوامر الشرائية عبر خوارزميات التدقيق الجنائي: تم تأكيد تراجع معدلات التسرب المالي بفضل التدخلات الاستباقية في بوابات الصرف، وفيما يلي الأسباب الجذرية الدقيقة والحلول التنفيذية لضمان استدامة هذه النتائج.'
-                : 'Based on General Ledger forensic tracking and automated 3-way reconciliation: operational financial loss was significantly curtailed due to automated pre-disbursement controls. Below are the empirical root causes and prescriptive solutions.'}
+                ? 'يقوم المحرك السببي بتحليل الفوارق وتحديد الأسباب الدقيقة للتسرب المالي والحلول التنفيذية فور رصد انحرافات في دفتر الأستاذ أو عند استيراد فواتير جديدة.'
+                : 'Causal intelligence diagnoses root causes and prescriptive controls dynamically once transaction variances or ledger anomalies are detected.'}
             </p>
           </div>
-
-          {/* Section: Root Causes Breakdown */}
-          <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
-              {isAr ? '🔍 الأسباب الجذرية وراء تراجع الخسائر (The Root Causes)' : '🔍 Identified Root-Cause Drivers'}
-            </h3>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-              <div className="content-panel" style={{ borderLeft: isAr ? 'none' : '4px solid var(--status-success)', borderRight: isAr ? '4px solid var(--status-success)' : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--status-success)' }}>{isAr ? 'السبب 01: كشف الصرف المكرر' : 'Cause 01: Duplicate Payout Interception'}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700, color: 'var(--status-success)' }}>+280,000 SAR وفر</span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '16px' }}>
+            {/* Executive Overview Banner */}
+            <div className="content-panel" style={{ border: '1px solid var(--accent-base)', background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)' }}>
+              <div className="panel-header">
+                <div>
+                  <span className="severity-tag optimal" style={{ textTransform: 'uppercase', marginBottom: '6px', display: 'inline-block' }}>
+                    {isAr ? 'تقرير تحليلي تنفيذي' : 'EXECUTIVE CAUSAL INTELLIGENCE'}
+                  </span>
+                  <h2 className="panel-title" style={{ fontSize: '18px' }}>
+                    {isAr ? 'تفسير مؤشرات التسرب المالي والأسباب الجذرية المرصودة' : 'Explanation of Financial Leakage & Root-Cause Drivers'}
+                  </h2>
                 </div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700 }}>
-                  {isAr ? 'تفعيل المطابقة الثلاثية الآلية (3-Way Matching)' : 'Automated 3-Way Triangulation'}
-                </h4>
-                <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
-                  {isAr
-                    ? 'رصدت خوارزميات التدقيق 18 محاولة تكرار لفواتير الموردين ذات بوالص الشحن المتطابقة قبل إرسال الحوالات للبنك، مما أغلق ثغرة الصرف غير المبرر.'
-                    : 'Levenshtein similarity checks flagged 18 duplicate vendor invoices sharing identical bills of lading before wire authorization, preventing unrecoverable outflows.'}
-                </p>
+                <div style={{ textAlign: isAr ? 'left' : 'right' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{isAr ? 'الحالات المرصودة' : 'Active Cases'}</span>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--status-danger)', fontFamily: 'var(--font-mono)' }}>
+                    {anomalies.length} {isAr ? 'حالات' : 'Cases'}
+                  </div>
+                </div>
               </div>
 
-              <div className="content-panel" style={{ borderLeft: isAr ? 'none' : '4px solid var(--accent-light)', borderRight: isAr ? '4px solid var(--accent-light)' : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-light)' }}>{isAr ? 'السبب 02: كبح تضخم الموردين' : 'Cause 02: Vendor Price Creep Containment'}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700, color: 'var(--accent-light)' }}>+145,000 SAR وفر</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)', margin: '14px 0' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'إجمالي التسرب المرصود' : 'Active Flagged Leakage'}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--status-danger)' }}>
+                    {activeLeakageSAR.toLocaleString()} SAR
+                  </div>
                 </div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700 }}>
-                  {isAr ? 'مقارنة فواتير التوريد بأسعار العقود الأساسية' : 'Baseline Contract Price Benchmarking'}
-                </h4>
-                <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
-                  {isAr
-                    ? 'رصد تفاوت سعري تدريجي غير مصرح به بنسبة 14.2% لدى موردي المواد الخام، وإلزام الموردين بتعديل الفواتير وفق التعاقد الرسمي.'
-                    : 'Systematic comparison between PO prices and framework contract baselines halted unauthorized 14.2% price creep among critical raw material suppliers.'}
-                </p>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'السيولة المحمية بالتجميد' : 'Protected Capital'}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--status-success)' }}>
+                    {protectedAmountSAR.toLocaleString()} SAR
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الحالات الحرجة' : 'Critical / High Cases'}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent-light)' }}>
+                    {highSeverityCount}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'دقة الخوارزميات' : 'Forensic Confidence'}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                    {anomalies.length > 0 ? (anomalies.reduce((acc, a) => acc + (a.confidence_pct || 90), 0) / anomalies.length).toFixed(1) : '95.0'}%
+                  </div>
+                </div>
               </div>
 
-              <div className="content-panel" style={{ borderLeft: isAr ? 'none' : '4px solid #f59e0b', borderRight: isAr ? '4px solid #f59e0b' : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#f59e0b' }}>{isAr ? 'السبب 03: تدقيق مطالبات المقاولين' : 'Cause 03: Construction Claims Audit'}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700, color: '#f59e0b' }}>+120,000 SAR وفر</span>
+              <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
+                {isAr
+                  ? 'استناداً إلى فحص دفاتر الأستاذ العام وتطبيق قواعد التدقيق الحسابي والمطابقة الثلاثية: تم تحديد الأسباب الجذرية الدقيقة لكل حالة تسرب مع التوصيات التنفيذية للحد من الأثر المالي وحماية السيولة.'
+                  : 'Based on General Ledger forensic audits and 3-way matching rules: empirical root causes and prescriptive solutions are mapped below for immediate executive action.'}
+              </p>
+            </div>
+
+            {/* Section: Root Causes Breakdown */}
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
+                {isAr ? '🔍 الأسباب الجذرية المرصودة من واقع السجلات (Root Causes)' : '🔍 Identified Root-Cause Drivers'}
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+                {anomalies.slice(0, 3).map((an, idx) => (
+                  <div
+                    key={an.id}
+                    className="content-panel"
+                    style={{
+                      borderLeft: isAr ? 'none' : '4px solid var(--accent-light)',
+                      borderRight: isAr ? '4px solid var(--accent-light)' : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-light)' }}>
+                        {isAr ? `السبب 0${idx + 1}: ${an.rule_code}` : `Cause 0${idx + 1}: ${an.rule_code}`}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700, color: 'var(--status-danger)' }}>
+                        {(Number(an.flagged_amount) || 0).toLocaleString()} {an.currency || 'SAR'}
+                      </span>
+                    </div>
+                    <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700 }}>
+                      {an.target_vendor}
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
+                      {isAr ? an.narrative_ar : an.narrative_en}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Section: Prescriptive Solutions Matrix */}
+            <div>
+              <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
+                {isAr ? '🛡️ الحلول والتوصيات التنفيذية للتحكم بالسيولة (Prescriptive Solutions)' : '🛡️ Recommended Executive Solutions & Controls'}
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 300px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span className="severity-tag optimal" style={{ fontSize: '10px' }}>{isAr ? 'حل فوري معتمد' : 'ACTIVE GATE'}</span>
+                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {isAr ? '1. بوابة الاعتماد المسبقة (Pre-Payment Matching Gate)' : '1. Mandatory Pre-Disbursement Matching Gate'}
+                      </strong>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                      {isAr
+                        ? 'منع إعداد أو تمرير أي أمر صرف في النظام البنكي إلا بعد تحقق النظام آلياً من وجود سند استلام بضاعة (GRN) معتمد وتطابق رقم أمر الشراء (PO).'
+                        : 'Block issuance of payment vouchers until automated verification confirms matched goods receipt (GRN) and signed PO baseline.'}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: isAr ? 'left' : 'right' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الأثر المالي المباشر' : 'Immediate Value'}</span>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>
+                      {protectedAmountSAR > 0 ? `${protectedAmountSAR.toLocaleString()} SAR محمي` : (isAr ? 'تجميد فوري للصرف المشبوه' : 'Instant Freeze')}
+                    </div>
+                  </div>
                 </div>
-                <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700 }}>
-                  {isAr ? 'إسقاط أوامر التغيير غير المعتمدة بالمشاريع' : 'Unapproved Change Orders Dismissal'}
-                </h4>
-                <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
-                  {isAr
-                    ? 'مطابقة نسب الإنجاز الميداني الفعلي مع المستخلصات المالية في مشروعي المستودعات والبرج الإداري واستبعاد المطالبات غير المؤكدة.'
-                    : 'Rigorous auditing of contractor progress claims against real site milestones eliminated inflated variance claims on warehouse and HQ projects.'}
-                </p>
+
+                <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 300px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span className="severity-tag optimal" style={{ fontSize: '10px' }}>{isAr ? 'حوكمة المشتريات' : 'PROCUREMENT GOVERNANCE'}</span>
+                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {isAr ? '2. سقف الصلاحيات وقفل تفتيت أوامر الشراء (Anti-Split Thresholds)' : '2. Anti-Split Purchase Order Locking'}
+                      </strong>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                      {isAr
+                        ? 'حظر تقسيم الفواتير للتهرب من موافقة المدير المالي، مع فحص مجدول لموردي المواد الخام والخدمات اللوجستية.'
+                        : 'Implement heuristic detection against splitting procurement invoices to evade executive delegation limits.'}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: isAr ? 'left' : 'right' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'نوع الرقابة' : 'Control Type'}</span>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-light)', fontFamily: 'var(--font-mono)' }}>
+                      {isAr ? 'رقابة وقائية آلية' : 'Automated Preventive'}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-
-          {/* Section: Prescriptive Solutions Matrix */}
-          <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
-              {isAr ? '🛡️ الحلول والتوصيات التنفيذية لضمان استدامة الوفر (Prescriptive Solutions)' : '🛡️ Recommended Executive Solutions & Controls'}
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 300px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="severity-tag optimal" style={{ fontSize: '10px' }}>{isAr ? 'حل فوري معتمد' : 'ACTIVE GATE'}</span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                      {isAr ? '1. بوابة الاعتماد المسبقة (Pre-Payment Matching Gate)' : '1. Mandatory Pre-Disbursement Matching Gate'}
-                    </strong>
-                  </div>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                    {isAr
-                      ? 'منع إعداد أو تمرير أي أمر صرف في النظام البنكي إلا بعد تحقق النظام آلياً من وجود سند استلام بضاعة (GRN) معتمد وتطابق رقم أمر الشراء (PO).'
-                      : 'Block issuance of payment vouchers until automated verification confirms matched goods receipt (GRN) and signed PO baseline.'}
-                  </p>
-                </div>
-                <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الأثر المالي المتوقع' : 'Projected Value'}</span>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>حماية 300,000+ ر.س / سنوياً</div>
-                </div>
-              </div>
-
-              <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 300px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="severity-tag optimal" style={{ fontSize: '10px' }}>{isAr ? 'حوكمة المشتريات' : 'PROCUREMENT GOVERNANCE'}</span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                      {isAr ? '2. سقف الصلاحيات وقفل تفتيت أوامر الشراء (Anti-Split Thresholds)' : '2. Anti-Split Purchase Order Locking'}
-                    </strong>
-                  </div>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                    {isAr
-                      ? 'حظر تقسيم الفواتير الكبيرة إلى مبالغ تقل عن 50 ألف ريال للتهرب من موافقة المدير المالي، مع فحص مجدول لموردين محددين.'
-                      : 'Implement heuristic detection against splitting procurement invoices into sub-50k tranches to evade executive delegation limits.'}
-                  </p>
-                </div>
-                <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الأثر المالي المتوقع' : 'Projected Value'}</span>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>حماية 150,000+ ر.س / سنوياً</div>
-                </div>
-              </div>
-
-              <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 300px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span className="severity-tag low" style={{ fontSize: '10px' }}>{isAr ? 'حوكمة المشاريع' : 'PROJECT CONTROLS'}</span>
-                    <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                      {isAr ? '3. ربط مستخلصات المقاولين بمؤشر الأداء الفعلي (CPI Rule)' : '3. Earned Value CPI Disbursement Gate'}
-                    </strong>
-                  </div>
-                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                    {isAr
-                      ? 'تجميد صرف أي مستخلصات إضافية للمشاريع التي ينخفض مؤشر كفاءة التكلفة فيها (CPI) عن 0.90 لحين تقديم خطة تصحيحية معتمدة.'
-                      : 'Halt non-essential drawdowns on any capital project whose Cost Performance Index (CPI) drops below 0.90 until remedial recovery plans are approved.'}
-                  </p>
-                </div>
-                <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الأثر المالي المتوقع' : 'Projected Value'}</span>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>حماية 220,000+ ر.س / سنوياً</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        )
       )}
 
       {/* TAB 2: ANOMALIES LIST */}

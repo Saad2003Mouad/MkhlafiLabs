@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode, ThemeMode } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../api/client';
 import {
   IconArrowRight,
   IconSun,
@@ -43,8 +44,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const getReturnUrl = (): string => {
     const params = new URLSearchParams(window.location.search);
     const returnUrl = params.get('returnUrl');
-    // Ensure returnUrl is a safe internal /app route to prevent open redirect vulnerabilities
-    if (returnUrl && returnUrl.startsWith('/app') && !returnUrl.startsWith('//')) {
+    // Ensure returnUrl is a safe internal /app or /admin route to prevent open redirect vulnerabilities
+    if (returnUrl && (returnUrl.startsWith('/app') || returnUrl.startsWith('/admin')) && !returnUrl.startsWith('//')) {
       return returnUrl;
     }
     return '/app';
@@ -52,10 +53,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
   const returnUrl = getReturnUrl();
 
-  // If already authenticated, redirect immediately
+  // If already authenticated, redirect strictly according to role
   useEffect(() => {
     if (isAuthenticated && user) {
-      onLoginSuccess(returnUrl);
+      if (user.isPlatformAdmin) {
+        onLoginSuccess('/admin');
+      } else {
+        onLoginSuccess(returnUrl.startsWith('/app') ? returnUrl : '/app');
+      }
     }
   }, [isAuthenticated, user]);
 
@@ -66,7 +71,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
     try {
       await login(email, password);
-      onLoginSuccess(returnUrl);
+      const me = await api.getMe().catch(() => null);
+      if (me?.user?.isPlatformAdmin) {
+        onLoginSuccess('/admin');
+      } else {
+        onLoginSuccess(returnUrl.startsWith('/app') ? returnUrl : '/app');
+      }
     } catch (err: any) {
       // Avoid revealing user existence; present a clear professional message
       setErrorMessage(
@@ -79,8 +89,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
-  const handleQuickDemoFill = () => {
+  const handleOwnerFill = () => {
     setEmail('saad@mikhlafi-labs.com');
+    setPassword('MikhlafiSecure2026!');
+  };
+
+  const handleClientFill = () => {
+    setEmail('client@mikhlafi-holding.com');
     setPassword('MikhlafiSecure2026!');
   };
 
@@ -305,23 +320,64 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </button>
           </form>
 
-          {/* Quick Demo Credentials Autofill */}
-          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+          {/* Quick Credentials Autofill */}
+          <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
               type="button"
-              onClick={handleQuickDemoFill}
+              onClick={handleOwnerFill}
               style={{
-                background: 'transparent',
-                border: '1px dashed var(--border-subtle)',
+                background: 'rgba(239, 68, 68, 0.09)',
+                border: '1px solid rgba(239, 68, 68, 0.45)',
                 borderRadius: 'var(--radius-sm)',
-                padding: '0.5rem 0.8rem',
-                color: 'var(--text-secondary)',
-                fontSize: '0.8rem',
+                padding: '0.75rem 0.9rem',
+                color: '#f87171',
+                fontSize: '0.82rem',
                 cursor: 'pointer',
-                width: '100%'
+                width: '100%',
+                fontWeight: 700,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '2px',
+                textAlign: 'start'
               }}
             >
-              ⚡ {isAr ? 'تعبئة بيانات حساب المشرف التنفيذي' : 'Auto-fill Executive Demo Account'}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🛡️</span>
+                <span>{isAr ? 'حساب مالك ومزود المنصة (Platform Owner)' : 'Platform Owner / Vendor Account'}</span>
+              </div>
+              <span style={{ fontSize: '10px', color: '#fca5a5', fontWeight: 400 }}>
+                {isAr ? 'البريد: saad@mikhlafi-labs.com · يفتح غرفة العمليات (/admin) حصرياً دون بيانات العملاء' : 'Email: saad@mikhlafi-labs.com · Opens /admin exclusively without client data'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClientFill}
+              style={{
+                background: 'rgba(56, 189, 248, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.35)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '0.75rem 0.9rem',
+                color: '#38bdf8',
+                fontSize: '0.82rem',
+                cursor: 'pointer',
+                width: '100%',
+                fontWeight: 700,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '2px',
+                textAlign: 'start'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🏛️</span>
+                <span>{isAr ? 'حساب عميل المنصة (مجموعة المخلافي القابضة)' : 'Client Account (Mikhlafi Holding Group)'}</span>
+              </div>
+              <span style={{ fontSize: '10px', color: '#7dd3fc', fontWeight: 400 }}>
+                {isAr ? 'البريد: client@mikhlafi-holding.com · يفتح مساحة عمل المنشأة الخاصة (/app)' : 'Email: client@mikhlafi-holding.com · Opens client workspace (/app)'}
+              </span>
             </button>
           </div>
 

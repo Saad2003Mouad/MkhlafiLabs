@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { IconSettings, IconCheck } from '../Icons';
+import { IconSettings, IconCheck, IconAlertTriangle } from '../Icons';
 import { api } from '../../api/client';
 
 interface SettingsViewProps {
@@ -14,10 +14,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
   const [retention, setRetention] = useState('7years');
   const [classification, setClassification] = useState('RESTRICTED');
   const [encryptionStandard, setEncryptionStandard] = useState('AES-256-GCM');
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    setIsLoading(true);
     api.getSettings()
       .then((data) => {
         if (data) {
@@ -28,26 +30,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
           if (data.encryption_standard) setEncryptionStandard(data.encryption_standard);
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch((err) => {
+        setSaveNotice({
+          type: 'error',
+          message: err.message || (isAr ? 'تعذر جلب إعدادات مساحة العمل' : 'Failed to load workspace settings')
+        });
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [isAr]);
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveNotice(null);
     try {
-      const res = await api.updateSettings({
+      const res = (await api.updateSettings({
         currency,
         calendar,
         retention,
         dataClassification: classification
-      });
+      })) as any;
       if (res.success) {
-        setSaveNotice(isAr ? 'تم حفظ تفضيلات مساحة العمل وتحديث إعدادات التشفير والسيادة بنجاح.' : 'Workspace configuration saved successfully.');
+        setSaveNotice({
+          type: 'success',
+          message: isAr
+            ? 'تم حفظ تفضيلات مساحة العمل (العملة المرجعية، التقويم، وسياسة حفظ السجلات) بنجاح.'
+            : 'Workspace preferences (base currency, calendar, retention policy) saved successfully.'
+        });
       }
     } catch (err: any) {
-      setSaveNotice(err.message || 'Save failed.');
+      setSaveNotice({
+        type: 'error',
+        message: err.message || (isAr ? 'فشل حفظ الإعدادات.' : 'Failed to save settings.')
+      });
     } finally {
       setIsSaving(false);
-      setTimeout(() => setSaveNotice(null), 3500);
+      setTimeout(() => setSaveNotice(null), 4500);
     }
   };
 
@@ -69,14 +88,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
           </h1>
           <p className="page-subtitle">
             {isAr
-              ? 'تخصيص العملة المرجعية، تقويم التقارير، مدة حفظ سجلات التدقيق الجنائي، ومفاتيح التشفير.'
-              : 'Configure base accounting currency, reporting calendars, immutable audit retention windows, and cryptographic keys.'}
+              ? 'تخصيص العملة المرجعية، تقويم التقارير، مدة حفظ سجلات التدقيق الجنائي، ومراجعة خصائص التشفير المدارة بنيوياً.'
+              : 'Configure base accounting currency, reporting calendars, immutable audit retention windows, and review infrastructure encryption.'}
           </p>
         </div>
 
         <button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || isLoading}
           className="btn-primary"
           style={{ fontSize: '13px', padding: '10px 18px' }}
         >
@@ -86,18 +105,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
       </div>
 
       {saveNotice && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{saveNotice}</span>
+        <div className={`alert-feedback-banner ${saveNotice.type === 'error' ? 'error' : 'success'}`}>
+          {saveNotice.type === 'error' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
+          <span>{saveNotice.message}</span>
         </div>
       )}
 
       {/* Settings Form Grid */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px', maxWidth: '800px' }}>
+        {/* 1. Base Currency */}
         <div className="decision-card">
-          <h3 style={{ fontSize: '14px', margin: '0 0 12px' }}>
-            {isAr ? 'العملة المرجعية للمحاسبة والتقارير' : 'Base Accounting Currency'}
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', margin: 0 }}>
+              {isAr ? 'العملة المرجعية للمحاسبة والتقارير' : 'Base Accounting Currency'}
+            </h3>
+            <span className="category-pill" style={{ fontSize: '11px' }}>
+              {isAr ? 'قابل للتخصيص' : 'Configurable'}
+            </span>
+          </div>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
             {isAr
               ? 'تُعاير كافة الانحرافات المالية والأسعار المسجلة في ERP إلى هذه العملة تلقائياً.'
@@ -124,10 +149,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
           </select>
         </div>
 
+        {/* 2. Reporting Calendar */}
         <div className="decision-card">
-          <h3 style={{ fontSize: '14px', margin: '0 0 12px' }}>
-            {isAr ? 'تقويم عرض الفترات والتقارير' : 'Reporting Calendar'}
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', margin: 0 }}>
+              {isAr ? 'تقويم عرض الفترات والتقارير' : 'Reporting Calendar'}
+            </h3>
+            <span className="category-pill" style={{ fontSize: '11px' }}>
+              {isAr ? 'قابل للتخصيص' : 'Configurable'}
+            </span>
+          </div>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
             {isAr
               ? 'تحديد نمط التاريخ الافتراضي في لوحات القيادة والتقارير التنفيذية.'
@@ -152,13 +183,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
           </select>
         </div>
 
+        {/* 3. Audit Log Retention */}
         <div className="decision-card">
-          <h3 style={{ fontSize: '14px', margin: '0 0 12px' }}>
-            {isAr ? 'مدة حفظ السجلات والتدقيق الجنائي المحاسبي' : 'Forensic Audit Log Retention'}
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', margin: 0 }}>
+              {isAr ? 'مدة حفظ السجلات والتدقيق الجنائي المحاسبي' : 'Forensic Audit Log Retention Policy'}
+            </h3>
+            <span className="category-pill" style={{ fontSize: '11px' }}>
+              {isAr ? 'سياسة نظامية' : 'Statutory Policy'}
+            </span>
+          </div>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
             {isAr
-              ? 'فترة الاحتفاظ غير القابلة للحذف أو التعديل تماشياً مع متطلبات هيئة الزكاة والضريبة والجمارك.'
+              ? 'فترة الاحتفاظ غير القابلة للحذف أو التعديل تماشياً مع متطلبات هيئة الزكاة والضريبة والجمارك (ZATCA).'
               : 'Immutable record retention window adhering to ZATCA and statutory tax compliance.'}
           </p>
           <select
@@ -181,21 +218,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ locale }) => {
           </select>
         </div>
 
+        {/* 4. Cryptographic Security & Sovereignty (Read-Only Infrastructure Property) */}
         <div className="decision-card">
-          <h3 style={{ fontSize: '14px', margin: '0 0 12px' }}>
-            {isAr ? 'بروتوكول التشفير والسيادة' : 'Cryptographic Security & Sovereignty Standard'}
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '14px', margin: 0 }}>
+              {isAr ? 'بروتوكول التشفير والسيادة' : 'Cryptographic Security & Sovereignty Standard'}
+            </h3>
+            <span className="severity-tag optimal" style={{ fontSize: '11px' }}>
+              {isAr ? 'مدار بنيوياً (قراءة فقط)' : 'Infrastructure Enforced (Read-Only)'}
+            </span>
+          </div>
           <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
             {isAr
-              ? 'تشفير كافة السجلات والاتصالات في السكون وأثناء النقل.'
-              : 'Cryptographic encryption standard enforced for all ledger records at rest and in transit.'}
+              ? 'خاصية أمان بنيوية تفرض تشفير كافة السجلات في السكون (At Rest) عبر AES-256-GCM وأثناء النقل عبر TLS 1.3. تدار المفاتيح عبر بنية KMS السحابية المعزولة ولا تخضع للتعديل البرمجي عبر الواجهة.'
+              : 'Infrastructure security property: All records are strictly encrypted at rest via AES-256-GCM and in transit via TLS 1.3. Cryptographic keys are managed via isolated KMS infrastructure and cannot be overridden from the client.'}
           </p>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <span className="severity-tag optimal" style={{ fontSize: '12px', padding: '6px 12px' }}>
-              {encryptionStandard}
+              {encryptionStandard} / TLS 1.3
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              {isAr ? 'مفاتيح مدارة محلياً بعزل كامل' : 'Customer-Isolated Sovereign Keys'}
+              {isAr ? 'مفاتيح سيادية معزولة لكل مستأجر' : 'Hardware-Secured Sovereign Tenant Keys'}
             </span>
           </div>
         </div>

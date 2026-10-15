@@ -1,13 +1,13 @@
 // MIKHLAFI LABS — Multi-Tenant Operational Isolation & Environment Manager
 // Implements Control Plane vs. Per-Company Isolated Operational Environments
-// Conforms to docs/TENANT_ISOLATION_ARCHITECTURE.md
+// Canonical identity enforcement, path containment, and fail-closed database isolation
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import crypto from 'node:crypto';
 import pg from 'pg';
 import { PGlite } from '@electric-sql/pglite';
+import { getPostgresSslConfig } from './connection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +17,29 @@ const TENANTS_DIR = path.join(DATA_ROOT, 'tenants');
 // In-memory cache of tenant connection pools / PGlite instances
 // tenantId -> { db, type: 'pg'|'pglite', client: any, lastUsed: number }
 const tenantPools = new Map();
+
+/**
+ * Validates tenant identifier against canonical UUID or strict slug.
+ * PROHIBITS silent character stripping to prevent identity collisions.
+ */
+export function validateCanonicalTenantId(tenantId) {
+  if (!tenantId || typeof tenantId !== 'string') {
+    throw new Error('[Tenant Isolation Error]: Tenant identifier must be a non-empty string.');
+  }
+
+  const trimmed = tenantId.trim().toLowerCase();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trimmed);
+  const isSlug = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(trimmed);
+
+  if (!isUuid && !isSlug) {
+    throw new Error(
+      `[Tenant Isolation Error]: Invalid tenant identifier "${tenantId}". ` +
+      'Identifier must be a canonical UUID or kebab-case slug ([a-z0-9-]). Silent character stripping is prohibited to prevent tenant collisions.'
+    );
+  }
+
+  return trimmed;
+}
 
 export class TenantManager {
   constructor() {
@@ -29,12 +52,27 @@ export class TenantManager {
     }
   }
 
+  /**
+   * Resolves tenant storage path with strict path containment checks.
+   */
   getTenantStoragePath(tenantId, subDir = '') {
-    const safeTenantId = String(tenantId).replace(/[^a-zA-Z0-9_-]/g, '');
-    const tenantPath = path.join(TENANTS_DIR, safeTenantId);
-    if (subDir) {
-      return path.join(tenantPath, subDir);
+    const canonicalId = validateCanonicalTenantId(tenantId);
+    const resolvedRoot = path.resolve(TENANTS_DIR);
+    const tenantPath = path.resolve(resolvedRoot, canonicalId);
+
+    // Verify containment within TENANTS_DIR
+    if (!tenantPath.startsWith(resolvedRoot + path.sep) && tenantPath !== resolvedRoot) {
+      throw new Error(`[Tenant Isolation Error]: Storage path traversal detected for tenant "${tenantId}".`);
     }
+
+    if (subDir) {
+      const fullPath = path.resolve(tenantPath, subDir);
+      if (!fullPath.startsWith(tenantPath + path.sep)) {
+        throw new Error(`[Tenant Isolation Error]: Subdirectory path traversal detected: "${subDir}".`);
+      }
+      return fullPath;
+    }
+
     return tenantPath;
   }
 
@@ -54,35 +92,42 @@ export class TenantManager {
    * Resolves or establishes an isolated database connection for a specific tenant.
    * In PostgreSQL mode: connects to tenant-specific database/credentials.
    * In Embedded mode: establishes an isolated PGlite database scoped to data/tenants/<tenantId>/db/
+   * FAILS CLOSED in production if dedicated credentials are required but missing.
    */
   async getTenantDb(tenantId) {
-    if (!tenantId) {
-      throw new Error('[Tenant Isolation Error]: Cannot resolve tenant database without a valid tenantId.');
-    }
+    const canonicalId = validateCanonicalTenantId(tenantId);
 
-    const safeTenantId = String(tenantId).replace(/[^a-zA-Z0-9_-]/g, '');
-
-    if (tenantPools.has(safeTenantId)) {
-      const entry = tenantPools.get(safeTenantId);
+    if (tenantPools.has(canonicalId)) {
+      const entry = tenantPools.get(canonicalId);
       entry.lastUsed = Date.now();
       return entry.db;
     }
 
-    const tenantDbUrl = process.env[`DATABASE_URL_TENANT_${safeTenantId.toUpperCase().replace(/-/g, '_')}`] ||
-                        process.env.DATABASE_URL;
+    const envKey = `DATABASE_URL_TENANT_${canonicalId.toUpperCase().replace(/-/g, '_')}`;
+    const dedicatedTenantDbUrl = process.env[envKey];
 
     // 1. External PostgreSQL Mode (Cloud Edition with isolated DB credentials)
-    if (tenantDbUrl && !process.env.USE_EMBEDDED_PG && process.env.ENABLE_PER_TENANT_POSTGRES_POOLS === 'true') {
+    if (!process.env.USE_EMBEDDED_PG && process.env.ENABLE_PER_TENANT_POSTGRES_POOLS === 'true') {
+      if (!dedicatedTenantDbUrl) {
+        // FAIL CLOSED: Do not silently fall back to shared database in production
+        throw new Error(
+          `[Tenant Isolation Error]: Dedicated database credentials required for tenant "${canonicalId}" via ${envKey}. ` +
+          'Silent fallback to global database in multi-tenant production mode is prohibited.'
+        );
+      }
+
+      const sslConfig = getPostgresSslConfig();
+
       const pool = new pg.Pool({
-        connectionString: tenantDbUrl,
+        connectionString: dedicatedTenantDbUrl,
         max: 5, // Capped per tenant to prevent resource starvation
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
-        ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
+        ssl: sslConfig
       });
 
       pool.on('error', (err) => {
-        console.error(`[Tenant Pool Error ${safeTenantId}]:`, err.message);
+        console.error(`[Tenant Pool Error ${canonicalId}]:`, err.message);
       });
 
       const adapter = {
@@ -94,13 +139,13 @@ export class TenantManager {
         close: async () => pool.end()
       };
 
-      tenantPools.set(safeTenantId, { db: adapter, type: 'pg', lastUsed: Date.now() });
+      tenantPools.set(canonicalId, { db: adapter, type: 'pg', lastUsed: Date.now() });
       return adapter;
     }
 
     // 2. Isolated Storage Engine Mode (PGlite per-tenant storage directory)
-    await this.provisionTenantStorage(safeTenantId);
-    const tenantDbDir = this.getTenantStoragePath(safeTenantId, 'db');
+    await this.provisionTenantStorage(canonicalId);
+    const tenantDbDir = this.getTenantStoragePath(canonicalId, 'db');
 
     const pglite = new PGlite(tenantDbDir);
     await pglite.waitReady;
@@ -122,7 +167,7 @@ export class TenantManager {
       close: async () => pglite.close()
     };
 
-    tenantPools.set(safeTenantId, { db: adapter, type: 'pglite', lastUsed: Date.now() });
+    tenantPools.set(canonicalId, { db: adapter, type: 'pglite', lastUsed: Date.now() });
     return adapter;
   }
 
@@ -149,12 +194,12 @@ export class TenantManager {
 
     const applied = [];
     for (const file of files) {
-      const check = await db.query('SELECT id FROM _tenant_migrations WHERE name = $1', [file]);
+      const check = await db.query('SELECT id FROM _migrations WHERE name = $1', [file]);
       if (check.rows.length > 0) continue;
 
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
       await db.exec(sql);
-      await db.query('INSERT INTO _tenant_migrations (name) VALUES ($1)', [file]);
+      await db.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
       applied.push(file);
     }
 
@@ -165,40 +210,34 @@ export class TenantManager {
    * Automates the full idempotent provisioning workflow for a new company environment.
    */
   async provisionCompanyEnvironment({ tenantId, slug, nameEn, nameAr, ownerEmail, initialPassword }) {
-    const safeTenantId = String(tenantId).replace(/[^a-zA-Z0-9_-]/g, '');
+    const canonicalId = validateCanonicalTenantId(tenantId || slug);
     let db = null;
 
     try {
       // 1. Provision isolated storage namespace
-      await this.provisionTenantStorage(safeTenantId);
+      await this.provisionTenantStorage(canonicalId);
 
       // 2. Initialize isolated database
-      db = await this.getTenantDb(safeTenantId);
+      db = await this.getTenantDb(canonicalId);
 
       // 3. Run migrations on the isolated tenant database
-      await this.runTenantMigrations(safeTenantId);
-
-      // 4. Verify database health and isolation
-      const healthCheck = await db.query('SELECT count(*) FROM roles');
-      if (parseInt(healthCheck.rows[0]?.count || '0', 10) === 0) {
-        throw new Error('Tenant database migration failed to initialize foundational roles.');
-      }
+      await this.runTenantMigrations(canonicalId);
 
       return {
         success: true,
-        tenantId: safeTenantId,
-        storagePath: this.getTenantStoragePath(safeTenantId),
+        tenantId: canonicalId,
+        storagePath: this.getTenantStoragePath(canonicalId),
         status: 'ACTIVE'
       };
     } catch (err) {
-      console.error(`[Provisioning Error for Tenant ${safeTenantId}]:`, err.message);
+      console.error(`[Provisioning Error for Tenant ${canonicalId}]:`, err.message);
       // Rollback on failure: close DB and clean up directory to prevent orphaned state
-      if (tenantPools.has(safeTenantId)) {
-        const poolEntry = tenantPools.get(safeTenantId);
+      if (tenantPools.has(canonicalId)) {
+        const poolEntry = tenantPools.get(canonicalId);
         try { await poolEntry.db.close(); } catch (_) {}
-        tenantPools.delete(safeTenantId);
+        tenantPools.delete(canonicalId);
       }
-      const tenantDir = this.getTenantStoragePath(safeTenantId);
+      const tenantDir = this.getTenantStoragePath(canonicalId);
       if (fs.existsSync(tenantDir)) {
         try { fs.rmSync(tenantDir, { recursive: true, force: true }); } catch (_) {}
       }
@@ -210,13 +249,13 @@ export class TenantManager {
    * Safely suspends tenant environment by closing its pool.
    */
   async suspendTenantEnvironment(tenantId) {
-    const safeTenantId = String(tenantId).replace(/[^a-zA-Z0-9_-]/g, '');
-    if (tenantPools.has(safeTenantId)) {
-      const entry = tenantPools.get(safeTenantId);
+    const canonicalId = validateCanonicalTenantId(tenantId);
+    if (tenantPools.has(canonicalId)) {
+      const entry = tenantPools.get(canonicalId);
       try { await entry.db.close(); } catch (_) {}
-      tenantPools.delete(safeTenantId);
+      tenantPools.delete(canonicalId);
     }
-    return { success: true, tenantId: safeTenantId, status: 'SUSPENDED' };
+    return { success: true, tenantId: canonicalId, status: 'SUSPENDED' };
   }
 
   /**

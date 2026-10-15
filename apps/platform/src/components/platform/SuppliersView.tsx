@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { MOCK_SUPPLIERS } from '../../data/mockData';
 import { IconSupplier, IconCheck, IconTrendingUp } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -12,27 +11,46 @@ interface SuppliersViewProps {
 export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
-  const [suppliers, setSuppliers] = useState<any[]>(MOCK_SUPPLIERS);
-  const [totalSpendSAR, setTotalSpendSAR] = useState<number>(5570000);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [totalSpendSAR, setTotalSpendSAR] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [notice, setNotice] = useState<string | null>(null);
   const [auditedSuppliers, setAuditedSuppliers] = useState<{ [key: string]: boolean }>({});
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
 
   const fetchSuppliers = async () => {
-    if (!isAuthenticated) return;
+    setLoading(true);
+    if (!isAuthenticated) {
+      setSuppliers([]);
+      setTotalSpendSAR(0);
+      setIsDemoDataset(false);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await api.getSuppliers();
-      if (res.suppliers && res.suppliers.length > 0) {
+      if (res && Array.isArray(res.suppliers)) {
         setSuppliers(res.suppliers);
-        setTotalSpendSAR(res.totalMonitoredContractsSAR);
+        setTotalSpendSAR(res.totalMonitoredContractsSAR || 0);
+        setIsDemoDataset(false);
         const map: { [key: string]: boolean } = {};
         res.suppliers.forEach((s: any) => {
           map[s.id] = !!s.is_audited;
         });
         setAuditedSuppliers(map);
+      } else {
+        setSuppliers([]);
+        setTotalSpendSAR(0);
+        setIsDemoDataset(false);
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      setSuppliers([]);
+      setTotalSpendSAR(0);
+      setIsDemoDataset(false);
+      setNotice(err.message || (isAr ? 'فشل تحميل بيانات الموردين' : 'Failed to fetch supplier records'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,9 +111,16 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
           </p>
         </div>
 
-        <div className="kpi-micro-badge">
-          <span className="label">{isAr ? 'حجم العقود قيد المتابعة' : 'Monitored Contracts'}</span>
-          <span className="value">{(totalSpendSAR / 1e6).toFixed(2)}M SAR</span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {isDemoDataset && (
+            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
+              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
+            </span>
+          )}
+          <div className="kpi-micro-badge">
+            <span className="label">{isAr ? 'حجم العقود قيد المتابعة' : 'Monitored Contracts'}</span>
+            <span className="value">{(totalSpendSAR / 1e6).toFixed(2)}M SAR</span>
+          </div>
         </div>
       </div>
 
@@ -130,6 +155,21 @@ export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
           </button>
         </div>
       </div>
+
+      {/* Empty State */}
+      {!loading && filteredSuppliers.length === 0 && (
+        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
+          <IconSupplier size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            {isAr ? 'لا يوجد موردون مسجلون حالياً' : 'No Monitored Suppliers Found'}
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+            {isAr
+              ? 'لم يتم تسجيل أي عقود توريد أو أوامر شراء لمساحة العمل الحالية.'
+              : 'Zero active supplier contracts or purchase orders found for the current workspace.'}
+          </p>
+        </div>
+      )}
 
       {/* Suppliers Grid */}
       <div className="decisions-grid">

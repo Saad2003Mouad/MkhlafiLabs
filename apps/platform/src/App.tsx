@@ -213,6 +213,7 @@ const AppRouterContent: React.FC = () => {
       <ProtectedRoute
         currentPath={currentPath}
         locale={locale}
+        requirePlatformAdmin={true}
         onRedirectToLogin={(returnPath) =>
           navigate(`${ROUTES.AUTH.LOGIN}?returnUrl=${encodeURIComponent(returnPath)}`)
         }

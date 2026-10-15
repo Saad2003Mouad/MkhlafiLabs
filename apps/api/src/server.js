@@ -28,6 +28,7 @@ import {
   seedInitialFinancialRecords,
   getBenchmarkStatus
 } from './services/financial/leakDetection.js';
+import { getFinancialAnalytics } from './services/financial/financialAnalyticsEngine.js';
 import {
   getTenantDecisions,
   createTenantDecision,
@@ -64,6 +65,7 @@ import {
   syncTenantIntegration,
   getTenantWorkflows,
   toggleTenantWorkflow,
+  executeTenantWorkflow,
   getTenantAlerts,
   toggleAlertAcknowledge,
   getTenantSettings,
@@ -73,11 +75,23 @@ import {
 import {
   getPlatformOverview,
   listTenants,
+  createTenant,
+  updateTenantDetails,
+  deleteTenant,
   updateTenantStatus,
+  addManualSubscription,
+  confirmOrganizationPayment,
+  listPackages,
+  createCustomPackage,
+  updatePackageDetails,
+  deleteCustomPackage,
   listPlatformUsers,
+  createPlatformUser,
+  updatePlatformUserDetails,
+  deletePlatformUser,
   listLeadInquiries,
-  listPlatformAuditLogs,
-  confirmOrganizationPayment
+  updateLeadStatus,
+  listPlatformAuditLogs
 } from './services/admin/adminEngine.js';
 
 export function getAllowedOrigin(incomingOrigin) {
@@ -374,7 +388,7 @@ export async function handleApiRequest(req, res) {
 
       const normalizedEmail = email.trim().toLowerCase();
       const userRes = await query(
-        `SELECT id, email, password_hash, name_en, name_ar, status
+        `SELECT id, email, password_hash, name_en, name_ar, status, is_platform_admin
          FROM users
          WHERE email = $1`,
         [normalizedEmail]
@@ -416,12 +430,16 @@ export async function handleApiRequest(req, res) {
 
       return jsonResponse(res, 200, {
         success: true,
+        sessionToken: sessionInfo.rawToken,
         user: {
           id: user.id,
           email: user.email,
           nameEn: user.name_en,
-          nameAr: user.name_ar
+          nameAr: user.name_ar,
+          status: user.status,
+          isPlatformAdmin: Boolean(user.is_platform_admin)
         },
+        tenant: tenantCheck.hasTenant ? tenantCheck.tenant : null,
         activeTenant: tenantCheck.hasTenant ? tenantCheck.tenant : null,
         availableOrganizations: tenantCheck.hasTenant ? tenantCheck.tenant.availableOrganizations : []
       }, { 'Set-Cookie': cookieHeader });
@@ -457,6 +475,12 @@ export async function handleApiRequest(req, res) {
       return jsonResponse(res, 200, { success: true, benchmark: result });
     }
 
+    // ── PUBLIC PACKAGES & TIERS CATALOG ─────────────────────────────────────
+    if (method === 'GET' && pathname === '/api/v1/packages') {
+      const packages = await listPackages();
+      return jsonResponse(res, 200, { packages });
+    }
+
     // ── AUTHENTICATION: CURRENT USER & TENANT CONTEXT ───────────────────────
     if (method === 'GET' && pathname === '/api/v1/auth/me') {
       const auth = await authenticateRequest(req);
@@ -490,14 +514,30 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 403, { error: 'Forbidden: Platform operator authorization required.' });
       }
 
+      // 1. Overview
       if (method === 'GET' && pathname === '/api/v1/admin/overview') {
         const overview = await getPlatformOverview();
         return jsonResponse(res, 200, overview);
       }
 
+      // 2. Tenants (List, Create, Update, Delete, Status)
       if (method === 'GET' && pathname === '/api/v1/admin/organizations') {
         const organizations = await listTenants();
         return jsonResponse(res, 200, { organizations });
+      }
+
+      if (method === 'POST' && pathname === '/api/v1/admin/organizations') {
+        const body = await readJsonBody(req);
+        try {
+          const result = await createTenant({
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 201, { success: true, ...result });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
       }
 
       if (method === 'PUT' && pathname.startsWith('/api/v1/admin/organizations/') && pathname.endsWith('/status')) {
@@ -513,22 +553,50 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 200, { success: true, organization: updatedOrg });
       }
 
-      if (method === 'GET' && pathname === '/api/v1/admin/users') {
-        const users = await listPlatformUsers();
-        return jsonResponse(res, 200, { users });
+      if (method === 'PUT' && pathname.startsWith('/api/v1/admin/organizations/') && !pathname.endsWith('/status') && !pathname.endsWith('/confirm-payment') && !pathname.endsWith('/subscription')) {
+        const parts = pathname.split('/');
+        const targetOrgId = parts[parts.indexOf('organizations') + 1];
+        const body = await readJsonBody(req);
+        try {
+          const updated = await updateTenantDetails(targetOrgId, {
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 200, { success: true, organization: updated });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
       }
 
-      if (method === 'GET' && pathname === '/api/v1/admin/leads') {
-        const leads = await listLeadInquiries();
-        return jsonResponse(res, 200, { leads });
+      if (method === 'DELETE' && pathname.startsWith('/api/v1/admin/organizations/')) {
+        const parts = pathname.split('/');
+        const targetOrgId = parts[parts.indexOf('organizations') + 1];
+        try {
+          const result = await deleteTenant(targetOrgId, auth.user.id, req.socket.remoteAddress);
+          return jsonResponse(res, 200, result);
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
       }
 
-      if (method === 'GET' && pathname === '/api/v1/admin/audit') {
-        const auditLogs = await listPlatformAuditLogs();
-        return jsonResponse(res, 200, { auditLogs });
+      // 3. Manual Subscriptions & Payments
+      if (method === 'POST' && pathname.startsWith('/api/v1/admin/organizations/') && pathname.endsWith('/subscription')) {
+        const parts = pathname.split('/');
+        const targetOrgId = parts[parts.indexOf('organizations') + 1];
+        const body = await readJsonBody(req);
+        try {
+          const sub = await addManualSubscription(targetOrgId, {
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 200, { success: true, subscription: sub });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
       }
 
-      // Operator: Confirm Manual Payment for Tenant
       if (method === 'POST' && pathname.startsWith('/api/v1/admin/organizations/') && pathname.endsWith('/confirm-payment')) {
         const parts = pathname.split('/');
         const targetOrgId = parts[parts.indexOf('organizations') + 1];
@@ -545,10 +613,128 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 200, { success: true, subscription: sub });
       }
 
-      // Operator: Issue Cryptographic Offline License for Private Edition
+      // 4. Commercial Packages (List, Create, Update, Delete)
+      if (method === 'GET' && pathname === '/api/v1/admin/packages') {
+        const packages = await listPackages();
+        return jsonResponse(res, 200, { packages });
+      }
+
+      if (method === 'POST' && pathname === '/api/v1/admin/packages') {
+        const body = await readJsonBody(req);
+        try {
+          const pkg = await createCustomPackage({
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 201, { success: true, package: pkg });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      if (method === 'PUT' && pathname.startsWith('/api/v1/admin/packages/')) {
+        const parts = pathname.split('/');
+        const packageId = parts[parts.indexOf('packages') + 1];
+        const body = await readJsonBody(req);
+        try {
+          const pkg = await updatePackageDetails(packageId, {
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 200, { success: true, package: pkg });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      if (method === 'DELETE' && pathname.startsWith('/api/v1/admin/packages/')) {
+        const parts = pathname.split('/');
+        const packageId = parts[parts.indexOf('packages') + 1];
+        try {
+          const result = await deleteCustomPackage(packageId, auth.user.id, req.socket.remoteAddress);
+          return jsonResponse(res, 200, result);
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      // 5. Global Users (List, Create, Update, Delete)
+      if (method === 'GET' && pathname === '/api/v1/admin/users') {
+        const users = await listPlatformUsers();
+        return jsonResponse(res, 200, { users });
+      }
+
+      if (method === 'POST' && pathname === '/api/v1/admin/users') {
+        const body = await readJsonBody(req);
+        try {
+          const newUser = await createPlatformUser({
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 201, { success: true, user: newUser });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      if (method === 'PUT' && pathname.startsWith('/api/v1/admin/users/')) {
+        const parts = pathname.split('/');
+        const userId = parts[parts.indexOf('users') + 1];
+        const body = await readJsonBody(req);
+        try {
+          const updated = await updatePlatformUserDetails(userId, {
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 200, { success: true, user: updated });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      if (method === 'DELETE' && pathname.startsWith('/api/v1/admin/users/')) {
+        const parts = pathname.split('/');
+        const userId = parts[parts.indexOf('users') + 1];
+        try {
+          const result = await deletePlatformUser(userId, auth.user.id, req.socket.remoteAddress);
+          return jsonResponse(res, 200, result);
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      // 6. Inbound Leads & CRM
+      if (method === 'GET' && pathname === '/api/v1/admin/leads') {
+        const leads = await listLeadInquiries();
+        return jsonResponse(res, 200, { leads });
+      }
+
+      if (method === 'PUT' && pathname.startsWith('/api/v1/admin/leads/') && pathname.endsWith('/status')) {
+        const parts = pathname.split('/');
+        const leadId = parts[parts.indexOf('leads') + 1];
+        const body = await readJsonBody(req);
+        try {
+          const updated = await updateLeadStatus(leadId, body.status, body.notes, auth.user.id, req.socket.remoteAddress);
+          return jsonResponse(res, 200, { success: true, lead: updated });
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      // 7. Security Audit Trail
+      if (method === 'GET' && pathname === '/api/v1/admin/audit') {
+        const auditLogs = await listPlatformAuditLogs();
+        return jsonResponse(res, 200, { auditLogs });
+      }
+
+      // 8. Offline License Generator & Verifier
       if (method === 'POST' && pathname === '/api/v1/admin/licenses/issue') {
         const body = await readJsonBody(req);
-        const { customerSlug, customerName, edition = 'PRIVATE_EDITION', tier = 'enterprise', licensedCapabilities, maxMembers = 100 } = body;
+        const { customerSlug, customerName, edition = 'PRIVATE_EDITION', tier = 'plan_enterprise', licensedCapabilities, maxMembers = 100 } = body;
         if (!customerSlug || !customerName) {
           return jsonResponse(res, 400, { error: 'customerSlug and customerName are required.' });
         }
@@ -570,12 +756,14 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 201, { success: true, license: signedLicense });
       }
 
-      // Operator: Verify Offline License File
       if (method === 'POST' && pathname === '/api/v1/admin/licenses/verify') {
         const body = await readJsonBody(req);
         const verification = licenseManager.verifyOfflineLicense(body);
         return jsonResponse(res, 200, verification);
       }
+
+      // Reject any unhandled admin API endpoint immediately
+      return jsonResponse(res, 404, { error: 'Admin API endpoint not found.' });
     }
 
     // ── PROTECTED CUSTOMER APPLICATION: REQUIRES RESOLVED TENANT CONTEXT ────
@@ -872,11 +1060,32 @@ export async function handleApiRequest(req, res) {
       });
     }
 
+    // ── TENANT AUDIT LOGS (/api/v1/tenant/audit-logs) ─────────────────────────
+    if (method === 'GET' && (pathname === '/api/v1/tenant/audit-logs' || pathname === '/api/tenant/audit-logs')) {
+      const logsRes = await query(
+        `SELECT id, action, entity_type, entity_id, details, ip_address, created_at
+         FROM audit_logs
+         WHERE organization_id = $1
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [orgId]
+      );
+      return jsonResponse(res, 200, { success: true, logs: logsRes.rows });
+    }
+
     // ── FINANCIAL LEAK DETECTION ENDPOINTS (/api/v1/records/financial-leaks) ─
     if (method === 'GET' && pathname === '/api/v1/records/financial-leaks') {
       const severity = parsedUrl.searchParams.get('severity') || 'all';
       const status = parsedUrl.searchParams.get('status') || 'all';
       const result = await getFinancialAnomalies(orgId, { severity, status });
+      return jsonResponse(res, 200, result);
+    }
+
+    if (method === 'GET' && pathname === '/api/v1/records/financial-analytics') {
+      const startDate = parsedUrl.searchParams.get('startDate');
+      const endDate = parsedUrl.searchParams.get('endDate');
+      const branchId = parsedUrl.searchParams.get('branchId');
+      const result = await getFinancialAnalytics(orgId, { startDate, endDate, branchId });
       return jsonResponse(res, 200, result);
     }
 
@@ -1039,9 +1248,9 @@ export async function handleApiRequest(req, res) {
     if (method === 'POST' && pathname.startsWith('/api/v1/integrations/') && pathname.endsWith('/sync')) {
       const parts = pathname.split('/');
       const integrationId = parts[parts.indexOf('integrations') + 1];
-      const synced = await syncTenantIntegration(orgId, integrationId);
-      if (!synced) return jsonResponse(res, 404, { error: 'Integration source not found.' });
-      return jsonResponse(res, 200, { success: true, integration: synced });
+      const result = await syncTenantIntegration(orgId, integrationId);
+      if (!result) return jsonResponse(res, 404, { error: 'Integration source not found.' });
+      return jsonResponse(res, 200, result);
     }
 
     // ── AUTOMATED WORKFLOWS (/api/v1/workflows) ─────────────────────────────
@@ -1056,6 +1265,25 @@ export async function handleApiRequest(req, res) {
       const toggled = await toggleTenantWorkflow(orgId, workflowId);
       if (!toggled) return jsonResponse(res, 404, { error: 'Workflow policy not found.' });
       return jsonResponse(res, 200, { success: true, workflow: toggled });
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/workflows/') && pathname.endsWith('/execute')) {
+      const parts = pathname.split('/');
+      const workflowId = parts[parts.indexOf('workflows') + 1];
+      const body = await readJsonBody(req);
+      try {
+        const executionResult = await executeTenantWorkflow(orgId, workflowId, {
+          triggeredBy: auth.user.email,
+          triggerType: body.triggerType || 'MANUAL_EXECUTIVE_TRIGGER',
+          dryRun: Boolean(body.dryRun),
+          idempotencyKey: body.idempotencyKey,
+          conditions: body.conditions || {},
+          userRole: tenant.role || 'org_owner'
+        });
+        return jsonResponse(res, 200, executionResult);
+      } catch (err) {
+        return jsonResponse(res, 400, { error: err.message });
+      }
     }
 
     // ── REAL-TIME ALERTS (/api/v1/alerts) ───────────────────────────────────
@@ -1080,19 +1308,27 @@ export async function handleApiRequest(req, res) {
 
     if (method === 'PUT' && pathname === '/api/v1/organization/settings') {
       const body = await readJsonBody(req);
-      const settings = await updateTenantSettings(orgId, body);
-      return jsonResponse(res, 200, { success: true, settings });
+      try {
+        const settings = await updateTenantSettings(orgId, body);
+        return jsonResponse(res, 200, { success: true, settings });
+      } catch (err) {
+        return jsonResponse(res, 400, { error: err.message });
+      }
     }
 
     // ── ERP JOURNAL ENTRY INGESTION (/api/v1/ingest/journal-entries) ────────
     if (method === 'POST' && pathname === '/api/v1/ingest/journal-entries') {
       const body = await readJsonBody(req);
       const { entries, batchId } = body;
-      if (!entries || !Array.isArray(entries)) {
-        return jsonResponse(res, 400, { error: 'entries must be an array of journal records.' });
+      if (!entries || !Array.isArray(entries) || entries.length === 0) {
+        return jsonResponse(res, 400, { error: 'entries must be a non-empty array of journal records.' });
       }
-      const result = await ingestJournalEntries(orgId, entries, batchId);
-      return jsonResponse(res, 201, result);
+      try {
+        const result = await ingestJournalEntries(orgId, entries, batchId);
+        return jsonResponse(res, 201, result);
+      } catch (err) {
+        return jsonResponse(res, 400, { error: err.message });
+      }
     }
 
     // 404 for unknown API paths

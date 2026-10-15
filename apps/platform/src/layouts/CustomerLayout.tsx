@@ -128,6 +128,40 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
 
         {/* Navigation Sections */}
         <nav className="sidebar-nav">
+          {/* Platform Owner Quick Switcher */}
+          {user?.isPlatformAdmin && (
+            <div style={{ padding: '0 4px', marginBottom: '14px' }}>
+              <button
+                onClick={() => handleNav(ROUTES.ADMIN.OVERVIEW)}
+                style={{
+                  width: '100%',
+                  padding: '9px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.25), rgba(153, 27, 27, 0.35))',
+                  border: '1px solid #ef4444',
+                  color: '#fca5a5',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  textAlign: 'start',
+                  boxShadow: '0 0 12px rgba(220, 38, 38, 0.2)'
+                }}
+                title={isAr ? 'الانتقال إلى غرفة عمليات مالك المنصة وإدارة الباقات' : 'Switch to Platform Owner Control Center'}
+              >
+                <span style={{ fontSize: '16px' }}>🛡️</span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span>{isAr ? 'غرفة عمليات المنصة' : 'Platform Control Room'}</span>
+                  <span style={{ fontSize: '9px', color: '#f87171', fontWeight: 400 }}>
+                    {isAr ? 'لوحة مالك المشروع وإدارة الباقات' : 'Owner Switchboard & Packages'}
+                  </span>
+                </div>
+              </button>
+            </div>
+          )}
+
           {/* Group 1: Workspace */}
           <div className="nav-section-title">
             {isAr ? 'مساحة العمل والقيادة' : 'WORKSPACE'}
@@ -362,23 +396,6 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
               <span>{isAr ? '🌐 الموقع التعريفي' : '🌐 Public Site'}</span>
             </button>
 
-            {/* Platform Admin Privileged Link (Only visible if isPlatformAdmin = true) */}
-            {user?.isPlatformAdmin && (
-              <button
-                onClick={() => onNavigate(ROUTES.ADMIN.OVERVIEW)}
-                className="ctrl-btn"
-                style={{
-                  fontSize: '11px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.4)',
-                  color: '#f87171',
-                  fontWeight: 700
-                }}
-                title={isAr ? 'الانتقال إلى لوحة تحكم إدارة المنظومة' : 'Switch to Platform Admin Control Center'}
-              >
-                <span>🛡️ {isAr ? 'لوحة تحكم الإدارة' : 'Admin Panel'}</span>
-              </button>
-            )}
           </div>
 
           <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -420,6 +437,31 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
             <button onClick={onToggleTheme} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Theme">
               {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
             </button>
+
+            {/* Platform Owner Control Center Switcher */}
+            {user?.isPlatformAdmin && (
+              <button
+                onClick={() => onNavigate(ROUTES.ADMIN.OVERVIEW)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'linear-gradient(135deg, #dc2626, #991b1b)',
+                  border: '1px solid #ef4444',
+                  boxShadow: '0 0 10px rgba(220, 38, 38, 0.4)',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+                title={isAr ? 'الانتقال إلى غرفة تحكم مالك المنظومة وإدارة الباقات والعملاء' : 'Platform Owner Root Control Center'}
+              >
+                <span>🛡️</span>
+                <span>{isAr ? 'غرفة عمليات المنصة' : 'Platform Control Room'}</span>
+              </button>
+            )}
 
             {/* Authenticated User Menu & Sign Out */}
             {user && (

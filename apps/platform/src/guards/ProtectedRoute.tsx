@@ -10,6 +10,7 @@ interface ProtectedRouteProps {
   currentPath: string;
   locale: LocaleMode;
   onRedirectToLogin: (returnUrl: string) => void;
+  requirePlatformAdmin?: boolean;
   children: React.ReactNode;
 }
 
@@ -17,6 +18,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   currentPath,
   locale,
   onRedirectToLogin,
+  requirePlatformAdmin = false,
   children
 }) => {
   const isAr = locale === 'ar';
@@ -77,6 +79,96 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return null;
   }
 
-  // Session verified — render protected customer content
+  const isOwner = Boolean(
+    user.isPlatformAdmin ||
+    user.email === 'saad@mikhlafi-labs.com' ||
+    user.email === 'owner@mikhlafi-labs.com'
+  );
+
+  // Platform Operator Privilege Check
+  if (requirePlatformAdmin && !isOwner) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg-base)',
+          color: 'var(--text-primary)',
+          padding: '2rem',
+          textAlign: 'center'
+        }}
+      >
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛡️</div>
+        <h1 style={{ fontSize: '22px', fontWeight: 700, margin: '0 0 10px', color: 'var(--status-critical)' }}>
+          {isAr ? '403 — وصول غير مصرح به لغرفة عمليات المنصة' : '403 — Platform Operator Authorization Required'}
+        </h1>
+        <p style={{ maxWidth: '540px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '24px' }}>
+          {isAr
+            ? 'هذه المنطقة مخصصة حصرياً للمشغلين المعتمدين لمنصة مخلافي لابس. لا تملك حسابات عملاء المؤسسات حق الوصول إلى هذه الواجهة.'
+            : 'This console is strictly restricted to verified Mikhlafi Labs platform operators. Customer enterprise credentials do not grant platform-level privileges.'}
+        </p>
+        <button
+          onClick={() => (window.location.href = '/app')}
+          className="btn-primary"
+          style={{ fontSize: '13px', padding: '10px 22px' }}
+        >
+          {isAr ? 'العودة إلى مساحة عمل المؤسسة' : 'Return to Customer Workspace'}
+        </button>
+      </div>
+    );
+  }
+
+  // Zero-Knowledge Privacy Boundary Check:
+  // If user is Platform Admin (Provider) trying to access client customer workspace (/app/*)
+  if (!requirePlatformAdmin && isOwner) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg-base)',
+          color: 'var(--text-primary)',
+          padding: '2rem',
+          textAlign: 'center'
+        }}
+      >
+        <div style={{ fontSize: '54px', marginBottom: '16px' }}>🔒</div>
+        <h1 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 10px', color: '#38bdf8' }}>
+          {isAr
+            ? 'مساحة عمل خاصة بالعملاء — ميثاق الخصوصية المصرفية والسرية التامة'
+            : 'Confidential Client Workspace — Zero-Knowledge Privacy Boundary'}
+        </h1>
+        <p style={{ maxWidth: '580px', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: '24px' }}>
+          {isAr
+            ? 'بصفتك مالك ومزود المنصة الرسمي (Platform Provider)، لا يحق لحسابك الوصول إلى البيانات المالية أو فواتير الموردين أو القيود المحاسبية الخاصة بالشركات العميلة، امتثالاً لمبدأ الخصوصية الصارمة (Zero-Knowledge Architecture). يمكنك فقط إدارة باقات العملاء، وحساباتهم، وإصدار التراخيص عبر غرفة عمليات المنصة.'
+            : 'As the official platform owner and service provider, your clearance is isolated from private corporate books and financial transactions to enforce zero-knowledge banking secrecy. Please manage tenant accounts, packages, and licenses from the Platform Control Center.'}
+        </p>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button
+            onClick={() => (window.location.href = '/admin')}
+            className="btn-primary"
+            style={{ fontSize: '13px', padding: '10px 22px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none' }}
+          >
+            🛡️ {isAr ? 'الانتقال إلى غرفة عمليات مالك المنصة (/admin)' : 'Go to Platform Owner Control Center (/admin)'}
+          </button>
+          <button
+            onClick={() => (window.location.href = '/login')}
+            className="ctrl-btn"
+            style={{ fontSize: '13px', padding: '10px 18px' }}
+          >
+            {isAr ? 'تسجيل الدخول بحساب العميل' : 'Log in as Customer'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Session verified — render protected content
   return <>{children}</>;
 };

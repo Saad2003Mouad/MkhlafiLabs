@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { MOCK_RISKS } from '../../data/mockData';
 import { IconRisk, IconShield, IconCheck } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -12,27 +11,46 @@ interface RiskViewProps {
 export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
-  const [risks, setRisks] = useState<any[]>(MOCK_RISKS);
-  const [totalExposureSAR, setTotalExposureSAR] = useState<number>(1710000);
+  const [risks, setRisks] = useState<any[]>([]);
+  const [totalExposureSAR, setTotalExposureSAR] = useState<number>(0);
   const [selectedRiskCategory, setSelectedRiskCategory] = useState<string>('all');
   const [simulatedMitigations, setSimulatedMitigations] = useState<{ [key: string]: boolean }>({});
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
 
   const fetchRisks = async () => {
-    if (!isAuthenticated) return;
+    setLoading(true);
+    if (!isAuthenticated) {
+      setRisks([]);
+      setTotalExposureSAR(0);
+      setIsDemoDataset(false);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await api.getRisks();
-      if (res.risks && res.risks.length > 0) {
+      if (res && Array.isArray(res.risks)) {
         setRisks(res.risks);
-        setTotalExposureSAR(res.totalMonitoredExposureSAR);
+        setTotalExposureSAR(res.totalMonitoredExposureSAR || 0);
+        setIsDemoDataset(false);
         const map: { [key: string]: boolean } = {};
         res.risks.forEach((r: any) => {
           map[r.id] = !!r.is_mitigated;
         });
         setSimulatedMitigations(map);
+      } else {
+        setRisks([]);
+        setTotalExposureSAR(0);
+        setIsDemoDataset(false);
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      setRisks([]);
+      setTotalExposureSAR(0);
+      setIsDemoDataset(false);
+      setBannerNotice(err.message || (isAr ? 'فشل تحميل بيانات المخاطر' : 'Failed to fetch risk records'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -105,9 +123,16 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
         </div>
 
         {/* Aggregate Exposure Pill */}
-        <div className="kpi-micro-badge warning">
-          <span className="label">{isAr ? 'إجمالي التعرض المالي المرصود' : 'Aggregate Monitored Exposure'}</span>
-          <span className="value">{totalExposureSAR.toLocaleString()} SAR</span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {isDemoDataset && (
+            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
+              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
+            </span>
+          )}
+          <div className="kpi-micro-badge warning">
+            <span className="label">{isAr ? 'إجمالي التعرض المالي المرصود' : 'Aggregate Monitored Exposure'}</span>
+            <span className="value">{totalExposureSAR.toLocaleString()} SAR</span>
+          </div>
         </div>
       </div>
 
@@ -156,9 +181,46 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
         </div>
       </div>
 
+      {/* Empty State */}
+      {!loading && filteredRisks.length === 0 && (
+        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
+          <IconRisk size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            {isAr ? 'لا توجد مخاطر مسجلة حالياً' : 'No Monitored Risks Found'}
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+            {isAr
+              ? 'لم يتم رصد أي مخاطر نشطة في سلاسل الإمداد أو السيولة لمساحة العمل الحالية.'
+              : 'Zero active risks detected for the current workspace.'}
+          </p>
+        </div>
+      )}
+
       {/* Risk Cards */}
       <div className="decisions-grid">
-        {filteredRisks.map((risk) => {
+        {filteredRisks.length === 0 ? (
+          <div
+            className="content-panel"
+            style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              padding: '48px 20px',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>🛡️</span>
+            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
+              {isAr ? 'لا توجد مخاطر تشغيلية مسجلة حالياً' : 'Zero Operational Risks Flagged'}
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+              {isAr
+                ? 'كافة المؤشرات التشغيلية وسلاسل الإمداد ومسارات التوريد ضمن الحدود المرجعية الآمنة.'
+                : 'All operational parameters and supply chain routes are operating within safe baselines.'}
+            </p>
+          </div>
+        ) : (
+          filteredRisks.map((risk) => {
           const isMitigated = simulatedMitigations[risk.id];
           const severity = risk.severity || 'high';
           const code = risk.code;
@@ -232,7 +294,8 @@ export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
               </div>
             </div>
           );
-        })}
+        })
+      )}
       </div>
     </div>
   );

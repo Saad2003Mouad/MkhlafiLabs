@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { MOCK_PROJECTS } from '../../data/mockData';
-import { IconProjects, IconCheck, IconFileText } from '../Icons';
+import { IconProjects, IconCheck, IconFileText, IconAlertTriangle } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
@@ -12,27 +11,46 @@ interface ProjectsViewProps {
 export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
-  const [projects, setProjects] = useState<any[]>(MOCK_PROJECTS);
-  const [totalBudgetSAR, setTotalBudgetSAR] = useState<number>(14100000);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [totalBudgetSAR, setTotalBudgetSAR] = useState<number>(0);
+  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [healthFilter, setHealthFilter] = useState<string>('all');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
   const [auditedClaims, setAuditedClaims] = useState<{ [key: string]: boolean }>({});
 
   const fetchProjects = async () => {
-    if (!isAuthenticated) return;
+    setLoading(true);
+    if (!isAuthenticated) {
+      setProjects([]);
+      setTotalBudgetSAR(0);
+      setIsDemoDataset(false);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await api.getProjects();
-      if (res.projects && res.projects.length > 0) {
+      if (res && Array.isArray(res.projects)) {
         setProjects(res.projects);
-        setTotalBudgetSAR(res.totalCapitalBudgetSAR);
+        setTotalBudgetSAR(res.totalCapitalBudgetSAR || 0);
+        setIsDemoDataset(false);
         const map: { [key: string]: boolean } = {};
         res.projects.forEach((p: any) => {
           map[p.id] = !!p.contractor_claims_audited;
         });
         setAuditedClaims(map);
+      } else {
+        setProjects([]);
+        setTotalBudgetSAR(0);
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || (isAr ? 'فشل جلب بيانات المشاريع' : 'Failed to load project records')
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -41,27 +59,32 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
   }, [isAuthenticated]);
 
   const handleVerifyClaims = async (projectId: string, code: string) => {
-    if (isAuthenticated) {
-      try {
-        await api.verifyProjectClaims(projectId);
-        setAuditedClaims((prev) => ({ ...prev, [projectId]: true }));
-        const msg = isAr
-          ? `تم تدقيق مطالبات المقاول لمشروع ${code} بنجاح وتسجيل حدث التدقيق في PostgreSQL.`
-          : `Contractor claims audited for ${code} & recorded in PostgreSQL.`;
-        setNotice(msg);
-        setTimeout(() => setNotice(null), 4000);
-        await fetchProjects();
-        return;
-      } catch (err: any) {
-        setNotice(err.message || 'Error auditing claims');
-        setTimeout(() => setNotice(null), 4000);
-      }
+    if (!isAuthenticated) {
+      setNotice({
+        type: 'warning',
+        message: isAr ? 'يتطلب تدقيق المستخلصات تسجيل الدخول لمساحة عمل المنشأة.' : 'Authentication required to audit contractor claims.'
+      });
+      return;
     }
 
-    // Demo fallback
-    setAuditedClaims((prev) => ({ ...prev, [projectId]: true }));
-    setNotice(isAr ? `(عرض تجريبي) تم تدقيق مطالبات المقاول لمشروع ${code}.` : `(Demo) Claims audited for ${code}.`);
-    setTimeout(() => setNotice(null), 4000);
+    try {
+      await api.verifyProjectClaims(projectId);
+      setAuditedClaims((prev) => ({ ...prev, [projectId]: true }));
+      setNotice({
+        type: 'success',
+        message: isAr
+          ? `تم تدقيق مطالبات المقاول لمشروع ${code} بنجاح وتسجيل حدث التدقيق في PostgreSQL.`
+          : `Contractor claims audited for ${code} & recorded in PostgreSQL.`
+      });
+      setTimeout(() => setNotice(null), 4000);
+      await fetchProjects();
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || (isAr ? 'فشل تدقيق المستخلصات' : 'Error auditing claims')
+      });
+      setTimeout(() => setNotice(null), 4000);
+    }
   };
 
   const filteredProjects = projects.filter((p) => {
@@ -79,7 +102,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
             <span>/</span>
             <span>{isAr ? 'محركات الذكاء' : 'Intelligence Suite'}</span>
             <span>/</span>
-            <span>{isAr ? 'ذكاء أداء المشاريع والعقود' : 'Project Intelligence'}</span>
+            <span className="current">{isAr ? 'ذكاء أداء المشاريع والعقود' : 'Project Intelligence'}</span>
           </div>
           <h1 className="page-title">
             <IconProjects size={24} />
@@ -92,16 +115,23 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
           </p>
         </div>
 
-        <div className="kpi-micro-badge">
-          <span className="label">{isAr ? 'إجمالي الميزانيات قيد المراقبة' : 'Monitored Capital Budget'}</span>
-          <span className="value">{(totalBudgetSAR / 1e6).toFixed(1)}M SAR</span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {isDemoDataset && (
+            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
+              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
+            </span>
+          )}
+          <div className="kpi-micro-badge">
+            <span className="label">{isAr ? 'إجمالي الميزانيات قيد المراقبة' : 'Monitored Capital Budget'}</span>
+            <span className="value">{(totalBudgetSAR / 1e6).toFixed(1)}M SAR</span>
+          </div>
         </div>
       </div>
 
       {notice && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{notice}</span>
+        <div className={`alert-feedback-banner ${notice.type === 'error' ? 'error' : notice.type === 'warning' ? 'warning' : 'success'}`}>
+          {notice.type === 'error' || notice.type === 'warning' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
+          <span>{notice.message}</span>
         </div>
       )}
 
@@ -130,13 +160,50 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
         </div>
       </div>
 
+      {/* Empty State */}
+      {!loading && filteredProjects.length === 0 && (
+        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
+          <IconProjects size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            {isAr ? 'لا توجد مشاريع مسجلة حالياً في مساحة العمل' : 'No Monitored Projects Found'}
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '500px', margin: '0 auto' }}>
+            {isAr
+              ? 'يمكنك ربط نظام إدارة المشاريع (ERP/Oracle) أو استيراد عقود المشاريع لبدء تدقيق الإنجاز الفعلي والمستخلصات.'
+              : 'Connect your ERP project management module or import project baseline schedules to track milestone variance.'}
+          </p>
+        </div>
+      )}
+
       {/* Projects Grid */}
       <div className="decisions-grid">
-        {filteredProjects.map((p) => {
+        {filteredProjects.length === 0 ? (
+          <div
+            className="content-panel"
+            style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              padding: '48px 20px',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>🏗️</span>
+            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
+              {isAr ? 'لا توجد مشاريع رأسمالية مسجلة حالياً' : 'No Capital Projects Registered'}
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+              {isAr
+                ? 'يتم تتبع مؤشرات الإنجاز الميداني وأوامر التغيير فور تسجيل مشاريع المؤسسة أو ربط نظام إدارة المشاريع.'
+                : 'Project performance baselines and contractor claims track dynamically once capital projects are configured.'}
+            </p>
+          </div>
+        ) : (
+          filteredProjects.map((p) => {
           const isClaimsAudited = auditedClaims[p.id] || p.contractor_claims_audited;
           const name = isAr ? (p.name_ar || p.nameAr) : (p.name_en || p.nameEn);
-          const planned = p.planned_progress ?? p.plannedProgress;
-          const actual = p.actual_progress ?? p.actualProgress;
+          const planned = Number(p.planned_progress ?? p.plannedProgress ?? 0);
+          const actual = Number(p.actual_progress ?? p.actualProgress ?? 0);
           const budget = p.budgetTotal || (p.budget_total_sar ? `${(parseFloat(p.budget_total_sar) / 1e6).toFixed(1)}M SAR` : '0 SAR');
           const variance = p.varianceSAR || (p.variance_sar ? `+${parseFloat(p.variance_sar).toLocaleString()} SAR` : '0 SAR');
           const changeOrders = p.change_orders_count ?? p.changeOrdersCount ?? 0;
@@ -174,7 +241,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{actual}%</span>
                   </div>
                   <div style={{ height: '6px', background: 'var(--border-subtle)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ width: `${actual}%`, height: '100%', background: p.health === 'on-track' ? 'var(--status-success)' : 'var(--status-warning)' }} />
+                    <div style={{ width: `${Math.min(100, Math.max(0, actual))}%`, height: '100%', background: p.health === 'on-track' ? 'var(--status-success)' : 'var(--status-warning)' }} />
                   </div>
                 </div>
 
@@ -184,7 +251,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
                     <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{planned}%</span>
                   </div>
                   <div style={{ height: '4px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ width: `${planned}%`, height: '100%', background: 'var(--border-strong)' }} />
+                    <div style={{ width: `${Math.min(100, Math.max(0, planned))}%`, height: '100%', background: 'var(--border-strong)' }} />
                   </div>
                 </div>
               </div>
@@ -225,7 +292,8 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
               </div>
             </div>
           );
-        })}
+        })
+      )}
       </div>
     </div>
   );

@@ -118,7 +118,11 @@ export const DecisionsView: React.FC<DecisionsViewProps> = ({ locale, onNavigate
         {/* Quick Summary Pill */}
         <div className="kpi-micro-badge">
           <span className="label">{isAr ? 'إجمالي الأثر المالي للأولويات النشطة' : 'Active Financial Impact'}</span>
-          <span className="value">362,400 SAR</span>
+          <span className="value">
+            {isAuthenticated
+              ? `${realDecisions.reduce((sum, d) => sum + (Number(d.impact_amount) || 0), 0).toLocaleString()} SAR`
+              : '0 SAR'}
+          </span>
         </div>
       </div>
 
@@ -288,6 +292,27 @@ export const DecisionsView: React.FC<DecisionsViewProps> = ({ locale, onNavigate
               </div>
             </div>
           ))
+        ) : isAuthenticated ? (
+          <div
+            className="content-panel"
+            style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              padding: '48px 20px',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          >
+            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>⚖️</span>
+            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
+              {isAr ? 'لا توجد قرارات تنفيذية معلقة حالياً لمؤسستك' : 'No Pending Executive Decisions'}
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+              {isAr
+                ? 'يتم توليد القرارات التنفيذية وترتيب أولوياتها تلقائياً في جدول tenant_decisions عند رصد انحرافات أسعار الموردين أو مطالبات المقاولين غير المعتمدة.'
+                : 'Executive decisions are generated automatically in tenant_decisions upon detecting supplier price drift or unapproved claims.'}
+            </p>
+          </div>
         ) : (
           filteredDecisions.map((decision) => (
             <div key={decision.id} className={`decision-card priority-${decision.priority}`}>

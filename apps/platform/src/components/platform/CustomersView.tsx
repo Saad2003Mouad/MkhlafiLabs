@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { LocaleMode } from '../../types';
-import { MOCK_CUSTOMERS } from '../../data/mockData';
 import { IconCustomer, IconCheck, IconClock } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -12,26 +11,45 @@ interface CustomersViewProps {
 export const CustomersView: React.FC<CustomersViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated } = useAuth();
-  const [customers, setCustomers] = useState<any[]>(MOCK_CUSTOMERS);
-  const [totalRevenueAtRiskSAR, setTotalRevenueAtRiskSAR] = useState<number>(1360000);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [totalRevenueAtRiskSAR, setTotalRevenueAtRiskSAR] = useState<number>(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [scheduledReviews, setScheduledReviews] = useState<{ [key: string]: boolean }>({});
+  const [loading, setLoading] = useState<boolean>(true);
+  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
 
   const fetchCustomers = async () => {
-    if (!isAuthenticated) return;
+    setLoading(true);
+    if (!isAuthenticated) {
+      setCustomers([]);
+      setTotalRevenueAtRiskSAR(0);
+      setIsDemoDataset(false);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await api.getCustomers();
-      if (res.customers && res.customers.length > 0) {
+      if (res && Array.isArray(res.customers)) {
         setCustomers(res.customers);
-        setTotalRevenueAtRiskSAR(res.totalRevenueAtRiskSAR);
+        setTotalRevenueAtRiskSAR(res.totalRevenueAtRiskSAR || 0);
+        setIsDemoDataset(false);
         const map: { [key: string]: boolean } = {};
         res.customers.forEach((c: any) => {
           map[c.id] = !!c.review_scheduled;
         });
         setScheduledReviews(map);
+      } else {
+        setCustomers([]);
+        setTotalRevenueAtRiskSAR(0);
+        setIsDemoDataset(false);
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      setCustomers([]);
+      setTotalRevenueAtRiskSAR(0);
+      setIsDemoDataset(false);
+      setNotice(err.message || (isAr ? 'فشل تحميل بيانات العملاء' : 'Failed to fetch customer records'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,9 +104,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ locale }) => {
           </p>
         </div>
 
-        <div className="kpi-micro-badge warning">
-          <span className="label">{isAr ? 'إجمالي الإيرادات المعرضة للمخاطر' : 'Revenue at Risk'}</span>
-          <span className="value">{(totalRevenueAtRiskSAR / 1e6).toFixed(2)}M SAR</span>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {isDemoDataset && (
+            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
+              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
+            </span>
+          )}
+          <div className="kpi-micro-badge warning">
+            <span className="label">{isAr ? 'إجمالي الإيرادات المعرضة للمخاطر' : 'Revenue at Risk'}</span>
+            <span className="value">{(totalRevenueAtRiskSAR / 1e6).toFixed(2)}M SAR</span>
+          </div>
         </div>
       </div>
 
@@ -96,6 +121,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ locale }) => {
         <div className="alert-feedback-banner success">
           <IconCheck size={16} />
           <span>{notice}</span>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && customers.length === 0 && (
+        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
+          <IconCustomer size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+            {isAr ? 'لا يوجد عملاء قيد المتابعة حالياً' : 'No Monitored Customers Found'}
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
+            {isAr
+              ? 'لم يتم تسجيل أي حسابات عملاء أو مؤشرات إيرادات معرضة للخطر لمساحة العمل الحالية.'
+              : 'Zero active customer accounts or churn signals found for the current workspace.'}
+          </p>
         </div>
       )}
 

@@ -184,6 +184,22 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </button>
 
           <button
+            onClick={() => handleNav(ROUTES.ADMIN.PACKAGES)}
+            className={`nav-item ${isActive(ROUTES.ADMIN.PACKAGES) ? 'active' : ''}`}
+          >
+            <span>📦</span>
+            <span>{isAr ? 'إدارة الباقات والتسعير' : 'Packages & Pricing'}</span>
+          </button>
+
+          <button
+            onClick={() => handleNav(ROUTES.ADMIN.LICENSES)}
+            className={`nav-item ${isActive(ROUTES.ADMIN.LICENSES) ? 'active' : ''}`}
+          >
+            <span>🔑</span>
+            <span>{isAr ? 'مولّد التراخيص المشفرة' : 'Offline License Generator'}</span>
+          </button>
+
+          <button
             onClick={() => handleNav(ROUTES.ADMIN.AUDIT)}
             className={`nav-item ${isActive(ROUTES.ADMIN.AUDIT) ? 'active' : ''}`}
           >
@@ -192,23 +208,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
           </button>
 
           <div className="nav-section-title" style={{ marginTop: '24px' }}>
-            {isAr ? 'الانتقال السريع' : 'QUICK SWITCH'}
+            {isAr ? 'روابط المنصة الخارجية' : 'PUBLIC LINKS'}
           </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.OVERVIEW)}
-            className="nav-item"
-            style={{ opacity: 0.8 }}
-          >
-            <span>🏛️ {isAr ? 'مساحة عمل العميل (/app)' : 'Customer Workspace (/app)'}</span>
-          </button>
 
           <button
             onClick={() => handleNav(ROUTES.PUBLIC.HOME)}
             className="nav-item"
             style={{ opacity: 0.8 }}
           >
-            <span>🌐 {isAr ? 'الموقع التعريفي العام (/)' : 'Public Marketing Site (/)'}</span>
+            <span>🌐 {isAr ? 'زيارة الموقع التعريفي العام (/)' : 'Visit Public Site (/)'}</span>
           </button>
         </nav>
       </aside>

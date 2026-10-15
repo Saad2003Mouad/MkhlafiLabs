@@ -34,9 +34,9 @@ export const BillingView: React.FC<BillingViewProps> = ({ locale }) => {
     ? (billingData?.subscription?.package_name_ar || 'باقة المؤسسات الشاملة')
     : (billingData?.subscription?.package_name_en || 'Enterprise Suite');
 
-  const recordsUsed = billingData?.usage?.monthlyRecordsUsed || 5510000;
+  const recordsUsed = billingData?.usage?.monthlyRecordsUsed || 0;
   const recordsLimit = billingData?.subscription?.monthly_record_limit || 10000000;
-  const percentage = Math.min(100, Math.round((recordsUsed / recordsLimit) * 100));
+  const percentage = recordsLimit > 0 ? Math.min(100, Math.round((recordsUsed / recordsLimit) * 100)) : 0;
 
   return (
     <div className="platform-page-container">

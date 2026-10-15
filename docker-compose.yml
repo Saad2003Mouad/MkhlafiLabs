@@ -17,11 +17,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-mikhlafi_user}:${POSTGRES_PASSWORD:-ChangeMeSecurePass2026!}@mikhlafi-db:5432/${POSTGRES_DB:-mikhlafi_platform}?sslmode=disable
-      - SESSION_SECRET=${SESSION_SECRET:-MikhlafiEnterpriseProductionSecretKey64CharsLongRandom2026!}
-      - LICENSE_SIGNING_SECRET=${LICENSE_SIGNING_SECRET:-MikhlafiMasterOfflineLicenseKeyHMAC2026!}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mikhlafi_user}:${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD must be provided in environment}@mikhlafi-db:5432/${POSTGRES_DB:-mikhlafi_platform}?sslmode=disable
+      - SESSION_SECRET=${SESSION_SECRET:?Error: SESSION_SECRET must be provided in environment}
+      - LICENSE_SIGNING_SECRET=${LICENSE_SIGNING_SECRET:?Error: LICENSE_SIGNING_SECRET must be provided in environment}
       - AI_PROVIDER=${AI_PROVIDER:-local_deterministic} # options: local_deterministic, local_ollama, external_api
       - AI_OLLAMA_ENDPOINT=http://mikhlafi-ollama:11434
       - AI_OLLAMA_MODEL=llama3.1
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mikhlafi_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMeSecurePass2026!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD must be provided in environment}
       POSTGRES_DB: ${POSTGRES_DB:-mikhlafi_platform}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
     volumes:

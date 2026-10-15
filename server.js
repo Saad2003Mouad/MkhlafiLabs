@@ -9,6 +9,17 @@ import { runMigrations } from './apps/api/src/db/connection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Automatically load .env file if it exists
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile(envPath);
+  }
+} catch (e) {
+  // Silent fallback
+}
+
 const PORT = process.env.PORT || 3000;
 
 const MIME_TYPES = {

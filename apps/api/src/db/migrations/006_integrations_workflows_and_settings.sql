@@ -97,9 +97,9 @@ CREATE INDEX IF NOT EXISTS idx_journal_entries_batch ON tenant_journal_entries(b
 -- ('c0000000-0000-0000-0000-000000000002')
 -- ============================================================================
 
--- Seed Integrations for mikhlafi-group
+-- Seed Integrations for mikhlafi-group (Templates awaiting credentials)
 INSERT INTO tenant_integrations (
-  id, organization_id, code, name_en, name_ar, category, auth_type, records_synced_count, status
+  id, organization_id, code, name_en, name_ar, category, auth_type, records_synced_count, last_sync_status, status
 )
 VALUES
 (
@@ -110,8 +110,9 @@ VALUES
   'نظام ساب المالي وإدارة دفتر الأستاذ العام (SAP S/4HANA)',
   'ERP / General Ledger',
   'mTLS + Read-Only Database Replica',
-  2840000,
-  'connected'
+  0,
+  'NOT_CONFIGURED',
+  'not_configured'
 ),
 (
   'e1000000-0000-0000-0000-000000000002',
@@ -121,8 +122,9 @@ VALUES
   'أوراكل لإدارة سلاسل الإمداد والمشتريات (Oracle SCM)',
   'Procurement & Contracts',
   'Signed REST Webhook (Read-Only)',
-  1420000,
-  'connected'
+  0,
+  'NOT_CONFIGURED',
+  'not_configured'
 ),
 (
   'e1000000-0000-0000-0000-000000000003',
@@ -132,12 +134,16 @@ VALUES
   'بوابة الفوترة الإلكترونية المرحلة الثانية (هيئة الزكاة والضريبة)',
   'Regulatory & Tax Bridge',
   'Cryptographic API Stamp (Read-Only)',
-  1250000,
-  'connected'
+  0,
+  'NOT_CONFIGURED',
+  'not_configured'
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  records_synced_count = EXCLUDED.records_synced_count,
+  last_sync_status = EXCLUDED.last_sync_status,
+  status = EXCLUDED.status;
 
--- Seed Workflows for mikhlafi-group
+-- Seed Workflows for mikhlafi-group (Zero execution until genuinely executed)
 INSERT INTO tenant_workflows (
   id, organization_id, code, name_ar, name_en, trigger_ar, trigger_en, action_ar, action_en, active, executions_count
 )
@@ -153,7 +159,7 @@ VALUES
   'تجميد أمر الدفع في ERP وإرسال تنبيه عاجل لمدير التدقيق',
   'Block ERP disbursement queue and escalate to Audit Director',
   true,
-  14
+  0
 ),
 (
   'e2000000-0000-0000-0000-000000000002',
@@ -166,7 +172,7 @@ VALUES
   'إدراج بند مراجعة أسعار في طابور قرارات المشتريات',
   'Create mandatory price review item in Procurement Decision Queue',
   true,
-  8
+  0
 ),
 (
   'e2000000-0000-0000-0000-000000000003',
@@ -179,9 +185,11 @@ VALUES
   'توليد إنذار مبكر لمدير العمليات التنفيذي',
   'Dispatch early warning notification to Operations Director',
   false,
-  3
+  0
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  executions_count = EXCLUDED.executions_count,
+  active = EXCLUDED.active;
 
 -- Seed Alerts for mikhlafi-group
 INSERT INTO tenant_alerts (

@@ -1,0 +1,63 @@
+# ==============================================================================
+# MIKHLAFI LABS — Isolated Automated Testing Environment (Docker Compose)
+# Dedicated isolated database and ephemeral synthetic runtime for test suites
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # ── 1. Isolated Test Database (PostgreSQL 16) ──────────────────────────────
+  mikhlafi-test-db:
+    image: postgres:16-alpine
+    container_name: mikhlafi-postgres-test-db
+    restart: "no"
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: mikhlafi_test_user
+      POSTGRES_PASSWORD: mikhlafi_test_password_local_only
+      POSTGRES_DB: mikhlafi_platform_test
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - mikhlafi-test-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mikhlafi_test_user -d mikhlafi_platform_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mikhlafi-test-internal
+
+  # ── 2. Isolated Test App Runner ───────────────────────────────────────────
+  mikhlafi-test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mikhlafi-test-runner
+    restart: "no"
+    environment:
+      - NODE_ENV=test
+      - DATABASE_URL=postgresql://mikhlafi_test_user:mikhlafi_test_password_local_only@mikhlafi-test-db:5432/mikhlafi_platform_test?sslmode=disable
+      - SESSION_SECRET=test_secret_for_local_isolated_unit_and_integration_tests_only_64ch
+      - LICENSE_SIGNING_SECRET=test_license_key_hmac_local_isolated_tests_only_64ch_secure
+      - AI_PROVIDER=local_deterministic
+      - DEFAULT_CURRENCY=SAR
+      - DEFAULT_LOCALE=ar
+    volumes:
+      - mikhlafi-test-tenant-data:/app/data/tenants
+    depends_on:
+      mikhlafi-test-db:
+        condition: service_healthy
+    networks:
+      - mikhlafi-test-internal
+    command: ["npm", "run", "test"]
+
+volumes:
+  mikhlafi-test-postgres-data:
+    driver: local
+  mikhlafi-test-tenant-data:
+    driver: local
+
+networks:
+  mikhlafi-test-internal:
+    driver: bridge

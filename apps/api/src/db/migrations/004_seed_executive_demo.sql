@@ -2,7 +2,7 @@
 -- Seeds the canonical Executive Demo User & Organization (saad@mikhlafi-labs.com)
 -- Pre-configured with Platform Super Admin + Enterprise Workspace Ownership
 
--- 1. Insert Executive User (if not exists)
+-- 1. Insert Platform Owner / Vendor Account (Strictly Platform Administration)
 INSERT INTO users (
   id,
   email,
@@ -16,8 +16,35 @@ INSERT INTO users (
   'c0000000-0000-0000-0000-000000000001',
   'saad@mikhlafi-labs.com',
   'scrypt$0c98e45748b8c347021cc4ab1cd48231$e2d60bb9c254aa9e4c4eb393d91be071ee30ea14da358ece93a3e2ea500c22163a5b996eb464530baf84ba08e688bdc1efd96d788fa631caf7d8128f0cfce73f',
-  'Saad Al-Mikhlafi',
-  'سعد المخلافي',
+  'Saad Al-Mikhlafi (Platform Owner)',
+  'سعد المخلافي (مالك ومزود المنظومة)',
+  true,
+  true,
+  'active'
+)
+ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  name_en = EXCLUDED.name_en,
+  name_ar = EXCLUDED.name_ar,
+  is_platform_admin = true,
+  status = 'active';
+
+-- 1.b Insert Alternate Platform Owner Alias
+INSERT INTO users (
+  id,
+  email,
+  password_hash,
+  name_en,
+  name_ar,
+  is_verified,
+  is_platform_admin,
+  status
+) VALUES (
+  'c0000000-0000-0000-0000-000000000005',
+  'owner@mikhlafi-labs.com',
+  'scrypt$0c98e45748b8c347021cc4ab1cd48231$e2d60bb9c254aa9e4c4eb393d91be071ee30ea14da358ece93a3e2ea500c22163a5b996eb464530baf84ba08e688bdc1efd96d788fa631caf7d8128f0cfce73f',
+  'Platform System Owner',
+  'مالك المنظومة ومزود الخدمة',
   true,
   true,
   'active'
@@ -27,7 +54,32 @@ ON CONFLICT (email) DO UPDATE SET
   is_platform_admin = true,
   status = 'active';
 
--- 2. Insert Executive Organization
+-- 1.c Insert Customer Organization Executive User (Client Account)
+INSERT INTO users (
+  id,
+  email,
+  password_hash,
+  name_en,
+  name_ar,
+  is_verified,
+  is_platform_admin,
+  status
+) VALUES (
+  'c0000000-0000-0000-0000-000000000010',
+  'client@mikhlafi-holding.com',
+  'scrypt$0c98e45748b8c347021cc4ab1cd48231$e2d60bb9c254aa9e4c4eb393d91be071ee30ea14da358ece93a3e2ea500c22163a5b996eb464530baf84ba08e688bdc1efd96d788fa631caf7d8128f0cfce73f',
+  'Mikhlafi Group CFO (Client Executive)',
+  'المدير المالي - مجموعة المخلافي القابضة (عميل)',
+  true,
+  false,
+  'active'
+)
+ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  is_platform_admin = false,
+  status = 'active';
+
+-- 2. Insert Client Organization (Mikhlafi Group Holding)
 INSERT INTO organizations (
   id,
   slug,
@@ -71,7 +123,11 @@ INSERT INTO branches (
 )
 ON CONFLICT DO NOTHING;
 
--- 4. Assign Executive Owner Membership
+-- Zero-Knowledge Privacy Architecture:
+-- Remove any platform owner memberships from customer client organizations
+DELETE FROM memberships WHERE user_id IN ('c0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000005');
+
+-- 4. Assign Executive Owner Membership exclusively to the Customer Account
 INSERT INTO memberships (
   user_id,
   organization_id,
@@ -79,7 +135,7 @@ INSERT INTO memberships (
   role,
   status
 ) VALUES (
-  'c0000000-0000-0000-0000-000000000001',
+  'c0000000-0000-0000-0000-000000000010',
   'c0000000-0000-0000-0000-000000000002',
   'c0000000-0000-0000-0000-000000000003',
   'org_owner',

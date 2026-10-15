@@ -124,6 +124,24 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
             {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
           </button>
 
+          {/* Platform Owner / Admin Link */}
+          <button
+            onClick={(e) => handleLinkClick(e, ROUTES.ADMIN.OVERVIEW)}
+            className="ctrl-btn"
+            style={{
+              fontSize: '11px',
+              padding: '6px 10px',
+              border: '1px solid rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: '#f87171',
+              fontWeight: 700
+            }}
+            title={isAr ? 'غرفة عمليات إدارة المنصة (مالك المشروع)' : 'Platform Owner Control Room'}
+          >
+            <span>🛡️</span>
+            <span>{isAr ? 'إدارة المنصة' : 'Admin'}</span>
+          </button>
+
           {/* Sign In CTA */}
           <button
             onClick={onLaunchPlatform}

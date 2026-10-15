@@ -10,9 +10,53 @@ import { PGlite } from '@electric-sql/pglite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+try {
+  const rootEnv = path.resolve(__dirname, '../../../../.env');
+  if (fs.existsSync(rootEnv) && typeof process.loadEnvFile === 'function') {
+    process.loadEnvFile(rootEnv);
+  }
+} catch (e) {
+  // Silent fallback
+}
+
 let pool = null;
 let pgliteInstance = null;
 let isInitialized = false;
+
+/**
+ * Resolves production-grade TLS configuration for PostgreSQL connections.
+ * Enforces server certificate validation in production.
+ * Insecure TLS (rejectUnauthorized: false) is strictly rejected in production.
+ */
+export function getPostgresSslConfig() {
+  if (process.env.DATABASE_SSL !== 'true') {
+    return false;
+  }
+
+  // Fatal security violation: Attempting to bypass TLS certificate validation in production
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_INSECURE_TLS === 'true') {
+    throw new Error(
+      '[FATAL SECURITY CONFIGURATION]: Insecure TLS (rejectUnauthorized: false) is strictly prohibited in production. ' +
+      'A trusted Certificate Authority (CA) must be supplied via DATABASE_SSL_CA or DATABASE_SSL_CA_PATH.'
+    );
+  }
+
+  const ssl = {
+    rejectUnauthorized: process.env.ALLOW_INSECURE_TLS === 'true' ? false : true
+  };
+
+  if (process.env.DATABASE_SSL_CA) {
+    ssl.ca = process.env.DATABASE_SSL_CA;
+  } else if (process.env.DATABASE_SSL_CA_PATH) {
+    if (fs.existsSync(process.env.DATABASE_SSL_CA_PATH)) {
+      ssl.ca = fs.readFileSync(process.env.DATABASE_SSL_CA_PATH, 'utf8');
+    } else {
+      throw new Error(`[Database TLS Error]: Specified CA certificate file not found: ${process.env.DATABASE_SSL_CA_PATH}`);
+    }
+  }
+
+  return ssl;
+}
 
 export async function getDb() {
   if (isInitialized) {
@@ -20,6 +64,24 @@ export async function getDb() {
   }
 
   const databaseUrl = process.env.DATABASE_URL;
+
+  // Fatal security guard: Prevent test mode from ever silently connecting to or modifying a production database
+  if (process.env.NODE_ENV === 'test') {
+    if (databaseUrl) {
+      const lowerUrl = databaseUrl.toLowerCase();
+      if (
+        lowerUrl.includes('prod') ||
+        lowerUrl.includes('production') ||
+        process.env.IS_PRODUCTION === 'true' ||
+        process.env.APP_ENV === 'production'
+      ) {
+        throw new Error(
+          '[FATAL SECURITY CONFIGURATION]: Automated test environment attempted to connect to a production database URL. ' +
+          'Tests must use an isolated test database (e.g. ending in _test) or the in-process disposable PGlite engine.'
+        );
+      }
+    }
+  }
 
   if (process.env.NODE_ENV === 'production' && !databaseUrl && !process.env.ALLOW_EMBEDDED_IN_PROD) {
     throw new Error(
@@ -29,13 +91,15 @@ export async function getDb() {
   }
 
   if (databaseUrl && !process.env.USE_EMBEDDED_PG) {
+    const sslConfig = getPostgresSslConfig();
+
     // Live PostgreSQL connection via pg.Pool
     pool = new pg.Pool({
       connectionString: databaseUrl,
       max: parseInt(process.env.DATABASE_MAX_CONNECTIONS || '10', 10),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
-      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false
+      ssl: sslConfig
     });
 
     pool.on('error', (err) => {

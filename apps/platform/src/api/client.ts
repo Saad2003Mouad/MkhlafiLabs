@@ -254,6 +254,64 @@ class ApiClient {
     });
   }
 
+  async getFinancialAnalytics(filters?: { startDate?: string; endDate?: string; branchId?: string }): Promise<{
+    organizationId: string;
+    hasData: boolean;
+    currency: string;
+    summary: {
+      totalRevenue: number;
+      totalExpenses: number;
+      netCashFlow: number;
+      activeLeakage: number;
+      protectedCapital: number;
+      anomalyCount: number;
+      periodVariance?: {
+        currentPeriod: string;
+        previousPeriod: string;
+        absoluteVarianceSAR: number | null;
+        percentageChange: number | null;
+      };
+    };
+    monthlyTrends: Array<{
+      period: string;
+      revenue: number;
+      expenses: number;
+      netFlow: number;
+      transactionCount: number;
+    }>;
+    expenseBreakdown: Array<{
+      account: string;
+      category: string;
+      amount: number;
+      count: number;
+    }>;
+    topVendors: Array<{
+      vendorName: string;
+      totalSpend: number;
+      invoiceCount: number;
+      currency: string;
+    }>;
+    severityDistribution: Array<{
+      severity: string;
+      count: number;
+      totalFlaggedSAR: number;
+    }>;
+    branchBreakdown: Array<{
+      branchNameEn: string;
+      branchNameAr: string;
+      branchCode: string;
+      totalSpend: number;
+      invoiceCount: number;
+    }>;
+  }> {
+    const params = new URLSearchParams();
+    if (filters?.startDate) params.set('startDate', filters.startDate);
+    if (filters?.endDate) params.set('endDate', filters.endDate);
+    if (filters?.branchId) params.set('branchId', filters.branchId);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/records/financial-analytics${qs}`, { method: 'GET' });
+  }
+
   // ── Customer Billing & Subscriptions ──────────────────────────────────────
   async getBillingDetails(): Promise<{
     subscription: any;
@@ -297,6 +355,45 @@ class ApiClient {
     return this.request('/admin/organizations', { method: 'GET' });
   }
 
+  async createTenant(payload: {
+    nameAr: string;
+    nameEn: string;
+    slug: string;
+    currency?: string;
+    timezone?: string;
+    adminEmail: string;
+    adminPassword?: string;
+    adminNameAr: string;
+    adminNameEn: string;
+    packageId?: string;
+    subscriptionMonths?: number;
+  }): Promise<{ success: boolean; organization: any; adminUser: any; subscription: any }> {
+    return this.request('/admin/organizations', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updateTenant(tenantId: string, payload: {
+    nameAr?: string;
+    nameEn?: string;
+    slug?: string;
+    currency?: string;
+    timezone?: string;
+    status?: string;
+  }): Promise<{ success: boolean; organization: any }> {
+    return this.request(`/admin/organizations/${tenantId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deleteTenant(tenantId: string): Promise<{ success: boolean; deleted: any }> {
+    return this.request(`/admin/organizations/${tenantId}`, {
+      method: 'DELETE'
+    });
+  }
+
   async updateTenantStatus(tenantId: string, status: string, reason?: string): Promise<{ success: boolean; organization: any }> {
     return this.request(`/admin/organizations/${tenantId}/status`, {
       method: 'PUT',
@@ -304,16 +401,147 @@ class ApiClient {
     });
   }
 
+  async addManualSubscription(tenantId: string, payload: {
+    packageId: string;
+    durationMonths?: number;
+    amount?: number;
+    paymentMethod?: string;
+    referenceNumber?: string;
+    notes?: string;
+  }): Promise<{ success: boolean; subscription: any }> {
+    return this.request(`/admin/organizations/${tenantId}/subscription`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async confirmTenantPayment(tenantId: string, amount: number, referenceNumber: string, notes = ''): Promise<{ success: boolean; subscription: any }> {
+    return this.request(`/admin/organizations/${tenantId}/confirm-payment`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, referenceNumber, notes })
+    });
+  }
+
   async getAdminUsers(): Promise<{ users: any[] }> {
     return this.request('/admin/users', { method: 'GET' });
+  }
+
+  async createPlatformUser(payload: {
+    email: string;
+    password: string;
+    nameAr: string;
+    nameEn: string;
+    isPlatformAdmin?: boolean;
+  }): Promise<{ success: boolean; user: any }> {
+    return this.request('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updatePlatformUser(userId: string, payload: {
+    nameAr?: string;
+    nameEn?: string;
+    status?: string;
+    isPlatformAdmin?: boolean;
+    newPassword?: string;
+  }): Promise<{ success: boolean; user: any }> {
+    return this.request(`/admin/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deletePlatformUser(userId: string): Promise<{ success: boolean; deletedUser: any }> {
+    return this.request(`/admin/users/${userId}`, {
+      method: 'DELETE'
+    });
   }
 
   async getAdminLeads(): Promise<{ leads: any[] }> {
     return this.request('/admin/leads', { method: 'GET' });
   }
 
+  async updateLeadStatus(leadId: string, status: string, notes = ''): Promise<{ success: boolean; lead: any }> {
+    return this.request(`/admin/leads/${leadId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, notes })
+    });
+  }
+
   async getAdminAuditLogs(): Promise<{ auditLogs: any[] }> {
     return this.request('/admin/audit', { method: 'GET' });
+  }
+
+  async getPackages(): Promise<{ packages: any[] }> {
+    return this.request('/packages', { method: 'GET' });
+  }
+
+  async createPackage(payload: {
+    id: string;
+    nameAr: string;
+    nameEn: string;
+    tierLevel?: number;
+    monthlyPriceSar?: number;
+    annualPriceSar?: number;
+    maxBranches?: number;
+    maxMembers?: number;
+    monthlyRecordLimit?: number;
+    capabilities?: string[];
+  }): Promise<{ success: boolean; package: any }> {
+    return this.request('/admin/packages', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async updatePackage(packageId: string, payload: {
+    nameAr?: string;
+    nameEn?: string;
+    tierLevel?: number;
+    monthlyPriceSar?: number;
+    annualPriceSar?: number;
+    maxBranches?: number;
+    maxMembers?: number;
+    monthlyRecordLimit?: number;
+    capabilities?: string[];
+    isActive?: boolean;
+  }): Promise<{ success: boolean; package: any }> {
+    return this.request(`/admin/packages/${packageId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async deletePackage(packageId: string): Promise<{ success: boolean; message?: string }> {
+    return this.request(`/admin/packages/${packageId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async issueOfflineLicense(payload: {
+    customerSlug: string;
+    customerName: string;
+    tier?: string;
+    edition?: string;
+    maxMembers?: number;
+    licensedCapabilities?: string[];
+  }): Promise<{ success: boolean; license: any }> {
+    return this.request('/admin/licenses/issue', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  async verifyOfflineLicense(licenseData: any): Promise<{ valid: boolean; error?: string; license?: any }> {
+    return this.request('/admin/licenses/verify', {
+      method: 'POST',
+      body: JSON.stringify(licenseData)
+    });
+  }
+
+  async getTenantAuditLogs(): Promise<{ success: boolean; logs: any[] }> {
+    return this.request('/tenant/audit-logs', { method: 'GET' });
   }
 
   // ── Operational Intelligence Engines (Services 03-08) ────────────────────
