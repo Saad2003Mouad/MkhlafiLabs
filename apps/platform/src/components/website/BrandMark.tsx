@@ -26,8 +26,7 @@ export interface BrandMarkProps {
  * The MIKHLAFI LABS monogram.
  */
 export const BrandMark: React.FC<BrandMarkProps> = ({
-  size = 36,
-  glow = false,
+  size = 48,
   className = '',
   style
 }) => {
@@ -39,39 +38,20 @@ export const BrandMark: React.FC<BrandMarkProps> = ({
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: size,
         height: size,
         flexShrink: 0,
         ...style
       }}
     >
-      {glow && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            inset: '-22%',
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(212, 160, 32, 0.45) 0%, transparent 70%)',
-            filter: 'blur(10px)',
-            pointerEvents: 'none'
-          }}
-        />
-      )}
-
       <img
-        src="/brand/favicon-base.png"
+        src="/brand/logo.jpg"
         alt="MIKHLAFI LABS"
-        width={size}
         height={size}
         style={{
-          position: 'relative',
+          height: `${size}px`,
+          width: 'auto',
           display: 'block',
-          width: size,
-          height: size,
-          borderRadius: `${Math.round(size * 0.22)}px`,
-          objectFit: 'contain',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)'
+          objectFit: 'contain'
         }}
       />
     </span>
@@ -80,9 +60,7 @@ export const BrandMark: React.FC<BrandMarkProps> = ({
 
 export interface BrandWordmarkProps {
   locale?: 'ar' | 'en';
-  /** Font size of the Latin wordmark in px. */
   size?: number;
-  /** Renders the Arabic descriptor line beneath the wordmark. */
   withDescriptor?: boolean;
   isOperator?: boolean;
   className?: string;
@@ -90,99 +68,26 @@ export interface BrandWordmarkProps {
 }
 
 /**
- * The MIKHLAFI LABS wordmark. Latin wordmark is locked to Inter with a wide
- * tracking; LABS carries the bronze gradient so the lock-up has one point of
- * colour rather than two competing ones.
+ * Text wordmark has been removed as the brand uses the complete logo.jpg image.
  */
-export const BrandWordmark: React.FC<BrandWordmarkProps> = ({
-  locale = 'ar',
-  size = 17,
-  withDescriptor = true,
-  isOperator = false,
-  className = '',
-  style
-}) => {
-  const isAr = locale === 'ar';
-
-  return (
-    <span
-      className={`mk-wordmark ${className}`}
-      style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, textAlign: 'start', ...style }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: '0.5em' }}>
-        <span
-          style={{
-            fontFamily: 'var(--font-latin)',
-            fontWeight: 800,
-            fontSize: size,
-            letterSpacing: '0.16em',
-            color: 'var(--text-primary)',
-            lineHeight: 1.1
-          }}
-        >
-          MIKHLAFI
-        </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-latin)',
-            fontWeight: 800,
-            fontSize: size,
-            letterSpacing: '0.24em',
-            backgroundImage: 'linear-gradient(100deg, var(--accent-hover), var(--accent-base))',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            paddingInlineStart: '2px'
-          }}
-        >
-          LABS
-        </span>
-      </span>
-
-      {withDescriptor && (
-        <span
-          style={{
-            marginTop: 4,
-            fontSize: Math.max(8.5, size * 0.55),
-            fontWeight: 600,
-            letterSpacing: '0.06em',
-            color: 'var(--text-muted)',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {isOperator
-            ? (isAr ? 'غرفة عمليات المالك' : 'MASTER OPERATOR SUITE')
-            : (isAr ? 'ذكاء القرار المؤسسي' : 'ENTERPRISE DECISION INTELLIGENCE')}
-        </span>
-      )}
-    </span>
-  );
+export const BrandWordmark: React.FC<BrandWordmarkProps> = () => {
+  return null;
 };
 
 export interface BrandLockupProps extends BrandMarkProps, BrandWordmarkProps {}
 
 /**
- * Mark + wordmark, the standard horizontal lock-up.
+ * Standard brand logo lock-up using logo.jpg
  */
 export const BrandLockup: React.FC<BrandLockupProps> = ({
-  size = 36,
-  glow = false,
-  locale = 'ar',
-  withDescriptor = true,
-  isOperator = false,
+  size = 48,
   className = '',
   style
 }) => (
   <span
     className={`mk-lockup ${className}`}
-    style={{ display: 'inline-flex', alignItems: 'center', gap: Math.round(size * 0.32), ...style }}
+    style={{ display: 'inline-flex', alignItems: 'center', ...style }}
   >
-    <BrandMark size={size} glow={glow} />
-    <BrandWordmark
-      locale={locale}
-      size={Math.round(size * 0.47)}
-      withDescriptor={withDescriptor}
-      isOperator={isOperator}
-    />
+    <BrandMark size={size} />
   </span>
 );

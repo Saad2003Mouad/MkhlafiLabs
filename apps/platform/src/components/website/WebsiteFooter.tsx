@@ -4,7 +4,6 @@
 import React from 'react';
 import { LocaleMode } from '../../types';
 import { ROUTES } from '../../router/routes';
-import { BrandMark, BrandWordmark } from './BrandMark';
 
 interface WebsiteFooterProps {
   locale: LocaleMode;
@@ -67,14 +66,16 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
         <div className="site-footer__grid">
           {/* Brand column */}
           <div>
-            <BrandMark size={40} />
-            <div style={{ marginTop: 14 }}>
-              <BrandWordmark
-                locale={locale === 'ar' ? 'ar' : 'en'}
-                size={16}
-                withDescriptor={false}
-              />
-            </div>
+            <img
+              src="/brand/logo.jpg"
+              alt="MIKHLAFI LABS"
+              style={{
+                height: '52px',
+                width: 'auto',
+                display: 'block',
+                objectFit: 'contain'
+              }}
+            />
             <p
               style={{
                 marginTop: 16,

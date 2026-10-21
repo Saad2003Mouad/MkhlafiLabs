@@ -16,7 +16,6 @@ import {
 } from '../Icons';
 import { ROUTES } from '../../router/routes';
 import { usePublishedEngines } from '../../hooks/publishedEngines';
-import { BrandMark, BrandWordmark } from './BrandMark';
 
 interface WebsiteHeaderProps {
   locale: LocaleMode;
@@ -133,8 +132,17 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           className="site-header__brand"
           aria-label="MIKHLAFI LABS"
         >
-          <BrandMark size={40} glow />
-          <BrandWordmark locale={isAr ? 'ar' : 'en'} size={17} />
+          <img
+            src="/brand/logo.jpg"
+            alt="MIKHLAFI LABS"
+            style={{
+              height: '46px',
+              width: 'auto',
+              maxHeight: '46px',
+              display: 'block',
+              objectFit: 'contain'
+            }}
+          />
         </a>
 
         {/* Desktop nav */}
