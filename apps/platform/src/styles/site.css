@@ -41,14 +41,15 @@
   position: sticky;
   top: 0;
   z-index: 600;
+  background: transparent;
   border-bottom: 1px solid transparent;
-  transition: background var(--transition-smooth), border-color var(--transition-smooth);
+  transition: background var(--transition-smooth), border-color var(--transition-smooth), backdrop-filter var(--transition-smooth);
 }
 
 .site-header--scrolled {
   background: var(--bg-surface-glass);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
   border-bottom-color: var(--border-subtle);
 }
 
@@ -305,7 +306,7 @@
   position: relative;
   overflow: hidden;
   padding-block: clamp(56px, 8vw, 104px) clamp(48px, 6vw, 84px);
-  border-bottom: 1px solid var(--border-subtle);
+  /* No border-bottom — sections flow seamlessly on a single shared canvas */
 }
 
 .site-hero__inner {
@@ -643,7 +644,9 @@
    -------------------------------------------------------------------------- */
 
 .site-section { padding-block: clamp(64px, 9vw, 116px); position: relative; }
-.site-section--alt { background: var(--bg-surface-subtle); border-block: 1px solid var(--border-subtle); }
+/* site-section--alt no longer adds a contrasting background; all sections share
+   the same ambient canvas. The class is kept for safe progressive enhancement. */
+.site-section--alt { background: transparent; }
 
 .site-section__head { max-width: 720px; margin-bottom: clamp(40px, 5vw, 64px); }
 .site-section__head--center { margin-inline: auto; text-align: center; }
@@ -870,11 +873,15 @@
 .industry-switch__btn.is-active { border-color: var(--accent-base); background: var(--accent-subtle); color: var(--accent-light); font-weight: 600; }
 
 /* --------------------------------------------------------------------------
-   FAQ
+   FAQ accordion
+   The trigger is a <button> that ALWAYS stays visible — only the answer panel
+   below it collapses. Overflow is never set on the trigger itself.
    -------------------------------------------------------------------------- */
 
 .faq-list { border-top: 1px solid var(--border-subtle); }
 .faq-row { border-bottom: 1px solid var(--border-subtle); }
+
+/* The trigger row: question text + chevron icon. Always visible. */
 .faq-row__trigger {
   width: 100%;
   display: flex;
@@ -886,16 +893,40 @@
   font-size: 15.5px;
   font-weight: 500;
   color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  /* IMPORTANT: never set overflow:hidden here — it would clip the button */
 }
-.faq-row__trigger svg { flex-shrink: 0; color: var(--text-tertiary); transition: transform var(--transition-smooth); }
-.faq-row.is-open .faq-row__trigger svg { transform: rotate(180deg); color: var(--accent-light); }
+.faq-row__trigger span {
+  /* Question text: shrinks but never disappears */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.faq-row__trigger svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-smooth), color var(--transition-smooth);
+}
+.faq-row.is-open .faq-row__trigger svg {
+  transform: rotate(180deg);
+  color: var(--accent-light);
+}
+
+/* The collapsible answer panel — only this element is hidden/shown */
 .faq-row__answer {
   overflow: hidden;
   max-height: 0;
-  transition: max-height var(--transition-smooth);
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .faq-row.is-open .faq-row__answer { max-height: 340px; }
-.faq-row__answer-inner { padding: 0 4px 24px; font-size: 14px; line-height: 1.75; color: var(--text-secondary); max-width: 72ch; }
+.faq-row__answer-inner {
+  padding: 0 4px 24px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+  max-width: 72ch;
+}
 
 /* --------------------------------------------------------------------------
    CTA band

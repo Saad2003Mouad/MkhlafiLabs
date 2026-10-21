@@ -17,7 +17,7 @@
   position: relative;
   overflow: hidden;
   padding-block: clamp(56px, 8vw, 104px) clamp(48px, 6vw, 84px);
-  border-bottom: 1px solid var(--border-subtle);
+  /* No border-bottom — sections share one seamless canvas */
   background: transparent;
 }
 
@@ -1068,8 +1068,8 @@
 }
 
 .pp-section--muted {
-  background: var(--bg-surface-subtle);
-  border-block: 1px solid var(--border-subtle);
+  /* Background removed: all sections now share the same ambient canvas */
+  background: transparent;
 }
 
 .pp-section__head {
