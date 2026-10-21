@@ -40,6 +40,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   const isAr = locale === 'ar';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [enginesOpen, setEnginesOpen] = useState(false);
+  const [pinnedByClick, setPinnedByClick] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<number | null>(null);
@@ -54,6 +55,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
       }
       setMobileMenuOpen(false);
       setEnginesOpen(false);
+      setPinnedByClick(false);
     },
     [onNavigate]
   );
@@ -70,10 +72,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     const handlePointerDown = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setEnginesOpen(false);
+        setPinnedByClick(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setEnginesOpen(false);
+      if (event.key === 'Escape') {
+        setEnginesOpen(false);
+        setPinnedByClick(false);
+      }
     };
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -83,15 +89,29 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
     };
   }, []);
 
-  // A short close delay keeps the panel from flickering when the pointer travels
-  // between the trigger and the panel.
+  // Comfortable grace delay (350ms) prevents the panel from vanishing when the pointer
+  // travels between trigger and panel or moves diagonally.
   const openEngines = () => {
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
     setEnginesOpen(true);
   };
+
   const scheduleCloseEngines = () => {
+    if (pinnedByClick) return; // Kept open if pinned by user click
     if (closeTimer.current) window.clearTimeout(closeTimer.current);
-    closeTimer.current = window.setTimeout(() => setEnginesOpen(false), 120);
+    closeTimer.current = window.setTimeout(() => {
+      setEnginesOpen(false);
+    }, 350);
+  };
+
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    setEnginesOpen((prev) => {
+      const next = !prev;
+      setPinnedByClick(next);
+      return next;
+    });
   };
 
   useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
@@ -127,7 +147,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           >
             <button
               type="button"
-              onClick={() => setEnginesOpen((open) => !open)}
+              onClick={handleTriggerClick}
               className={`site-nav__link site-nav__trigger ${enginesOpen ? 'is-active' : ''}`}
               aria-expanded={enginesOpen}
               aria-haspopup="true"
@@ -136,10 +156,14 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
               <IconChevronDown size={12} />
             </button>
 
-            <div className={`site-index-anchor ${enginesOpen ? 'is-open' : ''}`}>
+            <div
+              className={`site-index-anchor ${enginesOpen ? 'is-open' : ''}`}
+              onMouseEnter={openEngines}
+              onMouseLeave={scheduleCloseEngines}
+            >
               <div className="site-index" role="menu">
                 <div className="site-index__head">
-                  <span>{isAr ? 'محركات الذكاء التشغيلية' : 'Operational intelligence engines'}</span>
+                  <span>{isAr ? 'محركات الذكاء التشغيلي' : 'Operational Intelligence Engines'}</span>
                   <span className="ml-mono site-index__count">{String(engines.length).padStart(2, '0')}</span>
                 </div>
 
@@ -151,14 +175,13 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                       href={`/services/${engine.id}`}
                       onClick={(e) => handleLinkClick(e, `/services/${engine.id}`)}
                       className="site-index__item"
-                      style={{ '--i': index } as React.CSSProperties}
                     >
                       <span className="ml-mono site-index__ordinal">
                         {String(index + 1).padStart(2, '0')}
                       </span>
                       <span className="site-index__title">{isAr ? engine.titleAr : engine.titleEn}</span>
                       <span className="site-index__chevron" aria-hidden="true">
-                        <IconArrowRight size={12} />
+                        <IconArrowRight size={11} />
                       </span>
                     </a>
                   ))}
@@ -169,7 +192,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
                   onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)}
                   className="site-index__foot"
                 >
-                  <span>{isAr ? 'كل المحركات والحلول' : 'All engines and solutions'}</span>
+                  <span>{isAr ? 'استعراض كافة الحلول' : 'View all solutions'}</span>
                   <IconArrowRight size={12} />
                 </a>
               </div>
