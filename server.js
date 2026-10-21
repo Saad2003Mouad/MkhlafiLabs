@@ -74,38 +74,40 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // ── 2. Assets (/assets/*) ────────────────────────────────────────────────
-  if (urlPath.startsWith('/assets/')) {
-    const assetSub = urlPath.slice('/assets/'.length);
-    const safeDistBase = path.resolve(PLATFORM_DIST, 'assets');
-    const safeDistPath = path.resolve(safeDistBase, '.' + path.normalize('/' + assetSub));
-    const safeRootBase = path.resolve(__dirname, 'assets');
-    const safeRootPath = path.resolve(safeRootBase, '.' + path.normalize('/' + assetSub));
+  // ── 2. Static Assets (/assets/*, /favicon.*, root static files) ─────────
+  if (urlPath !== '/') {
+    // Check if the URL points to a physical file inside PLATFORM_DIST (e.g. /favicon.svg, /assets/...)
+    const safeDistBase = path.resolve(PLATFORM_DIST);
+    const safeDistPath = path.resolve(safeDistBase, '.' + path.normalize('/' + urlPath));
 
-    // Reject any path escaping the allowed asset directories
-    if (!safeDistPath.startsWith(safeDistBase) && !safeRootPath.startsWith(safeRootBase)) {
-      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Access Denied: Path traversal detected.');
-      return;
+    if (safeDistPath.startsWith(safeDistBase)) {
+      try {
+        if (fs.existsSync(safeDistPath) && fs.statSync(safeDistPath).isFile()) {
+          serveFile(res, safeDistPath);
+          return;
+        }
+      } catch (e) {
+        // Fall through
+      }
     }
 
-    fs.stat(safeDistPath, (err, stats) => {
-      if (!err && stats.isFile() && safeDistPath.startsWith(safeDistBase)) {
-        serveFile(res, safeDistPath);
-        return;
-      }
+    // Fallback for root /assets directory
+    if (urlPath.startsWith('/assets/')) {
+      const assetSub = urlPath.slice('/assets/'.length);
+      const safeRootBase = path.resolve(__dirname, 'assets');
+      const safeRootPath = path.resolve(safeRootBase, '.' + path.normalize('/' + assetSub));
 
-      // Root images/assets fallback
-      fs.stat(safeRootPath, (rootErr, rootStats) => {
-        if (!rootErr && rootStats.isFile() && safeRootPath.startsWith(safeRootBase)) {
-          serveFile(res, safeRootPath);
-        } else {
-          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-          res.end('Asset Not Found');
+      if (safeRootPath.startsWith(safeRootBase)) {
+        try {
+          if (fs.existsSync(safeRootPath) && fs.statSync(safeRootPath).isFile()) {
+            serveFile(res, safeRootPath);
+            return;
+          }
+        } catch (e) {
+          // Fall through
         }
-      });
-    });
-    return;
+      }
+    }
   }
 
   // ── 3. Main React Application Routes (SPA) ───────────────────────────────

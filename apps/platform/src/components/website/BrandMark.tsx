@@ -11,7 +11,7 @@
 // mark does too. Earlier artwork mixed cyan/emerald into a bronze interface, which
 // read as a stock asset rather than a brand.
 
-import React, { useId } from 'react';
+import React from 'react';
 
 export interface BrandMarkProps {
   /** Rendered square size in px. The artwork is drawn on a 40×40 grid. */
@@ -31,11 +31,6 @@ export const BrandMark: React.FC<BrandMarkProps> = ({
   className = '',
   style
 }) => {
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const plate = `mk-plate-${uid}`;
-  const ink = `mk-ink-${uid}`;
-  const gloss = `mk-gloss-${uid}`;
-
   return (
     <span
       className={`mk-mark ${className}`}
@@ -57,74 +52,28 @@ export const BrandMark: React.FC<BrandMarkProps> = ({
             position: 'absolute',
             inset: '-22%',
             borderRadius: '50%',
-            background: 'radial-gradient(circle, var(--accent-glow) 0%, transparent 68%)',
+            background: 'radial-gradient(circle, rgba(212, 160, 32, 0.45) 0%, transparent 70%)',
             filter: 'blur(10px)',
             pointerEvents: 'none'
           }}
         />
       )}
 
-      <svg
+      <img
+        src="/brand/favicon-base.png"
+        alt="MIKHLAFI LABS"
         width={size}
         height={size}
-        viewBox="0 0 40 40"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label="MIKHLAFI LABS"
-        style={{ position: 'relative', display: 'block' }}
-      >
-        <defs>
-          {/* Plate body: obsidian, faintly lit from the top-left. */}
-          <linearGradient id={plate} x1="0%" y1="0%" x2="70%" y2="100%">
-            <stop offset="0%" stopColor="#22222A" />
-            <stop offset="55%" stopColor="#141418" />
-            <stop offset="100%" stopColor="#09090B" />
-          </linearGradient>
-
-          {/* The single bronze ink used by the monogram and the plate rim. */}
-          <linearGradient id={ink} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="var(--accent-hover, #E3C088)" />
-            <stop offset="46%" stopColor="var(--accent-light, #D6AB6A)" />
-            <stop offset="100%" stopColor="var(--accent-base, #B8894A)" />
-          </linearGradient>
-
-          {/* Top-edge gloss, so the plate reads as a polished surface. */}
-          <linearGradient id={gloss} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.10" />
-            <stop offset="55%" stopColor="#ffffff" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {/* Plate */}
-        <rect
-          x="0.75"
-          y="0.75"
-          width="38.5"
-          height="38.5"
-          rx="12"
-          fill={`url(#${plate})`}
-          stroke="var(--border-glow)"
-          strokeWidth="1"
-        />
-        <rect x="0.75" y="0.75" width="38.5" height="38.5" rx="12" fill={`url(#${gloss})`} />
-
-        {/* Strata — the three operational layers, stated as hairlines rather than boxes. */}
-        <path d="M9 14.25H31" stroke="var(--accent-light)" strokeOpacity="0.16" strokeWidth="1" strokeLinecap="round" />
-        <path d="M9 25.75H31" stroke="var(--accent-light)" strokeOpacity="0.16" strokeWidth="1" strokeLinecap="round" />
-
-        {/* Monogram plume */}
-        <path
-          d="M11.4 29.2V12.1L20 21.3L28.6 12.1V29.2"
-          stroke={`url(#${ink})`}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {/* The decisive node at the apex of the plume. */}
-        <circle cx="20" cy="21.3" r="1.9" fill="var(--accent-hover)" />
-      </svg>
+        style={{
+          position: 'relative',
+          display: 'block',
+          width: size,
+          height: size,
+          borderRadius: `${Math.round(size * 0.22)}px`,
+          objectFit: 'contain',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.4)'
+        }}
+      />
     </span>
   );
 };
