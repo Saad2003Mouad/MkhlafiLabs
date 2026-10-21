@@ -16,6 +16,7 @@ import {
   IconDownload,
   IconX
 } from '../Icons';
+import { SandboxNotice } from '../common/SandboxNotice';
 
 interface PredictiveRiskWorkbenchProps {
   locale: LocaleMode;
@@ -198,33 +199,7 @@ export const PredictiveRiskWorkbench: React.FC<PredictiveRiskWorkbenchProps> = (
         gap: '0'
       }}
     >
-      {/* Public Page Sandbox Header */}
-      {isEmbeddedInPublicPage && (
-        <div
-          style={{
-            background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.08))',
-            padding: '10px 24px',
-            borderBottom: '1px solid var(--border-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '8px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            <span style={{ fontSize: '14px' }}>⚡</span>
-            <span>
-              {isAr
-                ? 'رادار إنذار مبكر تفاعلي حي — يمكنك اختبار حساسية الصدمات التشغيلية ومحاكاة السيولة النقدية لـ 13 أسبوعاً قادماً.'
-                : 'Interactive Early Warning Radar — Test operational stress scenarios and simulate rolling 13-week cash runway.'}
-            </span>
-          </div>
-          <span style={{ fontSize: '11px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#F59E0B' }}>
-            RADAR_TELEMETRY_V2.4
-          </span>
-        </div>
-      )}
+      <SandboxNotice locale={locale} variant={isEmbeddedInPublicPage ? 'public' : 'app'} />
 
       {/* Workbench Header & Scenario Bar */}
       <div

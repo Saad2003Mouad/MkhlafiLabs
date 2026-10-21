@@ -1,9 +1,17 @@
-// MIKHLAFI LABS — Enterprise Authentication Modal & Drawer
-// Secure login, registration, and active tenant switching dialog
+// MIKHLAFI LABS — Enterprise Authentication Modal
+// Secure sign-in and organization registration dialog. All authentication goes
+// through the real API; loading, error, and success states reflect its response.
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LocaleMode } from '../../types';
 import { api, UserProfile, TenantContext } from '../../api/client';
+import {
+  IconAlert,
+  IconCheckCircle,
+  IconLock,
+  IconShield,
+  IconX
+} from '../Icons';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,20 +37,95 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [orgNameAr, setOrgNameAr] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const emailRef = useRef<HTMLInputElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const dismissedRef = useRef(false);
+
+  // Focus the first field whenever the dialog opens or the mode changes
+  useEffect(() => {
+    if (isOpen) {
+      const timer = window.setTimeout(() => emailRef.current?.focus(), 60);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [isOpen, mode]);
+
+  // Escape closes the dialog
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') requestClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Reset transient state when the dialog is (re)opened
+  useEffect(() => {
+    if (isOpen) {
+      dismissedRef.current = false;
+      setErrorMessage(null);
+      setIsSuccess(false);
+      setIsLoading(false);
+    }
+  }, [isOpen]);
+
+  // Never leave a pending confirmation behind
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   if (!isOpen) return null;
 
+  const resolveErrorMessage = (err: unknown): string => {
+    const msg = err instanceof Error ? err.message.trim() : '';
+    if (!msg || msg === 'Failed to fetch' || msg.startsWith('NetworkError')) {
+      return isAr
+        ? 'تعذّر الوصول إلى الخادم. تحقّق من اتصالك بالشبكة وحاول مرة أخرى.'
+        : 'Could not reach the server. Check your connection and try again.';
+    }
+    return msg;
+  };
+
+  // User-initiated dismissal (close button, overlay, Escape)
+  const requestClose = () => {
+    dismissedRef.current = true;
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    onClose();
+  };
+
+  const completeAuth = (user: UserProfile, tenant: TenantContext | null) => {
+    setIsLoading(false);
+    setIsSuccess(true);
+    // Hold the confirmation briefly, then hand the session to the application
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
+      if (dismissedRef.current) return;
+      onAuthSuccess(user, tenant);
+      onClose();
+    }, 750);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading || isSuccess) return;
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
       if (mode === 'login') {
         const res = await api.login(email, password);
-        onAuthSuccess(res.user, res.activeTenant);
-        onClose();
+        completeAuth(res.user, res.activeTenant);
       } else {
         await api.register({
           email,
@@ -52,343 +135,278 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           orgNameEn,
           orgNameAr: orgNameAr || orgNameEn
         });
-        // Now fetch active tenant
         const meRes = await api.getMe();
-        onAuthSuccess(meRes.user, meRes.tenant);
-        onClose();
+        completeAuth(meRes.user, meRes.tenant);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please verify credentials.');
-    } finally {
+    } catch (err) {
+      setErrorMessage(resolveErrorMessage(err));
       setIsLoading(false);
     }
   };
 
-  const handleDemoFill = (demoRole: 'owner' | 'new') => {
-    if (demoRole === 'owner') {
-      setMode('login');
-      setEmail('saad@mikhlafi-labs.com');
-      setPassword('MikhlafiSecure2026!');
-    } else {
-      setMode('register');
-      const stamp = Date.now().toString(36).substring(4);
-      setEmail(`executive.${stamp}@alyusr-holding.sa`);
-      setPassword('MikhlafiEnterprise2026!');
-      setNameEn('Dr. Sultan Al-Ghamdi');
-      setNameAr('د. سلطان الغامدي');
-      setOrgNameEn('Al-Yusr Contracting & Logistics');
-      setOrgNameAr('مجموعة اليسر للمقاولات والخدمات اللوجستية');
-    }
+  const switchMode = (next: 'login' | 'register') => {
+    if (isLoading || isSuccess) return;
+    setMode(next);
+    setErrorMessage(null);
   };
+
+  const busy = isLoading || isSuccess;
+
+  const secureLabel = isAr ? 'جلسة مؤسسية مشفرة' : 'Secure enterprise session';
+  const closeLabel = isAr ? 'إغلاق' : 'Close';
+  const modeGroupLabel = isAr ? 'طريقة المصادقة' : 'Authentication mode';
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'rgba(5, 7, 10, 0.85)',
-        backdropFilter: 'blur(8px)',
-        padding: '1.5rem'
+      className="ml-modal-overlay"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) requestClose();
       }}
     >
       <div
-        style={{
-          width: '100%',
-          maxWidth: '520px',
-          background: 'var(--surface-primary, #0c1017)',
-          border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
-          borderRadius: '16px',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7)',
-          overflow: 'hidden'
-        }}
+        className="ml-modal auth-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div
-          style={{
-            padding: '1.5rem 2rem',
-            borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255, 255, 255, 0.02)'
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
-              <div
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: 'var(--accent-emerald, #10b981)',
-                  boxShadow: '0 0 10px var(--accent-emerald, #10b981)'
-                }}
-              />
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  letterSpacing: '0.12em',
-                  color: 'var(--accent-emerald, #10b981)',
-                  fontWeight: 700,
-                  textTransform: 'uppercase'
-                }}
-              >
-                {isAr ? 'مصادقة السيرفر المشفرة' : 'Secure Enterprise Session'}
-              </span>
-            </div>
-            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#f3f4f6' }}>
+        {/* Head */}
+        <div className="auth-modal__head">
+          <div className="auth-modal__headings">
+            <span className="ml-eyebrow">
+              <IconLock size={13} />
+              {secureLabel}
+            </span>
+            <h2 className="auth-modal__title" id="auth-modal-title">
               {mode === 'login'
                 ? (isAr ? 'تسجيل الدخول إلى المنصة' : 'Sign in to MIKHLAFI LABS')
-                : (isAr ? 'إنشاء حساب ومؤسسة جديدة' : 'Register New Tenant & Account')}
-            </h3>
+                : (isAr ? 'إنشاء حساب ومؤسسة جديدة' : 'Register a new organization')}
+            </h2>
           </div>
           <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#9ca3af',
-              cursor: 'pointer',
-              fontSize: '1.5rem',
-              lineHeight: 1
-            }}
+            type="button"
+            className="ml-icon-btn auth-modal__close"
+            onClick={requestClose}
+            aria-label={closeLabel}
+            title={closeLabel}
           >
-            ×
+            <IconX size={16} />
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))' }}>
-          <button
-            type="button"
-            onClick={() => setMode('login')}
-            style={{
-              flex: 1,
-              padding: '0.85rem',
-              background: mode === 'login' ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
-              color: mode === 'login' ? 'var(--accent-emerald, #10b981)' : '#9ca3af',
-              border: 'none',
-              borderBottom: mode === 'login' ? '2px solid var(--accent-emerald, #10b981)' : 'none',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            {isAr ? 'تسجيل الدخول' : 'Sign In'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('register')}
-            style={{
-              flex: 1,
-              padding: '0.85rem',
-              background: mode === 'register' ? 'rgba(16, 185, 129, 0.08)' : 'transparent',
-              color: mode === 'register' ? 'var(--accent-emerald, #10b981)' : '#9ca3af',
-              border: 'none',
-              borderBottom: mode === 'register' ? '2px solid var(--accent-emerald, #10b981)' : 'none',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            {isAr ? 'تسجيل مؤسسة جديدة' : 'Register Organization'}
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} style={{ padding: '2rem' }}>
-          {errorMessage && (
-            <div
-              style={{
-                marginBottom: '1.25rem',
-                padding: '0.85rem 1rem',
-                borderRadius: '8px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#f87171',
-                fontSize: '0.88rem'
-              }}
+        {/* Mode switch */}
+        <div className="auth-modal__tabs">
+          <div className="ml-segmented" role="group" aria-label={modeGroupLabel}>
+            <button
+              type="button"
+              className={`ml-segmented__item ${mode === 'login' ? 'is-active' : ''}`}
+              aria-pressed={mode === 'login'}
+              onClick={() => switchMode('login')}
             >
-              {errorMessage}
+              {isAr ? 'تسجيل الدخول' : 'Sign in'}
+            </button>
+            <button
+              type="button"
+              className={`ml-segmented__item ${mode === 'register' ? 'is-active' : ''}`}
+              aria-pressed={mode === 'register'}
+              onClick={() => switchMode('register')}
+            >
+              {isAr ? 'حساب جديد' : 'New account'}
+            </button>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form className="auth-modal__body" onSubmit={handleSubmit}>
+          {errorMessage && (
+            <div className="auth-alert auth-alert--danger" role="alert">
+              <span className="auth-alert__icon" aria-hidden="true"><IconAlert size={15} /></span>
+              <span className="auth-alert__text">{errorMessage}</span>
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.82rem', color: '#9ca3af', marginBottom: '0.35rem' }}>
-                {isAr ? 'البريد الإلكتروني المؤسسي' : 'Corporate Email'}
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="executive@company.com"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '8px',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: '#f9fafb',
-                  fontSize: '0.92rem'
-                }}
-              />
+          {isSuccess && (
+            <div className="auth-alert auth-alert--success" role="status">
+              <span className="auth-alert__icon" aria-hidden="true"><IconCheckCircle size={15} /></span>
+              <span className="auth-alert__text">
+                {mode === 'login'
+                  ? (isAr ? 'تم التحقق من الجلسة… جارٍ التحويل.' : 'Session verified. Redirecting you now…')
+                  : (isAr ? 'تم إنشاء الحساب والتحقق من الجلسة… جارٍ التحويل.' : 'Account created and session verified. Redirecting you now…')}
+              </span>
             </div>
+          )}
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.82rem', color: '#9ca3af', marginBottom: '0.35rem' }}>
-                {isAr ? 'كلمة المرور المشفرة' : 'Password (min 8 chars)'}
-              </label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  borderRadius: '8px',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: '#f9fafb',
-                  fontSize: '0.92rem'
-                }}
-              />
-            </div>
-
-            {mode === 'register' && (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', color: '#9ca3af', marginBottom: '0.35rem' }}>
-                      {isAr ? 'الاسم بالإنجليزية' : 'Full Name (English)'}
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={nameEn}
-                      onChange={e => setNameEn(e.target.value)}
-                      placeholder="Fahad Al-Maktoum"
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem 1rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#f9fafb',
-                        fontSize: '0.92rem'
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', color: '#9ca3af', marginBottom: '0.35rem' }}>
-                      {isAr ? 'الاسم بالعربية' : 'Full Name (Arabic)'}
-                    </label>
-                    <input
-                      type="text"
-                      value={nameAr}
-                      onChange={e => setNameAr(e.target.value)}
-                      placeholder="فهد المكتوم"
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem 1rem',
-                        borderRadius: '8px',
-                        background: 'rgba(255, 255, 255, 0.04)',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: '#f9fafb',
-                        fontSize: '0.92rem'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', color: '#9ca3af', marginBottom: '0.35rem' }}>
-                    {isAr ? 'اسم المؤسسة / الشركة (بالإنجليزية)' : 'Organization Name (English)'}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={orgNameEn}
-                    onChange={e => setOrgNameEn(e.target.value)}
-                    placeholder="Al-Khobar Infrastructure Ltd."
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem 1rem',
-                      borderRadius: '8px',
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      color: '#f9fafb',
-                      fontSize: '0.92rem'
-                    }}
-                  />
-                </div>
-              </>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              style={{
-                marginTop: '0.5rem',
-                padding: '0.85rem',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#fff',
-                fontWeight: 600,
-                fontSize: '0.95rem',
-                border: 'none',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
-                opacity: isLoading ? 0.7 : 1,
-                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)'
-              }}
-            >
-              {isLoading
-                ? (isAr ? 'جاري التحقق والمصادقة...' : 'Authenticating...')
-                : mode === 'login'
-                ? (isAr ? 'تسجيل الدخول الفوري' : 'Sign In to Workspace')
-                : (isAr ? 'إنشاء حساب والبدء فوراً' : 'Create Account & Launch')}
-            </button>
+          <div className="ml-field">
+            <label className="ml-label" htmlFor="auth-modal-email">
+              {isAr ? 'البريد الإلكتروني المؤسسي' : 'Work email address'}
+            </label>
+            <input
+              ref={emailRef}
+              id="auth-modal-email"
+              name="email"
+              type="email"
+              required
+              autoComplete="username"
+              inputMode="email"
+              spellCheck={false}
+              dir="ltr"
+              className="ml-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+              disabled={busy}
+            />
           </div>
 
-          {/* Quick Demo Credentials Autofill */}
-          <div
-            style={{
-              marginTop: '1.5rem',
-              paddingTop: '1.25rem',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}
-          >
-            <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>
-              {isAr ? 'تجربة سريعة:' : 'Quick Demo:'}
-            </span>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="ml-field">
+            <label className="ml-label" htmlFor="auth-modal-password">
+              {isAr ? 'كلمة المرور' : 'Password'}
+            </label>
+            <div className="auth-input-wrap">
+              <input
+                id="auth-modal-password"
+                name={mode === 'register' ? 'new-password' : 'current-password'}
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={mode === 'register' ? 8 : undefined}
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                className="ml-input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                dir="ltr"
+                disabled={busy}
+              />
               <button
                 type="button"
-                onClick={() => handleDemoFill('new')}
-                style={{
-                  fontSize: '0.75rem',
-                  padding: '0.35rem 0.65rem',
-                  borderRadius: '6px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: '#9ca3af',
-                  cursor: 'pointer'
-                }}
+                className="auth-input-wrap__toggle"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-pressed={showPassword}
+                disabled={busy}
               >
-                {isAr ? 'تعبئة مؤسسة جديدة' : 'New Org Template'}
+                {showPassword ? (isAr ? 'إخفاء' : 'Hide') : (isAr ? 'إظهار' : 'Show')}
               </button>
             </div>
+            {mode === 'register' && (
+              <span className="ml-hint">
+                {isAr ? 'ثمانية خانات على الأقل' : 'At least 8 characters'}
+              </span>
+            )}
           </div>
+
+          {mode === 'register' && (
+            <>
+              <div className="auth-grid-2">
+                <div className="ml-field">
+                  <label className="ml-label" htmlFor="auth-modal-name-en">
+                    {isAr ? 'الاسم (بالإنجليزية)' : 'Full name (EN)'}
+                  </label>
+                  <input
+                    id="auth-modal-name-en"
+                    name="name"
+                    type="text"
+                    required
+                    autoComplete="name"
+                    className="ml-input"
+                    value={nameEn}
+                    onChange={(e) => setNameEn(e.target.value)}
+                    placeholder="Rana Al-Otaibi"
+                    disabled={busy}
+                  />
+                </div>
+
+                <div className="ml-field">
+                  <label className="ml-label" htmlFor="auth-modal-name-ar">
+                    {isAr ? 'الاسم (بالعربية)' : 'Full name (AR)'}
+                  </label>
+                  <input
+                    id="auth-modal-name-ar"
+                    name="nameAr"
+                    type="text"
+                    autoComplete="name"
+                    className="ml-input"
+                    value={nameAr}
+                    onChange={(e) => setNameAr(e.target.value)}
+                    placeholder="رنا العتيبي"
+                    disabled={busy}
+                  />
+                </div>
+              </div>
+
+              <div className="ml-field">
+                <label className="ml-label" htmlFor="auth-modal-org-en">
+                  {isAr ? 'اسم المؤسسة (بالإنجليزية)' : 'Organization name (EN)'}
+                </label>
+                <input
+                  id="auth-modal-org-en"
+                  name="organization"
+                  type="text"
+                  required
+                  autoComplete="organization"
+                  className="ml-input"
+                  value={orgNameEn}
+                  onChange={(e) => setOrgNameEn(e.target.value)}
+                  placeholder="Northbridge Contracting Group"
+                  disabled={busy}
+                />
+              </div>
+
+              <div className="ml-field">
+                <label className="ml-label" htmlFor="auth-modal-org-ar">
+                  {isAr ? 'اسم المؤسسة (بالعربية)' : 'Organization name (AR)'}
+                </label>
+                <input
+                  id="auth-modal-org-ar"
+                  name="organizationAr"
+                  type="text"
+                  autoComplete="organization"
+                  className="ml-input"
+                  value={orgNameAr}
+                  onChange={(e) => setOrgNameAr(e.target.value)}
+                  placeholder="مجموعة شمال للمقاولات"
+                  disabled={busy}
+                />
+              </div>
+            </>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="ml-btn ml-btn--primary ml-btn--lg ml-btn--block auth-submit"
+          >
+            {isLoading && (
+              <>
+                <span className="auth-spinner" aria-hidden="true" />
+                <span>{isAr ? 'جارٍ التحقق…' : 'Verifying…'}</span>
+              </>
+            )}
+            {!isLoading && isSuccess && (
+              <>
+                <IconCheckCircle size={16} />
+                <span>{isAr ? 'تم التحقق' : 'Verified'}</span>
+              </>
+            )}
+            {!isLoading && !isSuccess && (
+              <span>
+                {mode === 'login'
+                  ? (isAr ? 'تسجيل الدخول' : 'Sign in')
+                  : (isAr ? 'إنشاء الحساب والبدء' : 'Create account & start')}
+              </span>
+            )}
+          </button>
         </form>
+
+        {/* Foot */}
+        <div className="auth-modal__foot">
+          <span className="auth-trust__icon" aria-hidden="true"><IconShield size={14} /></span>
+          <span>
+            {isAr
+              ? 'جلسات مشفرة وعزل متعدد المستأجرين'
+              : 'Encrypted sessions · multi-tenant isolation'}
+          </span>
+        </div>
       </div>
     </div>
   );

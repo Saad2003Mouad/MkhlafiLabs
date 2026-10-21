@@ -1,6 +1,15 @@
+// MIKHLAFI LABS — About & Sovereign Vision Page (/about)
+// Luxury Enterprise Aesthetic, Forensic Laboratory Pillars & Visual Command Cockpit Showcase
+
 import React from 'react';
 import { LocaleMode } from '../../types';
-import { IconArrowRight, IconServer, IconCheck } from '../../components/Icons';
+import {
+  IconArrowRight,
+  IconShield,
+  IconServer,
+  IconCheckCircle,
+  IconLayers
+} from '../../components/Icons';
 
 interface AboutPageProps {
   locale: LocaleMode;
@@ -10,233 +19,253 @@ interface AboutPageProps {
 export const AboutPage: React.FC<AboutPageProps> = ({ locale, onNavigate }) => {
   const isAr = locale === 'ar';
 
+  const principles = [
+    {
+      icon: <IconShield size={22} />,
+      titleAr: 'أدلة حتمية وقابلة للتتبع',
+      titleEn: 'Deterministic, traceable evidence',
+      descAr: 'كل نتيجة مرتبطة بسجلها المصدر مباشرة، بلا تخمين أو افتراضات إحصائية.',
+      descEn: 'Every finding is anchored to its original source record — no speculation.'
+    },
+    {
+      icon: <IconLayers size={22} />,
+      titleAr: 'محايد على مستوى القطاعات',
+      titleEn: 'Cross-industry neutral',
+      descAr: 'يعمل في المقاولات والتصنيع واللوجستيات والتجزئة والخدمات ومجموعات الأعمال.',
+      descEn: 'Designed for contracting, manufacturing, logistics, retail, services, and holding groups.'
+    },
+    {
+      icon: <IconServer size={22} />,
+      titleAr: 'نشر سيادي وغير تطفلي',
+      titleEn: 'Sovereign, non-invasive',
+      descAr: 'يدعم النشر السحابي السيادي داخل السعودية أو النشر المحلي المغلق (Air-Gapped).',
+      descEn: 'Sovereign deployment in KSA or air-gapped on-prem, with read-only integration.'
+    },
+    {
+      icon: <IconCheckCircle size={22} />,
+      titleAr: 'فصل صارم للبيانات بين الكيانات',
+      titleEn: 'Strict tenant isolation',
+      descAr: 'عزل على مستوى الصفوف وحماية صارمة للحدود بين المؤسسات والكيانات التابعة.',
+      descEn: 'Row-level isolation and enforced boundaries across entities and tenants.'
+    }
+  ];
+
   return (
-    <div className="content-scroll" style={{ padding: '0 0 4rem' }}>
-      {/* Hero Intro */}
-      <section style={{
-        padding: '5rem 1.5rem 3rem',
-        textAlign: 'center',
-        background: 'linear-gradient(180deg, var(--bg-surface-elevated) 0%, var(--bg-base) 100%)',
-        borderBottom: '1px solid var(--border-subtle)'
-      }}>
-        <div style={{ maxWidth: '860px', margin: '0 auto' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '4px 12px',
-            borderRadius: '999px',
-            background: 'var(--accent-subtle)',
-            border: '1px solid var(--border-accent)',
-            color: 'var(--accent-light)',
-            fontSize: '12px',
-            fontWeight: 700,
-            marginBottom: '1.25rem'
-          }}>
-            <span>🏛️</span>
-            <span>{isAr ? 'عن مخلافي لابس · MIKHLAFI LABS' : 'ABOUT MIKHLAFI LABS'}</span>
-          </div>
-
-          <h1 style={{
-            fontSize: 'clamp(2rem, 4vw, 3rem)',
-            fontWeight: 900,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.2,
-            marginBottom: '1.25rem',
-            color: 'var(--text-primary)'
-          }}>
+    <div>
+      {/* Hero */}
+      <section className="pp-hero">
+        <div className="ml-container pp-hero__inner">
+          <span className="pp-hero__eyebrow">
+            {isAr ? 'نبذة عن المنصة' : 'ABOUT'}
+          </span>
+          <h1 className="ml-display pp-hero__title">
             {isAr
-              ? 'نبني تكنولوجيا تساعد المؤسسات على اتخاذ قرارات أفضل'
-              : 'Building Technology That Helps Businesses Make Better Decisions'}
+              ? 'منصة استخبارات تشغيلية مبنية على أدلة حتمية'
+              : 'An industry-neutral, evidence-based operational intelligence platform'}
           </h1>
-
-          <p style={{
-            fontSize: '1.1rem',
-            color: 'var(--text-secondary)',
-            lineHeight: 1.7,
-            maxWidth: '720px',
-            margin: '0 auto 2rem'
-          }}>
+          <p className="ml-lead pp-hero__lead">
             {isAr
-              ? 'مخلافي لابس منصة ذكاء عمليات وقرارات عابرة للقطاعات، صُممت لتمكين القيادات التنفيذية من كشف الانحرافات المحاسبية وحماية هوامش الربحية بالاعتماد على أدلة رقمية قطعية وحتمية.'
-              : 'MIKHLAFI LABS is a cross-industry decision intelligence platform designed to empower executive leadership with deterministic operational forensics, risk mitigation, and margin protection.'}
+              ? 'تم تصميم MIKHLAFI LABS لمساعدة القيادات على اتخاذ قرارات أكثر دقة من خلال تحليل حتمي للبيانات التشغيلية، مع إبقاء التكامل غير تطفلي والبيانات تحت سيطرة المؤسسة بالكامل.'
+              : 'MIKHLAFI LABS helps leadership teams make well-grounded decisions by applying deterministic checks to operational data, with minimal integration footprint and full control over sovereignty.'}
           </p>
-
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => onNavigate('/platform')}
-              className="btn-primary"
-              style={{ fontSize: '13px', padding: '10px 20px' }}
-            >
-              <span>{isAr ? 'استعراض معمارية المنظومة' : 'Explore Platform Architecture'}</span>
-              <IconArrowRight size={14} />
+          <div className="pp-hero__actions">
+            <button onClick={() => onNavigate('/platform')} className="ml-btn ml-btn--primary ml-btn--lg">
+              <span>{isAr ? 'استعرض المعمارية' : 'Explore platform architecture'}</span>
+              <IconArrowRight size={16} />
             </button>
-
-            <button
-              onClick={() => onNavigate('/contact')}
-              className="btn-secondary"
-              style={{ fontSize: '13px', padding: '10px 18px' }}
-            >
-              <span>{isAr ? 'طلب جلسة تشاورية' : 'Request Consultation'}</span>
+            <button onClick={() => onNavigate('/contact')} className="ml-btn ml-btn--ghost ml-btn--lg">
+              <span>{isAr ? 'طلب جلسة تشاورية' : 'Request a briefing'}</span>
             </button>
           </div>
         </div>
       </section>
 
-      {/* Philosophy & Pillars */}
-      <section style={{ maxWidth: '1100px', margin: '4rem auto 0', padding: '0 1.5rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-            {isAr ? 'ركائزنا الجوهرية وفلسفة التصميم' : 'Our Core Pillars & Philosophy'}
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            {isAr ? 'المبادئ الصارمة التي تحكم كل سطر برمجي وكل خوارزمية في مخلافي لابس' : 'The strict principles governing every algorithm and pipeline in MIKHLAFI LABS'}
-          </p>
-        </div>
-
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '20px'
-        }}>
-          {/* Card 1 */}
-          <div className="decision-card" style={{ padding: '24px' }}>
-            <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '10px',
-              background: 'var(--accent-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-light)',
-              fontSize: '20px',
-              marginBottom: '1rem'
-            }}>
-              ⚖️
-            </div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-              {isAr ? 'الذكاء الحتمي القائم على الأدلة' : 'Deterministic Evidence-First'}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+      {/* Positioning / Principles */}
+      <section className="site-section">
+        <div className="ml-container">
+          <div className="site-section__head">
+            <span className="ml-eyebrow">{isAr ? 'موقعنا الوظيفي' : 'POSITIONING'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'ذكاء تشغيلي حتمي محايد للقطاعات' : 'Deterministic operational intelligence, sector-neutral'}
+            </h2>
+            <p className="ml-lead site-section__lead">
               {isAr
-                ? 'لا نعتمد على نماذج التوليد الاحتمالية العشوائية في القرارات المالية والمحاسبية الحساسة. كل توصية تقترن بسجل قيد محاسبي مثبت ومسار تدقيق غير قابل للتلاعب.'
-                : 'We reject probabilistic guessing for core financial and forensic audits. Every recommendation is backed by verifiable accounting records and immutable audit logs.'}
+                ? 'تُعد المنصة طبقة استخبارات تشغيلية وليست أداة مالية فقط. يتركز الغرض على ربط الأدلة بالتصرفات التنفيذية، مع الحفاظ على فصل واضح بين ما هو مؤكد وما هو مقترح.'
+                : 'MIKHLAFI LABS is an operational decision intelligence layer. The focus is simple: connect verifiable evidence to actionable decisions, with clear separation between established facts and hypotheses.'}
             </p>
           </div>
 
-          {/* Card 2 */}
-          <div className="decision-card" style={{ padding: '24px' }}>
-            <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '10px',
-              background: 'var(--accent-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-light)',
-              fontSize: '20px',
-              marginBottom: '1rem'
-            }}>
-              🌐
-            </div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-              {isAr ? 'منصة عابرة للقطاعات (Cross-Industry)' : 'Cross-Industry by Design'}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-              {isAr
-                ? 'المنصة غير مقتصرة على المقاولات أو المالية وحدها؛ بل توفر محركات تدقيق قياسية صالحة لسلاسل الإمداد، والتصنيع، والخدمات اللوجستية، وتجارة التجزئة.'
-                : 'Architected universally across sectors: supply chain, distribution, logistics, industrial contracting, retail, and business operations.'}
-            </p>
-          </div>
-
-          {/* Card 3 */}
-          <div className="decision-card" style={{ padding: '24px' }}>
-            <div style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '10px',
-              background: 'var(--accent-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-light)',
-              fontSize: '20px',
-              marginBottom: '1rem'
-            }}>
-              🛡️
-            </div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>
-              {isAr ? 'السيادة والخصوصية وعزل البيانات' : 'Strict Sovereign Tenancy'}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-              {isAr
-                ? 'عزل خادمي صارم للمستأجرين في طبقة البيانات، ودعم النشر السحابي السيادي والمحلي (On-Premise) مع التوافق التام مع ضوابط الأمن السيبراني السعودية.'
-                : 'Guaranteed server-side tenant isolation in PostgreSQL, support for sovereign cloud and on-premise hosting, compliant with enterprise security standards.'}
-            </p>
+          <div className="site-grid site-grid--4">
+            {principles.map((p, idx) => (
+              <article key={idx} className="site-tile">
+                <div className="site-tile__icon" aria-hidden="true">
+                  {p.icon}
+                </div>
+                <h3 className="site-tile__title">
+                  {isAr ? p.titleAr : p.titleEn}
+                </h3>
+                <p className="site-tile__desc">
+                  {isAr ? p.descAr : p.descEn}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Corporate Summary & Leadership */}
-      <section style={{ maxWidth: '1100px', margin: '4rem auto 0', padding: '0 1.5rem' }}>
-        <div style={{
-          background: 'var(--bg-surface)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '2.5rem',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '2rem',
-          alignItems: 'center'
-        }}>
-          <div>
-            <span style={{ fontSize: '11px', color: 'var(--accent-light)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              {isAr ? 'الهوية والرسالة' : 'IDENTITY & MISSION'}
-            </span>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '8px 0 16px', color: 'var(--text-primary)' }}>
-              MIKHLAFI LABS
-            </h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', lineHeight: 1.7, marginBottom: '1.25rem' }}>
+      {/* How it works (4 stages) */}
+      <section className="site-section site-section--alt">
+        <div className="ml-container">
+          <div className="site-section__head">
+            <span className="ml-eyebrow">{isAr ? 'كيف نعمل' : 'HOW WE WORK'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'عملية متسقة للربط والتحقق' : 'A consistent process for integration and verification'}
+            </h2>
+            <p className="ml-lead site-section__lead">
               {isAr
-                ? 'تأسست مخلافي لابس لتكون شريك التكنولوجيا الاستراتيجي للمؤسسات الكبرى والشركات الساعية لرفع كفاءة قراراتها. نركز على تحويل البيانات المتناثرة إلى رؤى قيادية قابلة للتنفيذ.'
-                : 'Founded to deliver sovereign enterprise intelligence that eliminates accounting leakage and drives high-conviction decision making across fragmented business units.'}
+                ? 'يتم التركيز على تقليل الأثر على أنظمتك القائمة، مع بناء سلسلة أدلة واضحة لكل توصية.'
+                : 'Focus on minimal impact to existing systems, with clear provenance for every recommendation.'}
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <IconCheck size={14} />
-                <span>{isAr ? 'المقر الرئيسي: الرياض، المملكة العربية السعودية' : 'Headquarters: Riyadh, Kingdom of Saudi Arabia'}</span>
+          </div>
+          <div className="site-steps">
+            {[
+              {
+                n: '01',
+                tAr: 'ربط غير تطفلي',
+                tEn: 'Read-only integration',
+                dAr: 'ربط آمن للقراءة فقط مع ERP وقواعد البيانات دون تعديل البنية التحتية.',
+                dEn: 'Secure read-only access to ERPs and databases with no schema changes.'
+              },
+              {
+                n: '02',
+                tAr: 'توحيد الكيانات',
+                tEn: 'Entity normalization',
+                dAr: 'توحيد الجهات والعملات والمصطلحات لضمان المقارنة الدقيقة بين السجلات.',
+                dEn: 'Normalize entities, currencies, and terms for consistent cross-matching.'
+              },
+              {
+                n: '03',
+                tAr: 'تحقق حتمي',
+                tEn: 'Deterministic checks',
+                dAr: 'تطبيق قواعد حسابية قطعية ومقارنات مباشرة بين السجلات الموثقة.',
+                dEn: 'Apply arithmetic rules and direct comparisons against verifiable records.'
+              },
+              {
+                n: '04',
+                tAr: 'إجراء قابل للتنفيذ',
+                tEn: 'Actionable outcomes',
+                dAr: 'عرض النتائج مع الأدلة والمسؤولية المقترحة دون فرض إجراءات تلقائية غير مصرح بها.',
+                dEn: 'Present evidence-backed findings with proposed ownership, never forcing unauthorized actions.'
+              }
+            ].map((s) => (
+              <article key={s.n} className="site-step">
+                <span className="site-step__num">{s.n}</span>
+                <h3 className="site-step__title">{isAr ? s.tAr : s.tEn}</h3>
+                <p className="site-step__desc">{isAr ? s.dAr : s.dEn}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Sovereignty & Trust */}
+      <section className="site-section">
+        <div className="ml-container">
+          <div className="pp-split">
+            <div>
+              <span className="ml-eyebrow">{isAr ? 'السيادة والامتثال' : 'SOVEREIGNTY & COMPLIANCE'}</span>
+              <h2 className="ml-heading pp-split__title">
+                {isAr ? 'بياناتك ضمن حدودك وتحت إشرافك' : 'Your data stays within your boundaries and under your control'}
+              </h2>
+              <p className="ml-lead pp-split__lead">
+                {isAr
+                  ? 'تدعم المنصة النشر داخل المملكة أو داخل مراكز بيانات مؤسستك، مع عزل صارم بين الكيانات وسجلات تدقيق لا يمكن تعديلها، بما يحقق متطلبات حماية البيانات والالتزامات التنظيمية.'
+                  : 'Deploy within the Kingdom of Saudi Arabia or inside your own data centers, with strict per-tenant isolation and tamper-evident audit trails that support data protection and regulatory obligations.'}
+              </p>
+              <div className="pp-split__list">
+                <div className="pp-split__item">
+                  <span className="pp-split__dot" aria-hidden="true" />
+                  <span>
+                    {isAr
+                      ? 'مواءمة مع ضوابط الأمن السيبراني الوطنية (NCA) ونظام حماية البيانات الشخصية (PDPL).'
+                      : 'Aligned with national cybersecurity controls (NCA) and personal data protection law (PDPL).'}
+                  </span>
+                </div>
+                <div className="pp-split__item">
+                  <span className="pp-split__dot" aria-hidden="true" />
+                  <span>
+                    {isAr
+                      ? 'عزل بين المستأجرين على مستوى قاعدة البيانات مع مخططات منفصلة لكل مؤسسة.'
+                      : 'Database-level tenant isolation with separate schemas per organization.'}
+                  </span>
+                </div>
+                <div className="pp-split__item">
+                  <span className="pp-split__dot" aria-hidden="true" />
+                  <span>
+                    {isAr
+                      ? 'تكامل قراءة فقط لا يكتب ولا يعدّل سجلات أنظمتك الأساسية.'
+                      : 'Read-only integration that neither writes to nor alters your core systems.'}
+                  </span>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <IconCheck size={14} />
-                <span>{isAr ? 'الترخيص والأنظمة: منظومة أعمال وتقنية معلومات مؤسسية' : 'Enterprise Technology & SaaS Systems'}</span>
+            </div>
+
+            <div className="ml-panel">
+              <div className="ml-panel__head">
+                <span className="ml-title">{isAr ? 'التزامنا التحريري' : 'Our commitment'}</span>
+                <span className="ml-badge ml-badge--accent">{isAr ? 'مؤسسات' : 'ENTERPRISE'}</span>
+              </div>
+              <div className="ml-panel__body">
+                <div className="pp-contact__item">
+                  <span className="pp-contact__k">{isAr ? 'المقر الرئيسي' : 'Headquarters'}</span>
+                  <span className="pp-contact__v">
+                    {isAr ? 'الرياض، المملكة العربية السعودية' : 'Riyadh, Kingdom of Saudi Arabia'}
+                  </span>
+                </div>
+                <div className="pp-gap-lg" />
+                <div className="pp-contact__item">
+                  <span className="pp-contact__k">{isAr ? 'النسخة السيادية' : 'Sovereign options'}</span>
+                  <span className="pp-contact__v">
+                    {isAr
+                      ? 'سحابة سيادية داخل السعودية أو نشر محلي مغلق بالكامل داخل مراكز بياناتك.'
+                      : 'Sovereign cloud in KSA, or a fully air-gapped deployment in your own data centers.'}
+                  </span>
+                </div>
+                <div className="pp-gap-lg" />
+                <div className="pp-contact__item">
+                  <span className="pp-contact__k">{isAr ? 'حدود الاستخدام' : 'Scope of use'}</span>
+                  <span className="pp-contact__v">
+                    {isAr
+                      ? 'تشمل القطاعات: المقاولات والمشاريع، الصناعة، اللوجستيات، التجزئة، الخدمات، والمجموعات القابضة.'
+                      : 'Sectors served: contracting and projects, manufacturing, logistics, retail, services, and holding groups.'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div style={{
-            background: 'var(--bg-surface-elevated)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-md)',
-            padding: '2rem',
-            textAlign: 'center'
-          }}>
-            <IconServer size={32} />
-            <div style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '1rem', color: 'var(--text-primary)' }}>
-              {isAr ? 'هل أنت مستعد لتأمين هوامش مؤسستك؟' : 'Ready to Secure Enterprise Margins?'}
-            </div>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', margin: '8px 0 1.5rem' }}>
+      {/* CTA */}
+      <section className="site-section site-section--tight">
+        <div className="ml-container">
+          <div className="site-cta">
+            <span className="ml-eyebrow">{isAr ? 'الخطوة التالية' : 'NEXT STEP'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'ابدأ باستكشاف المنصة' : 'Start by exploring the platform'}
+            </h2>
+            <p className="ml-lead site-section__lead" style={{ marginInline: 'auto', textAlign: 'center' }}>
               {isAr
-                ? 'ابدأ حساب تجريبي أو تواصل مع فريق مهندسي الحلول للربط الآمن مع ERP.'
-                : 'Create your enterprise workspace or speak with our solutions architects.'}
+                ? 'استعرض المعمارية والمحركات الثمانية، أو تواصل مع فريقنا لمناقشة متطلبات مؤسستك.'
+                : 'Review the architecture and eight engines, or contact us to discuss your organization’s requirements.'}
             </p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button onClick={() => onNavigate('/register')} className="btn-primary" style={{ fontSize: '12px', padding: '8px 16px' }}>
-                <span>{isAr ? 'إنشاء حساب جديد' : 'Create Account'}</span>
+            <div className="site-cta__actions">
+              <button onClick={() => onNavigate('/platform')} className="ml-btn ml-btn--primary ml-btn--lg">
+                <span>{isAr ? 'استعراض المنصة' : 'Explore the platform'}</span>
+                <IconArrowRight size={16} />
               </button>
-              <button onClick={() => onNavigate('/contact')} className="btn-secondary" style={{ fontSize: '12px', padding: '8px 14px' }}>
-                <span>{isAr ? 'تواصل معنا' : 'Contact Us'}</span>
+              <button onClick={() => onNavigate('/contact')} className="ml-btn ml-btn--ghost ml-btn--lg">
+                <span>{isAr ? 'تواصل معنا' : 'Contact us'}</span>
               </button>
             </div>
           </div>

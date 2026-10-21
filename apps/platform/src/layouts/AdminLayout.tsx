@@ -1,6 +1,6 @@
-// MIKHLAFI LABS — Platform Operator Dedicated Layout
-// Architecturally decoupled from customer workspaces (/admin/*)
-// Displays high-contrast privileged session indicator and audit accountability
+// MIKHLAFI LABS — Platform Administration Layout
+// Dedicated shell for /admin/*, architecturally decoupled from customer workspaces.
+// Communicates a privileged, fully audited session clearly without alarmist styling.
 
 import React, { useState } from 'react';
 import { LocaleMode, ThemeMode } from '../types';
@@ -16,7 +16,11 @@ import {
   IconMenu,
   IconGlobe,
   IconSun,
-  IconMoon
+  IconMoon,
+  IconShield,
+  IconCreditCard,
+  IconSettings,
+  IconLayers
 } from '../components/Icons';
 
 interface AdminLayoutProps {
@@ -27,6 +31,13 @@ interface AdminLayoutProps {
   onToggleTheme: () => void;
   onToggleLocale: () => void;
   children: React.ReactNode;
+}
+
+interface AdminNavItem {
+  route: string;
+  icon: React.ReactNode;
+  ar: string;
+  en: string;
 }
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({
@@ -40,11 +51,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const isAr = locale === 'ar';
   const { user, logout } = useAuth();
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
 
   const handleNav = (targetPath: string) => {
     onNavigate(targetPath);
-    setMobileSidebarOpen(false);
+    setRailOpen(false);
   };
 
   const handleSignOut = async () => {
@@ -55,269 +66,188 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     }
   };
 
-  const isActive = (routePath: string) => {
-    return currentPath === routePath;
-  };
+  const isActive = (routePath: string) => currentPath === routePath;
+
+  const groups: Array<{ labelAr: string; labelEn: string; items: AdminNavItem[] }> = [
+    {
+      labelAr: 'المؤشرات',
+      labelEn: 'Overview',
+      items: [
+        { route: ROUTES.ADMIN.OVERVIEW, icon: <IconDashboard size={16} />, ar: 'حالة المنصة', en: 'Platform Status' }
+      ]
+    },
+    {
+      labelAr: 'التجاري',
+      labelEn: 'Commercial',
+      items: [
+        { route: ROUTES.ADMIN.ORGANIZATIONS, icon: <IconOrganization size={16} />, ar: 'المؤسسات والمستأجرون', en: 'Organizations & Tenants' },
+        { route: ROUTES.ADMIN.SERVICES, icon: <IconLayers size={16} />, ar: 'إدارة الخدمات', en: 'Service Catalog' },
+        { route: ROUTES.ADMIN.PACKAGES, icon: <IconCreditCard size={16} />, ar: 'الباقات والتسعير', en: 'Packages & Pricing' },
+        { route: ROUTES.ADMIN.LEADS, icon: <IconFileText size={16} />, ar: 'طلبات التواصل', en: 'Inbound Inquiries' },
+        { route: ROUTES.ADMIN.LICENSES, icon: <IconSettings size={16} />, ar: 'التراخيص', en: 'Licenses' }
+      ]
+    },
+    {
+      labelAr: 'الأمن والحوكمة',
+      labelEn: 'Security & Governance',
+      items: [
+        { route: ROUTES.ADMIN.USERS, icon: <IconCustomer size={16} />, ar: 'دليل المستخدمين', en: 'User Directory' },
+        { route: ROUTES.ADMIN.AUDIT, icon: <IconServer size={16} />, ar: 'سجل التدقيق', en: 'Audit Log' }
+      ]
+    }
+  ];
 
   return (
-    <div className="app-layout" style={{ background: '#05070a' }}>
-      {/* High-Security Privileged Top Banner */}
+    <div className="admin-shell">
+      {/* Privileged session ribbon */}
       <div
         style={{
           position: 'fixed',
+          insetInline: 0,
           top: 0,
-          left: 0,
-          right: 0,
-          height: '28px',
-          background: 'linear-gradient(90deg, #7f1d1d, #991b1b, #7f1d1d)',
-          color: '#fef2f2',
+          height: 30,
+          zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '8px',
-          fontSize: '11px',
-          fontWeight: 700,
-          letterSpacing: '0.04em',
-          zIndex: 2000,
+          gap: 9,
           padding: '0 16px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+          background: 'linear-gradient(90deg, #1B1206, #2A1C08, #1B1206)',
+          borderBottom: '1px solid rgba(184, 137, 74, 0.4)',
+          color: 'var(--accent-light)',
+          fontSize: 11.5,
+          fontWeight: 600,
+          letterSpacing: '0.03em',
+          textAlign: 'center'
         }}
+        role="status"
       >
-        <span>🛡️</span>
-        <span>
+        <IconShield size={13} />
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {isAr
-            ? 'جلسة مشغّل منصة معتمدة — كافة العمليات تخضع للتدقيق المباشر في سجل platform_audit_logs'
-            : 'PRIVILEGED PLATFORM OPERATOR SESSION — All administrative actions are recorded in platform_audit_logs'}
+            ? 'جلسة إدارية معتمدة — كل إجراء يُسجَّل في سجل التدقيق غير القابل للتعديل'
+            : 'Privileged administration session — every action is written to the immutable audit log'}
         </span>
       </div>
 
-      {/* Operator Sidebar */}
-      <aside
-        className="app-sidebar"
-        style={{
-          marginTop: '28px',
-          height: 'calc(100vh - 28px)',
-          borderInlineEnd: '1px solid rgba(239, 68, 68, 0.25)',
-          background: 'linear-gradient(180deg, #090d14 0%, #06090f 100%)',
-          display: mobileSidebarOpen ? 'flex' : undefined,
-          position: mobileSidebarOpen ? 'fixed' : undefined,
-          zIndex: mobileSidebarOpen ? 1500 : undefined,
-          top: 0,
-          insetInlineStart: 0
-        }}
-      >
-        {/* Sidebar Header */}
-        <div className="sidebar-header" style={{ borderBottom: '1px solid rgba(239, 68, 68, 0.2)' }}>
+      {/* Administration rail */}
+      <aside className={`admin-rail ${railOpen ? 'is-open' : ''}`} style={{ top: 30, height: 'calc(100vh - 30px)' }}>
+        <div className="admin-rail__brand">
+          <span className="admin-rail__crest">ML</span>
+          <span>
+            <span className="admin-rail__title">MIKHLAFI LABS</span>
+            <span className="admin-rail__sub">{isAr ? 'إدارة المنصة' : 'Platform Admin'}</span>
+          </span>
           <button
-            onClick={() => handleNav(ROUTES.ADMIN.OVERVIEW)}
-            className="brand-emblem"
-            style={{ textAlign: 'start', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+            onClick={() => setRailOpen(false)}
+            className="ml-icon-btn"
+            style={{ marginInlineStart: 'auto', display: railOpen ? 'inline-flex' : 'none' }}
+            aria-label="Close navigation"
           >
-            <div
-              className="brand-symbol"
-              style={{
-                width: '32px',
-                height: '32px',
-                fontSize: '15px',
-                background: 'linear-gradient(135deg, #dc2626, #991b1b)',
-                boxShadow: '0 0 14px rgba(220, 38, 38, 0.4)'
-              }}
-            >
-              M
-            </div>
-            <div className="brand-meta">
-              <span className="brand-name" style={{ fontSize: '13px', color: '#f87171' }}>
-                MIKHLAFI CONTROL
-              </span>
-              <span className="brand-sub" style={{ fontSize: '8px', color: '#fca5a5' }}>
-                {isAr ? 'غرفة عمليات إدارة المنظومة' : 'PLATFORM ADMINISTRATION'}
-              </span>
-            </div>
+            <IconX size={16} />
           </button>
-          {mobileSidebarOpen && (
-            <button
-              onClick={() => setMobileSidebarOpen(false)}
-              className="ctrl-btn"
-              style={{ marginInlineStart: 'auto' }}
-            >
-              <IconX size={16} />
-            </button>
-          )}
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="sidebar-nav">
-          <div className="nav-section-title" style={{ color: '#f87171' }}>
-            {isAr ? 'لوحة تحكم المشغّل' : 'OPERATOR SWITCHBOARD'}
+        <nav className="admin-rail__scroll" aria-label={isAr ? 'تنقل الإدارة' : 'Administration'}>
+          {groups.map((group, gi) => (
+            <div key={gi} className="nav-group">
+              <div className="nav-group__label">{isAr ? group.labelAr : group.labelEn}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.route}
+                  onClick={() => handleNav(item.route)}
+                  className={`nav-link ${isActive(item.route) ? 'is-active' : ''}`}
+                  aria-current={isActive(item.route) ? 'page' : undefined}
+                >
+                  <span className="nav-link__icon">{item.icon}</span>
+                  <span>{isAr ? item.ar : item.en}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+
+          <div className="nav-group">
+            <div className="nav-group__label">{isAr ? 'روابط' : 'Links'}</div>
+            <button onClick={() => handleNav(ROUTES.PUBLIC.HOME)} className="nav-link">
+              <span className="nav-link__icon">
+                <IconFileText size={16} />
+              </span>
+              <span>{isAr ? 'الموقع العام' : 'Public website'}</span>
+            </button>
+            <button onClick={() => handleNav(ROUTES.APP.OVERVIEW)} className="nav-link">
+              <span className="nav-link__icon">
+                <IconOrganization size={16} />
+              </span>
+              <span>{isAr ? 'مساحة العمل' : 'Customer workspace'}</span>
+            </button>
           </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.OVERVIEW)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.OVERVIEW) ? 'active' : ''}`}
-          >
-            <IconDashboard size={16} />
-            <span>{isAr ? 'المؤشرات والوضع العام' : 'Platform Overview'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.ORGANIZATIONS)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.ORGANIZATIONS) ? 'active' : ''}`}
-          >
-            <IconOrganization size={16} />
-            <span>{isAr ? 'إدارة المؤسسات والمستأجرين' : 'Tenant Organizations'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.USERS)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.USERS) ? 'active' : ''}`}
-          >
-            <IconCustomer size={16} />
-            <span>{isAr ? 'المستخدمون والحسابات' : 'Global Users Directory'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.LEADS)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.LEADS) ? 'active' : ''}`}
-          >
-            <IconFileText size={16} />
-            <span>{isAr ? 'طلبات العروض والتواصل' : 'Inbound Demo Inquiries'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.PACKAGES)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.PACKAGES) ? 'active' : ''}`}
-          >
-            <span>📦</span>
-            <span>{isAr ? 'إدارة الباقات والتسعير' : 'Packages & Pricing'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.LICENSES)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.LICENSES) ? 'active' : ''}`}
-          >
-            <span>🔑</span>
-            <span>{isAr ? 'مولّد التراخيص المشفرة' : 'Offline License Generator'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.ADMIN.AUDIT)}
-            className={`nav-item ${isActive(ROUTES.ADMIN.AUDIT) ? 'active' : ''}`}
-          >
-            <IconServer size={16} />
-            <span>{isAr ? 'سجل التدقيق الأمني العام' : 'Security Audit Trail'}</span>
-          </button>
-
-          <div className="nav-section-title" style={{ marginTop: '24px' }}>
-            {isAr ? 'روابط المنصة الخارجية' : 'PUBLIC LINKS'}
-          </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.PUBLIC.HOME)}
-            className="nav-item"
-            style={{ opacity: 0.8 }}
-          >
-            <span>🌐 {isAr ? 'زيارة الموقع التعريفي العام (/)' : 'Visit Public Site (/)'}</span>
-          </button>
         </nav>
       </aside>
 
-      {/* Main Admin Content */}
-      <main className="app-main" style={{ marginTop: '28px', minHeight: 'calc(100vh - 28px)' }}>
-        {/* Top Header */}
-        <header
-          className="app-header"
-          style={{
-            borderBottom: '1px solid rgba(239, 68, 68, 0.2)',
-            background: 'rgba(9, 13, 20, 0.85)'
-          }}
-        >
-          <div className="header-left">
+      {railOpen && <div className="rail-scrim" onClick={() => setRailOpen(false)} />}
+
+      {/* Main column */}
+      <div className="admin-main">
+        <header className="admin-topbar">
+          <div className="app-topbar__start">
             <button
-              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-              className="ctrl-btn"
+              onClick={() => setRailOpen(!railOpen)}
+              className="ml-icon-btn"
               style={{ display: 'none' }}
+              id="admin-rail-toggle"
+              aria-label="Open navigation"
             >
               <IconMenu size={18} />
             </button>
 
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '4px 10px',
-                borderRadius: 'var(--radius-sm)',
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                fontSize: '11px',
-                color: '#fca5a5',
-                fontWeight: 700
-              }}
-            >
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }} />
-              <span>{isAr ? 'وضع التحكم الإداري الأعلى' : 'GLOBAL PLATFORM ROOT ACCESS'}</span>
+            <div className="topbar-context">
+              <span className="topbar-context__label">{isAr ? 'الصلاحية' : 'Privilege'}</span>
+              <span className="topbar-context__value" style={{ color: 'var(--accent-light)' }}>
+                {isAr ? 'مدير المنصة' : 'Platform administrator'}
+              </span>
             </div>
           </div>
 
-          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Lang Toggle */}
-            <button onClick={onToggleLocale} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Language">
-              <IconGlobe size={14} />
-              <span>{isAr ? 'EN' : 'عربي'}</span>
+          <div className="app-topbar__end">
+            <button onClick={onToggleLocale} className="ml-icon-btn" title={isAr ? 'English' : 'العربية'} aria-label="Toggle language">
+              <IconGlobe size={15} />
+            </button>
+            <button onClick={onToggleTheme} className="ml-icon-btn" title="Theme" aria-label="Toggle theme">
+              {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
             </button>
 
-            {/* Theme Toggle */}
-            <button onClick={onToggleTheme} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Theme">
-              {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
-            </button>
-
-            {/* Operator Identity Badge */}
             {user && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, paddingInlineStart: 6, borderInlineStart: '1px solid var(--border-subtle)' }}>
+                <span
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    padding: '4px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(220, 38, 38, 0.2)',
-                    border: '1px solid #ef4444',
-                    color: '#fecaca',
-                    fontSize: '11px',
+                    justifyContent: 'center',
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: 'var(--accent-subtle)',
+                    border: '1px solid var(--border-glow)',
+                    color: 'var(--accent-light)',
+                    fontSize: 12.5,
                     fontWeight: 700
                   }}
+                  title={user.email}
                 >
-                  <span>{user.email}</span>
-                  <span
-                    style={{
-                      fontSize: '9px',
-                      padding: '1px 5px',
-                      borderRadius: '3px',
-                      background: '#ef4444',
-                      color: '#fff'
-                    }}
-                  >
-                    ROOT ADMIN
-                  </span>
-                </div>
-
-                <button
-                  onClick={handleSignOut}
-                  className="ctrl-btn"
-                  style={{ fontSize: '11px', padding: '5px 8px', color: '#f87171' }}
-                  title={isAr ? 'إنهاء جلسة المشغّل' : 'Sign Out'}
-                >
-                  {isAr ? 'خروج' : 'Sign Out'}
+                  {(user.nameEn || user.email || '?').charAt(0).toUpperCase()}
+                </span>
+                <button onClick={handleSignOut} className="ml-btn ml-btn--subtle ml-btn--sm">
+                  {isAr ? 'خروج' : 'Sign out'}
                 </button>
               </div>
             )}
           </div>
         </header>
 
-        {/* Content Body */}
-        {children}
-      </main>
+        <main className="admin-content">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };

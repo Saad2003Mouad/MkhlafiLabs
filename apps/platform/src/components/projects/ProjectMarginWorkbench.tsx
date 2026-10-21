@@ -18,6 +18,7 @@ import {
   IconAlertTriangle,
   IconFileText
 } from '../Icons';
+import { SandboxNotice } from '../common/SandboxNotice';
 
 interface ProjectMarginWorkbenchProps {
   locale: LocaleMode;
@@ -152,7 +153,7 @@ export const ProjectMarginWorkbench: React.FC<ProjectMarginWorkbenchProps> = ({
         fontFamily: 'inherit'
       }}
     >
-      {/* ── Top Cockpit Status Bar ────────────────────────────────────────── */}
+      <SandboxNotice locale={locale} variant={isEmbeddedInPublicPage ? 'public' : 'app'} />
       <div
         style={{
           background: 'linear-gradient(90deg, #131728 0%, #171c33 100%)',

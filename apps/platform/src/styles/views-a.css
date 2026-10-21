@@ -1,0 +1,174 @@
+/* ==========================================================================
+   MIKHLAFI LABS — Workspace Views A
+   Helpers for Executive Dashboard, Financial Intelligence detail, and the
+   Risk / Projects / Suppliers record views. Built only on design tokens.
+   ========================================================================== */
+
+/* Generic vertical stack with consistent rhythm */
+.va-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.va-section-gap {
+  margin-top: var(--space-5);
+}
+
+/* Metric strip inside record rows / panels */
+.va-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.va-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.va-metric__k {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.va-metric__v {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.va-metric__v--success { color: var(--status-success); }
+.va-metric__v--warning { color: var(--status-warning); }
+.va-metric__v--danger { color: var(--status-danger); }
+.va-metric__v--accent { color: var(--accent-light); }
+.va-metric__v--muted { color: var(--text-tertiary); }
+
+/* Row header inside a record row */
+.va-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.va-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.va-mono-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.va-amount {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-light);
+  white-space: nowrap;
+}
+
+.va-amount--danger { color: var(--status-danger); }
+.va-amount--success { color: var(--status-success); }
+
+/* Progress bars (planned vs actual) */
+.va-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.va-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+.va-progress-row strong {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.va-progress-track {
+  height: 6px;
+  margin-top: 5px;
+  border-radius: var(--radius-full);
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.va-progress-track--thin { height: 4px; }
+
+.va-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent-base);
+}
+
+.va-progress-fill--planned { background: var(--border-strong); }
+.va-progress-fill--success { background: var(--status-success); }
+.va-progress-fill--warning { background: var(--status-warning); }
+.va-progress-fill--danger { background: var(--status-danger); }
+
+/* Free-text blocks attached to a record (mitigation plans, audit notes) */
+.va-plan {
+  margin-top: var(--space-3);
+  padding: 10px 12px;
+  border-inline-start: 2px solid var(--accent-base);
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface-subtle);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.va-note {
+  margin-top: var(--space-3);
+  padding: 9px 12px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+/* Inline action flag shown after a record was resolved */
+.va-resolved-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--status-success);
+}
+
+/* Audit trail rows */
+.va-log-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}

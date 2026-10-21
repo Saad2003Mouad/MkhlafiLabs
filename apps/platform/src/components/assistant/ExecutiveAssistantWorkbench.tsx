@@ -4,6 +4,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { LocaleMode } from '../../types';
+import { SandboxNotice } from '../common/SandboxNotice';
 import {
   PRESET_ASSISTANT_SCENARIOS,
   AssistantQueryRecord,
@@ -201,6 +202,8 @@ export const ExecutiveAssistantWorkbench: React.FC<ExecutiveAssistantWorkbenchPr
         fontFamily: 'inherit'
       }}
     >
+      <SandboxNotice locale={locale} variant={isEmbeddedInPublicPage ? 'public' : 'app'} />
+
       {/* ── Top Bar: Sovereign AI Header & Live Status ────────────────────────── */}
       <div
         style={{

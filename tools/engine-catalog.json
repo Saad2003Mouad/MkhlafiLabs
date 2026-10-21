@@ -1,0 +1,66 @@
+[
+  {
+    "id": "financial-leak-detection",
+    "slug": "financial-leak-detection",
+    "num": "01",
+    "badgeEn": "CORE FINANCIAL FORENSICS",
+    "titleAr": "منظومة كشف الهدر والانحراف المالي المستمر",
+    "titleEn": "Autonomous Financial Leak & Variance Prevention"
+  },
+  {
+    "id": "executive-decisions",
+    "slug": "executive-decisions",
+    "num": "02",
+    "badgeEn": "EXECUTIVE DECISION MESH",
+    "titleAr": "شبكة القرارات التنفيذية وتوجيه رأس المال",
+    "titleEn": "Executive Decision Mesh & Capital Allocation"
+  },
+  {
+    "id": "risk-radar",
+    "slug": "risk-radar",
+    "num": "03",
+    "badgeEn": "PREDICTIVE RISK INTELLIGENCE",
+    "titleAr": "رادار التنبؤ بالمخاطر والإنذار المبكر",
+    "titleEn": "Predictive Risk Intelligence & Early Warning Radar"
+  },
+  {
+    "id": "project-margins",
+    "slug": "project-margins",
+    "num": "04",
+    "badgeEn": "PROJECT & CONTRACT GOVERNANCE",
+    "titleAr": "حوكمة المشاريع وحماية هوامش العقود الاستراتيجية",
+    "titleEn": "Contract Margin Assurance & Project Telemetry"
+  },
+  {
+    "id": "supplier-intelligence",
+    "slug": "supplier-intelligence",
+    "num": "05",
+    "badgeEn": "SUPPLIER INTELLIGENCE RADAR",
+    "titleAr": "ذكاء الموردين وموثوقية سلاسل الإمداد",
+    "titleEn": "Supplier Intelligence & Procurement Risk Radar"
+  },
+  {
+    "id": "customer-retention",
+    "slug": "customer-retention",
+    "num": "06",
+    "badgeEn": "CUSTOMER RETENTION RADAR",
+    "titleAr": "مراقبة العملاء ومكافحة الفقدان الصامت",
+    "titleEn": "Customer Health & Silent Churn Prevention"
+  },
+  {
+    "id": "executive-assistant",
+    "slug": "executive-assistant",
+    "num": "07",
+    "badgeEn": "EVIDENCE-GROUNDED AI",
+    "titleAr": "المساعد التنفيذي المؤسسي المستند للأدلة",
+    "titleEn": "Evidence-Grounded AI Executive Assistant"
+  },
+  {
+    "id": "data-quality-governance",
+    "slug": "data-quality-governance",
+    "num": "08",
+    "badgeEn": "DATA GOVERNANCE & INTEGRITY",
+    "titleAr": "ذكاء جودة وحوكمة البيانات المتعددة",
+    "titleEn": "Data Quality & Multi-System Governance"
+  }
+]

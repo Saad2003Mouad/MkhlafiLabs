@@ -1,0 +1,483 @@
+/* ==========================================================================
+   MIKHLAFI LABS — Authentication Surfaces
+   Split-screen sign-in / registration pages and the enterprise auth modal.
+   Built entirely on design tokens so both themes stay correct.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Shell — split screen
+   -------------------------------------------------------------------------- */
+
+.auth-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   2. Brand panel (side)
+   -------------------------------------------------------------------------- */
+
+.auth-aside {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: clamp(36px, 5vw, 76px);
+  background:
+    radial-gradient(85% 65% at 50% 0%, var(--accent-glow), transparent 68%),
+    linear-gradient(190deg, var(--bg-surface-elevated) 0%, var(--bg-app) 92%);
+  border-inline-end: 1px solid var(--border-subtle);
+}
+
+.auth-aside__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: 540px;
+  margin-inline-end: auto;
+  animation: auth-rise 0.6s var(--ease-out) both;
+}
+
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  transition: opacity var(--transition-fast);
+}
+
+.auth-brand:hover { opacity: 0.85; }
+
+.auth-aside__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-light);
+  width: fit-content;
+}
+
+.auth-aside__kicker::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-base);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+[dir="rtl"] .auth-aside__kicker { letter-spacing: normal; text-transform: none; }
+
+.auth-aside__title {
+  font-size: clamp(26px, 2.7vw, 40px);
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.auth-aside__lead {
+  font-size: clamp(14.5px, 1.35vw, 16.5px);
+  line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 56ch;
+  margin: 0;
+}
+
+/* Trust marks — static, non-numeric product assurances */
+.auth-trust {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-5) 0 0;
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: 14px;
+}
+
+.auth-trust__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.auth-trust__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  background: var(--accent-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-light);
+}
+
+/* Architecture specs strip (mono) */
+.auth-aside__specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 34px;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.auth-aside__spec {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.auth-aside__spec-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+[dir="rtl"] .auth-aside__spec-label { letter-spacing: normal; }
+
+.auth-aside__spec-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   3. Form panel
+   -------------------------------------------------------------------------- */
+
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-app);
+}
+
+.auth-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: clamp(16px, 2.6vw, 26px) clamp(20px, 4vw, 48px);
+}
+
+.auth-panel__main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(4px, 2vw, 28px) clamp(20px, 4vw, 48px) clamp(32px, 5vw, 56px);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: auth-rise 0.5s var(--ease-out) 0.08s both;
+}
+
+.auth-card--wide { max-width: 620px; }
+
+.auth-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-card__title {
+  font-size: clamp(24px, 2.4vw, 32px);
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.auth-card__sub {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 54ch;
+}
+
+.auth-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: var(--space-4) clamp(20px, 4vw, 48px);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.auth-foot__sep { color: var(--text-muted); }
+
+/* --------------------------------------------------------------------------
+   4. Alerts — loading / error / success / destination
+   -------------------------------------------------------------------------- */
+
+.auth-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-alert__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.auth-alert__text { min-width: 0; overflow-wrap: anywhere; }
+
+.auth-alert--danger {
+  background: var(--status-danger-subtle);
+  border-color: var(--status-danger);
+  color: var(--status-danger);
+}
+
+.auth-alert--success {
+  background: var(--status-success-subtle);
+  border-color: var(--status-success);
+  color: var(--status-success);
+}
+
+.auth-alert--accent {
+  background: var(--accent-subtle);
+  border-color: var(--accent-base);
+  color: var(--text-primary);
+}
+
+.auth-alert--accent .auth-alert__icon { color: var(--accent-light); }
+
+/* --------------------------------------------------------------------------
+   5. Form
+   -------------------------------------------------------------------------- */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.auth-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-4);
+}
+
+.auth-linkbtn {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-light);
+  transition: color var(--transition-fast);
+}
+
+.auth-linkbtn:hover { color: var(--accent-hover); text-decoration: underline; }
+
+.auth-input-wrap { position: relative; display: flex; }
+
+.auth-input-wrap .ml-input { padding-inline-end: 62px; }
+
+.auth-input-wrap__toggle {
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  background: transparent;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.auth-input-wrap__toggle:hover {
+  color: var(--accent-light);
+  background: var(--accent-subtle);
+}
+
+.auth-submit { margin-top: var(--space-2); min-height: 46px; }
+
+.auth-submit:disabled {
+  opacity: 0.78;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.auth-spinner {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: auth-spin 0.7s linear infinite;
+}
+
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+@keyframes auth-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Logical arrow direction: point forward in both writing modes */
+[dir="rtl"] .auth-arrow { transform: scaleX(-1); }
+
+.auth-swap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.auth-swap .auth-linkbtn { font-size: 13.5px; font-weight: 700; }
+
+.auth-dest-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent-light);
+  unicode-bidi: isolate;
+}
+
+/* --------------------------------------------------------------------------
+   6. Responsive — brand panel compresses, form stays first-class
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 980px) {
+  .auth-shell { grid-template-columns: 1fr; }
+
+  .auth-aside {
+    align-items: flex-start;
+    padding: clamp(28px, 5vw, 40px) clamp(20px, 5vw, 40px);
+    border-inline-end: none;
+    border-block-end: 1px solid var(--border-subtle);
+  }
+
+  .auth-aside__inner { max-width: none; gap: var(--space-4); }
+
+  .auth-aside__title { font-size: clamp(22px, 4.6vw, 30px); }
+
+  .auth-aside__lead { font-size: 14px; }
+
+  .auth-trust { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+  .auth-aside__specs { display: none; }
+
+  .auth-topbar { justify-content: space-between; }
+
+  .auth-panel__main { padding-top: var(--space-8); }
+}
+
+@media (max-width: 560px) {
+  .auth-trust { display: none; }
+}
+
+/* --------------------------------------------------------------------------
+   7. Auth Modal
+   -------------------------------------------------------------------------- */
+
+.auth-modal { max-width: 520px; }
+
+.auth-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.auth-modal__headings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.auth-modal__title {
+  font-size: 20px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.auth-modal__close { flex-shrink: 0; }
+
+.auth-modal__tabs {
+  padding: 18px 26px 0;
+}
+
+.auth-modal__tabs .ml-segmented { width: 100%; }
+
+.auth-modal__tabs .ml-segmented__item {
+  flex: 1;
+  text-align: center;
+}
+
+.auth-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 20px 26px 26px;
+}
+
+.auth-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   8. Reduced motion — panels render instantly
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-aside__inner,
+  .auth-card { animation: none; }
+}

@@ -1,286 +1,375 @@
-import React, { useState, useEffect } from 'react';
+// MIKHLAFI LABS — Supplier Intelligence & Procurement Scorecards (protected workspace view)
+// Records are loaded exclusively from api.getSuppliers; benchmark audits call
+// api.auditSupplier and reflect the real backend response. No demo fallbacks
+// and no simulated records are ever rendered.
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../../types';
-import { IconSupplier, IconCheck, IconTrendingUp } from '../Icons';
+import { IconSupplier, IconCheck, IconTrendingUp, IconAlert, IconFilter, IconLock } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { SupplierRiskWorkbench } from '../suppliers/SupplierRiskWorkbench';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface SuppliersViewProps {
   locale: LocaleMode;
 }
 
+type SupplierRecord = {
+  id: string;
+  code: string;
+  name_en?: string;
+  name_ar?: string;
+  rating_score?: number;
+  price_creep_rate?: string;
+  price_creep_pct?: string | number;
+  on_time_delivery_rate?: string;
+  active_contracts_val_sar?: string | number;
+  risk_status?: string;
+  is_audited?: boolean;
+  last_audit_notes?: string;
+};
+
+interface NoticeState {
+  type: 'success' | 'error';
+  message: string;
+}
+
 export const SuppliersView: React.FC<SuppliersViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const { isAuthenticated } = useAuth();
-  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [totalSpendSAR, setTotalSpendSAR] = useState<number>(0);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [notice, setNotice] = useState<string | null>(null);
-  const [auditedSuppliers, setAuditedSuppliers] = useState<{ [key: string]: boolean }>({});
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
+  const { isAuthenticated, tenant, openAuthModal } = useAuth();
 
-  const fetchSuppliers = async () => {
-    setLoading(true);
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
+  const [totalContractsSAR, setTotalContractsSAR] = useState<number>(0);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const currency = tenant?.currency || 'SAR';
+
+  const fetchSuppliers = useCallback(async () => {
     if (!isAuthenticated) {
       setSuppliers([]);
-      setTotalSpendSAR(0);
-      setIsDemoDataset(false);
+      setTotalContractsSAR(0);
+      setError(null);
       setLoading(false);
       return;
     }
+    setLoading(true);
+    setError(null);
     try {
       const res = await api.getSuppliers();
-      if (res && Array.isArray(res.suppliers)) {
-        setSuppliers(res.suppliers);
-        setTotalSpendSAR(res.totalMonitoredContractsSAR || 0);
-        setIsDemoDataset(false);
-        const map: { [key: string]: boolean } = {};
-        res.suppliers.forEach((s: any) => {
-          map[s.id] = !!s.is_audited;
-        });
-        setAuditedSuppliers(map);
-      } else {
-        setSuppliers([]);
-        setTotalSpendSAR(0);
-        setIsDemoDataset(false);
-      }
-    } catch (err: any) {
+      setSuppliers(Array.isArray(res.suppliers) ? (res.suppliers as SupplierRecord[]) : []);
+      setTotalContractsSAR(res.totalMonitoredContractsSAR || 0);
+    } catch (err) {
       setSuppliers([]);
-      setTotalSpendSAR(0);
-      setIsDemoDataset(false);
-      setNotice(err.message || (isAr ? 'فشل تحميل بيانات الموردين' : 'Failed to fetch supplier records'));
+      setTotalContractsSAR(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تحميل سجلات الموردين.' : 'Failed to fetch supplier records.')
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
     fetchSuppliers();
-  }, [isAuthenticated]);
+  }, [fetchSuppliers, tenant?.organizationId]);
 
-  const handleAuditVendor = async (supplierId: string, name: string) => {
-    if (isAuthenticated) {
-      try {
-        await api.auditSupplier(supplierId);
-        setAuditedSuppliers((prev) => ({ ...prev, [supplierId]: true }));
-        const msg = isAr
-          ? `تم بدء فحص المقارنة السعرية لـ (${name}) مع أسعار الأساس وتوثيق التدقيق في PostgreSQL.`
-          : `Price benchmark audit initiated for (${name}) against catalog baseline & saved in PostgreSQL.`;
-        setNotice(msg);
-        setTimeout(() => setNotice(null), 4000);
-        await fetchSuppliers();
-        return;
-      } catch (err: any) {
-        setNotice(err.message || 'Error auditing vendor');
-        setTimeout(() => setNotice(null), 4000);
-      }
-    }
-
-    // Demo fallback
-    setAuditedSuppliers((prev) => ({ ...prev, [supplierId]: true }));
-    setNotice(isAr ? `(عرض تجريبي) تم بدء فحص المقارنة السعرية لـ (${name}).` : `(Demo) Price benchmark audit initiated for (${name}).`);
-    setTimeout(() => setNotice(null), 4000);
+  const showNotice = (state: NoticeState) => {
+    setNotice(state);
+    setTimeout(() => setNotice(null), 5000);
   };
 
-  const filteredSuppliers = suppliers.filter((s) => {
-    if (statusFilter === 'all') return true;
-    const risk = s.risk_status || s.riskStatus;
-    return risk === statusFilter;
-  });
+  const handleAudit = async (supplier: SupplierRecord) => {
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
+    setBusyId(supplier.id);
+    try {
+      const res = await api.auditSupplier(supplier.id);
+      const name = isAr
+        ? (res.supplier?.name_ar || supplier.name_ar || supplier.name_en || supplier.code)
+        : (res.supplier?.name_en || supplier.name_en || supplier.name_ar || supplier.code);
+      showNotice({
+        type: 'success',
+        message: isAr
+          ? `تم بدء فحص المقارنة السعرية للمورد (${name}) وتسجيل النتيجة في سجل التدقيق.`
+          : `Price benchmark audit completed for supplier ${name} and recorded in the audit trail.`
+      });
+      await fetchSuppliers();
+    } catch (err) {
+      showNotice({
+        type: 'error',
+        message: err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تنفيذ فحص المقارنة السعرية.' : 'Failed to run the benchmark audit.')
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const statusBadgeClass = (status?: string, audited?: boolean) => {
+    const s = (status || '').toLowerCase();
+    if (s === 'critical') return 'ml-badge ml-badge--danger';
+    if (s === 'optimal' || audited) return 'ml-badge ml-badge--success';
+    if (s === 'moderate') return 'ml-badge ml-badge--warning';
+    return 'ml-badge';
+  };
+
+  const statusLabel = (status?: string) => {
+    const s = (status || '').toLowerCase();
+    if (s === 'critical') return isAr ? 'حرج' : 'CRITICAL';
+    if (s === 'optimal') return isAr ? 'مثالي' : 'OPTIMAL';
+    if (s === 'moderate') return isAr ? 'معتدل' : 'MODERATE';
+    return (status || '').toUpperCase();
+  };
+
+  const statusOptions = Array.from(
+    new Set(suppliers.map((s) => s.risk_status).filter((s): s is string => !!s))
+  );
+
+  const filteredSuppliers = suppliers.filter((s) =>
+    statusFilter === 'all' ? true : s.risk_status === statusFilter
+  );
+
+  const auditedCount = suppliers.filter((s) => !!s.is_audited).length;
+
+  const formatAmount = (value?: string | number) =>
+    `${(Number(value) || 0).toLocaleString()} ${currency}`;
+
+  const priceCreep = (s: SupplierRecord) => {
+    if (s.price_creep_rate) return s.price_creep_rate;
+    if (s.price_creep_pct != null && s.price_creep_pct !== '') return `${Number(s.price_creep_pct).toFixed(1)}%`;
+    return '—';
+  };
 
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'محركات الذكاء' : 'Intelligence Suite'}</span>
-            <span>/</span>
-            <span>{isAr ? 'ذكاء الموردين والمشتريات' : 'Supplier Intelligence'}</span>
-          </div>
-          <h1 className="page-title">
-            <IconSupplier size={24} />
-            <span>{isAr ? 'محرك ذكاء الموردين وبطاقات الأداء وسلاسل الشراء' : 'Supplier Intelligence & Procurement Scorecards'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'مراقبة تباين وتصاعد أسعار الموردين (Price Creep)، قياس موثوقية مواعيد التوريد وجودة الاستلام، وكشف تركز المخاطر على جهات محددة.'
-              : 'Tracking supplier price creep, on-time delivery adherence, and vendor concentration risks using verified purchase order data.'}
-          </p>
-        </div>
+      <PageHeader
+        locale={locale}
+        icon={<IconSupplier size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'محركات الذكاء' : 'Intelligence Engines']}
+        title={isAr ? 'محرك ذكاء الموردين وبطاقات الأداء' : 'Supplier Intelligence & Procurement Scorecards'}
+        subtitle={
+          isAr
+            ? 'رصد تدرّج أسعار الموردين وموثوقية مواعيد التوريد وتوزّع المخاطر على الموردين، مع فحوص مقارنة سعرية قابلة للتدقيق.'
+            : 'Tracking supplier price progression, delivery reliability, and risk concentration across the vendor base, with auditable price benchmark checks.'
+        }
+        action={
+          isAuthenticated ? (
+            <div className="kpi-micro-badge">
+              <span className="label">{isAr ? 'إجمالي العقود المراقَبة' : 'Monitored Contracts'}</span>
+              <span className="value">{totalContractsSAR.toLocaleString()} {currency}</span>
+            </div>
+          ) : undefined
+        }
+      />
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {isDemoDataset && (
-            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
-              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
-            </span>
-          )}
-          <div className="kpi-micro-badge">
-            <span className="label">{isAr ? 'حجم العقود قيد المتابعة' : 'Monitored Contracts'}</span>
-            <span className="value">{(totalSpendSAR / 1e6).toFixed(2)}M SAR</span>
-          </div>
-        </div>
-      </div>
-
-      {/* View Switcher Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
-        <button
-          onClick={() => setViewMode('workbench')}
-          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
-          style={{
-            fontWeight: viewMode === 'workbench' ? 800 : 500,
-            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(6, 182, 212, 0.25), rgba(8, 145, 178, 0.15))' : undefined,
-            borderColor: viewMode === 'workbench' ? '#06B6D4' : undefined,
-            color: viewMode === 'workbench' ? '#67E8F9' : undefined
-          }}
-        >
-          {isAr ? '🔬 رادار ذكاء الموردين ومحاكي الشراء الموحد (Workbench)' : '🔬 Supplier Intelligence & Group Spend Workbench'}
-        </button>
-        <button
-          onClick={() => setViewMode('database')}
-          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
-          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
-        >
-          {isAr
-            ? `📋 سجل موردي المنشأة المسجلين (${suppliers.length})`
-            : `📋 Enterprise Vendor Records (${suppliers.length})`}
-        </button>
-      </div>
-
-      {viewMode === 'workbench' ? (
-        <SupplierRiskWorkbench
-          locale={locale}
-          initialScenario="fmcg_retail"
-          isEmbeddedInPublicPage={false}
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconLock size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض سجل موردي مؤسستك' : 'Sign in to view your organization’s supplier registry'}
+          description={
+            isAr
+              ? 'تُسترجع بطاقات أداء الموردين ومؤشرات الأسعار وحالة الفحوص مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Supplier scorecards, price indicators, and audit status are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
+            </button>
+          }
         />
       ) : (
         <>
           {notice && (
-            <div className="alert-feedback-banner success">
-              <IconCheck size={16} />
-              <span>{notice}</span>
-            </div>
-          )}
-
-          {/* Filter Bar */}
-          <div className="page-filter-bar">
-        <div className="filter-group">
-          <span className="filter-label">{isAr ? 'تصنيف المورد:' : 'Supplier Risk:'}</span>
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={`filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
-          >
-            {isAr ? `كافة الموردين (${suppliers.length})` : `All Suppliers (${suppliers.length})`}
-          </button>
-          <button
-            onClick={() => setStatusFilter('critical')}
-            className={`filter-chip ${statusFilter === 'critical' ? 'active' : ''}`}
-          >
-            {isAr ? 'حرج (انحراف سعري)' : 'Critical Creep'}
-          </button>
-          <button
-            onClick={() => setStatusFilter('optimal')}
-            className={`filter-chip ${statusFilter === 'optimal' ? 'active' : ''}`}
-          >
-            {isAr ? 'مثالي ومطابق' : 'Optimal'}
-          </button>
-        </div>
-      </div>
-
-      {/* Empty State */}
-      {!loading && filteredSuppliers.length === 0 && (
-        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
-          <IconSupplier size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-            {isAr ? 'لا يوجد موردون مسجلون حالياً' : 'No Monitored Suppliers Found'}
-          </h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
-            {isAr
-              ? 'لم يتم تسجيل أي عقود توريد أو أوامر شراء لمساحة العمل الحالية.'
-              : 'Zero active supplier contracts or purchase orders found for the current workspace.'}
-          </p>
-        </div>
-      )}
-
-      {/* Suppliers Grid */}
-      <div className="decisions-grid">
-        {filteredSuppliers.map((s) => {
-          const isAudited = auditedSuppliers[s.id] || s.is_audited;
-          const name = isAr ? (s.name_ar || s.nameAr) : (s.name_en || s.nameEn);
-          const score = s.rating_score ?? s.ratingScore ?? 75;
-          const creep = s.price_creep_rate || s.priceCreepRate || '+0.0%';
-          const delivery = s.on_time_delivery_rate || s.onTimeDeliveryRate || '90%';
-          const contractsVal = s.activeContractsVal || (s.active_contracts_val_sar ? `${(parseFloat(s.active_contracts_val_sar) / 1e6).toFixed(2)}M SAR` : '0 SAR');
-          const riskStatus = s.risk_status || s.riskStatus || 'moderate';
-
-          return (
-            <div key={s.id} className="decision-card">
-              <div className="decision-card-header">
-                <div className="badge-row">
-                  <span className={`severity-tag ${riskStatus === 'optimal' ? 'optimal' : riskStatus === 'critical' ? 'critical' : 'medium'}`}>
-                    {riskStatus.toUpperCase()}
-                  </span>
-                  <span className="category-pill">{isAr ? `تقييم الأداء: ${score}/100` : `Score: ${score}/100`}</span>
-                </div>
-                <div className="decision-financial">
-                  <span className="label">{isAr ? 'حجم العقود النشطة' : 'Active Contracts'}</span>
-                  <span className="amount">{contractsVal}</span>
-                </div>
-              </div>
-
-              <h3 className="decision-title">
-                {name}
-              </h3>
-
-              <div className="risk-metric-strip">
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'التصاعد السعري (Price Creep)' : 'Price Creep'}</span>
-                  <span className="v" style={{ color: riskStatus === 'critical' ? 'var(--status-critical)' : 'var(--text-primary)' }}>
-                    {creep}
-                  </span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'الالتزام بمواعيد التوريد' : 'On-Time Delivery'}</span>
-                  <span className="v">{delivery}</span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'فحص المقارنة السعرية' : 'Price Benchmark'}</span>
-                  <span className="v" style={{ color: isAudited ? 'var(--status-success)' : 'var(--text-secondary)' }}>
-                    {isAudited ? (isAr ? 'تم الفحص' : 'Audited') : (isAr ? 'غير مفحوص' : 'Pending')}
-                  </span>
-                </div>
-              </div>
-
-              {s.last_audit_notes && (
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '10px 0', background: 'var(--bg-surface-elevated)', padding: '8px 12px', borderRadius: '4px' }}>
-                  {s.last_audit_notes}
+                <div className={`alert-feedback-banner ${notice.type === 'success' ? 'success' : 'error'}`}>
+                  {notice.type === 'success' ? <IconCheck size={16} /> : <IconAlert size={16} />}
+                  <span>{notice.message}</span>
                 </div>
               )}
 
-              <div className="decision-actions-row">
-                <button
-                  onClick={() => handleAuditVendor(s.id, name)}
-                  className={isAudited ? 'btn-secondary' : 'btn-primary'}
-                  disabled={isAudited}
-                  style={{ fontSize: '12px', padding: '8px 14px' }}
-                >
-                  <IconTrendingUp size={14} />
-                  <span>
-                    {isAudited
-                      ? (isAr ? 'تم فحص ومقارنة الأسعار' : 'Benchmark Audit Active')
-                      : (isAr ? 'بدء فحص المقارنة السعرية في ERP' : 'Initiate Benchmark Audit')}
-                  </span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      </>
+              {loading ? (
+                <div className="skeleton-grid">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="skeleton-card" />
+                  ))}
+                </div>
+              ) : error ? (
+                <EmptyState
+                  icon={<IconAlert size={30} />}
+                  title={isAr ? 'تعذر تحميل سجل الموردين' : 'Unable to load the supplier registry'}
+                  description={error}
+                  action={
+                    <button onClick={fetchSuppliers} className="ml-btn ml-btn--primary">
+                      {isAr ? 'إعادة المحاولة' : 'Retry'}
+                    </button>
+                  }
+                />
+              ) : (
+                <>
+                  <div className="stat-grid">
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'الموردون المراقَبون' : 'Monitored Suppliers'}</div>
+                      <div className="stat-tile__value">{suppliers.length}</div>
+                      <div className="stat-tile__hint">{isAr ? 'علاقات توريد نشطة' : 'Active supply relationships'}</div>
+                    </div>
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'قيمة العقود النشطة' : 'Active Contract Value'}</div>
+                      <div className="stat-tile__value">{totalContractsSAR.toLocaleString()} {currency}</div>
+                      <div className="stat-tile__hint">{isAr ? 'كما هو مسجّل في السجلات' : 'As recorded in the registry'}</div>
+                    </div>
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'فحوص مقارنة مكتملة' : 'Benchmark Audits Done'}</div>
+                      <div className="stat-tile__value">{auditedCount}</div>
+                      <div className="stat-tile__hint">{isAr ? 'تم تنفيذها فعلياً' : 'Actually performed'}</div>
+                    </div>
+                  </div>
+
+                  {suppliers.length === 0 ? (
+                    <EmptyState
+                      icon={<IconSupplier size={30} />}
+                      title={isAr ? 'لا يوجد موردون مسجلون حالياً' : 'No suppliers registered right now'}
+                      description={
+                        isAr
+                          ? 'تُسجَّل علاقات التوريد في هذه المساحة عبر ربط أنظمة المشتريات أو استيراد أوامر الشراء؛ فور التسجيل تظهر هنا مع بطاقات الأداء.'
+                          : 'Supply relationships are registered in this workspace by connecting procurement systems or importing purchase orders; once registered they appear here with scorecards.'
+                      }
+                    />
+                  ) : (
+                    <>
+                      {statusOptions.length > 0 && (
+                        <div className="page-filter-bar">
+                          <div className="filter-group">
+                            <IconFilter size={14} />
+                            <span className="filter-label">{isAr ? 'تصنيف المخاطر:' : 'Risk class:'}</span>
+                            <button
+                              onClick={() => setStatusFilter('all')}
+                              className={`filter-chip ${statusFilter === 'all' ? 'active' : ''}`}
+                            >
+                              {isAr ? 'الكل' : 'All'} ({suppliers.length})
+                            </button>
+                            {statusOptions.map((status) => {
+                              const count = suppliers.filter((s) => s.risk_status === status).length;
+                              return (
+                                <button
+                                  key={status}
+                                  onClick={() => setStatusFilter(status)}
+                                  className={`filter-chip ${statusFilter === status ? 'active' : ''}`}
+                                >
+                                  {statusLabel(status)} ({count})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {filteredSuppliers.length === 0 ? (
+                        <EmptyState
+                          icon={<IconFilter size={30} />}
+                          title={isAr ? 'لا يوجد موردون بهذا التصنيف' : 'No suppliers in this class'}
+                          description={
+                            isAr
+                              ? 'اختر تصنيفاً آخر لعرض بقية سجل الموردين.'
+                              : 'Select a different class to view the rest of the supplier registry.'
+                          }
+                          action={
+                            <button onClick={() => setStatusFilter('all')} className="ml-btn ml-btn--ghost">
+                              {isAr ? 'عرض الكل' : 'Show All'}
+                            </button>
+                          }
+                        />
+                      ) : (
+                        <div className="record-list">
+                          {filteredSuppliers.map((supplier) => {
+                            const name = isAr
+                              ? (supplier.name_ar || supplier.name_en || supplier.code)
+                              : (supplier.name_en || supplier.name_ar || supplier.code);
+                            const score = Number(supplier.rating_score);
+                            const creep = priceCreep(supplier);
+                            const creepIsRising = creep.startsWith('+') || (supplier.risk_status || '').toLowerCase() === 'critical';
+
+                            return (
+                              <div key={supplier.id} className="record-row" style={{ alignItems: 'flex-start' }}>
+                                <div className="record-row__main">
+                                  <div className="va-row-head">
+                                    <div className="va-tags">
+                                      <span className={statusBadgeClass(supplier.risk_status, supplier.is_audited)}>
+                                        <span className="ml-dot" />
+                                        {statusLabel(supplier.risk_status)}
+                                      </span>
+                                      <span className="va-mono-id">{supplier.code}</span>
+                                      {!Number.isNaN(score) && (
+                                        <span className="ml-badge">
+                                          {isAr ? `التقييم: ${score}/100` : `Score: ${score}/100`}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="va-amount">{formatAmount(supplier.active_contracts_val_sar)}</span>
+                                  </div>
+
+                                  <div className="record-row__title" style={{ marginTop: 6 }}>{name}</div>
+
+                                  <div className="va-metric-grid">
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'التصاعد السعري' : 'Price creep'}</span>
+                                      <span className={`va-metric__v ${creepIsRising ? 'va-metric__v--warning' : ''}`}>
+                                        {creep}
+                                      </span>
+                                    </div>
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'الالتزام بالتوريد' : 'On-time delivery'}</span>
+                                      <span className="va-metric__v">{supplier.on_time_delivery_rate || '—'}</span>
+                                    </div>
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'فحص المقارنة السعرية' : 'Benchmark audit'}</span>
+                                      <span className={`va-metric__v ${supplier.is_audited ? 'va-metric__v--success' : 'va-metric__v--muted'}`}>
+                                        {supplier.is_audited
+                                          ? (isAr ? 'مكتمل' : 'Completed')
+                                          : (isAr ? 'لم يُنفَّذ بعد' : 'Not run yet')}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {supplier.last_audit_notes && (
+                                    <div className="va-note">{supplier.last_audit_notes}</div>
+                                  )}
+                                </div>
+
+                                <div className="record-row__actions">
+                                  <button
+                                    onClick={() => handleAudit(supplier)}
+                                    disabled={busyId === supplier.id}
+                                    className={`ml-btn ml-btn--sm ${supplier.is_audited ? 'ml-btn--subtle' : 'ml-btn--primary'}`}
+                                  >
+                                    <IconTrendingUp size={14} />
+                                    <span>
+                                      {busyId === supplier.id
+                                        ? (isAr ? 'جارِ الفحص…' : 'Auditing…')
+                                        : supplier.is_audited
+                                          ? (isAr ? 'إعادة الفحص' : 'Re-run Audit')
+                                          : (isAr ? 'فحص المقارنة السعرية' : 'Run Benchmark Audit')}
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+        </>
       )}
     </div>
   );

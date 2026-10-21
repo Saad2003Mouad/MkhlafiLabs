@@ -1,6 +1,10 @@
+// MIKHLAFI LABS — Public Website: How It Works
+// The four-stage operational method, sourced from the canonical marketing
+// content so the sequence stays consistent across the public site.
+
 import React from 'react';
 import { LocaleMode } from '../../types';
-import { WORKFLOW } from '../../data/mockData';
+import { WORKFLOW } from '../../data/marketingContent';
 
 interface HowItWorksProps {
   locale: LocaleMode;
@@ -11,55 +15,37 @@ export const HowItWorksSection: React.FC<HowItWorksProps> = ({ locale }) => {
 
   return (
     <section className="site-section" id="how-it-works">
-      <div className="site-container">
-        <div className="section-head">
-          <span className="section-eyebrow">
-            {isAr ? 'منهجية العمل والتحليل' : 'FORENSIC METHODOLOGY'}
-          </span>
-          <h2 className="section-title">
+      <div className="ml-container">
+        <div className="site-section__head">
+          <span className="ml-eyebrow">{isAr ? 'المسار التشغيلي' : 'THE OPERATING PATH'}</span>
+          <h2 className="ml-heading site-section__title">
             {isAr
-              ? 'من البيانات المشتتة إلى القرارات الحاسمة في 4 مراحل'
-              : 'From fragmented ledger feeds to verifiable executive action'}
+              ? 'أربع مراحل من الربط إلى القرار الموثّق'
+              : 'Four stages from connection to an evidenced decision'}
           </h2>
-          <p className="section-subtitle">
+          <p className="ml-lead site-section__lead">
             {isAr
-              ? 'معمارية حتمية مصممة للربط الآمن والتدقيق الجنائي دون إرباك فرق العمل أو المساس بسلامة الأنظمة القائمة.'
-              : 'A deterministic pipeline engineered for non-invasive ingestion, reconciliation, and audit-grade decision support.'}
+              ? 'المنهجية نفسها تنطبق على كل قطاع: تُقرأ البيانات من أنظمتكم، وتُوحَّد وتُعاير، ثم تُفحص بقواعد قطعية، وتُسلَّم كأولويات تنفيذية بمالك مسؤول ومتابعة أثر.'
+              : 'The same method applies to every sector: data is read from your systems, normalized and calibrated, tested with deterministic rules, and delivered as executive priorities with accountable owners and tracked impact.'}
           </p>
         </div>
 
-        <div className="workflow-grid">
+        <div className="site-steps">
           {WORKFLOW.map((step) => (
-            <div key={step.index} className="workflow-card">
-              <span className="workflow-idx">{step.index}</span>
-
-              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {isAr ? step.titleAr : step.titleEn}
-              </h3>
-
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                {isAr ? step.descAr : step.descEn}
-              </p>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: 'auto', paddingTop: '10px' }}>
-                {step.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    style={{
-                      fontSize: '10px',
-                      background: 'var(--bg-surface-elevated)',
-                      border: '1px solid var(--border-subtle)',
-                      padding: '2px 7px',
-                      borderRadius: 'var(--radius-xs)',
-                      color: 'var(--text-tertiary)',
-                      fontFamily: 'var(--font-mono)'
-                    }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <article key={step.index} className="site-step">
+              <span className="site-step__num">{step.index}</span>
+              <h3 className="site-step__title">{isAr ? step.titleAr : step.titleEn}</h3>
+              <p className="site-step__desc">{isAr ? step.descAr : step.descEn}</p>
+              {step.tags.length > 0 && (
+                <div className="site-step__tags">
+                  {step.tags.map((tag, i) => (
+                    <span key={i} className="ml-badge">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </article>
           ))}
         </div>
       </div>

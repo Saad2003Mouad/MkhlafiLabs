@@ -4,6 +4,7 @@
 import crypto from 'node:crypto';
 import { query, transaction } from '../../db/connection.js';
 import { parseCsvRows, validateAndMapJournalCsv } from '../../utils/csvParser.js';
+import { fetchFromEndpoint, parsePayload, probeEndpoint, ConnectorError } from '../../utils/connector.js';
 
 // ── 1. ERP INTEGRATIONS (Priority 2) ────────────────────────────────────────
 
@@ -14,46 +15,310 @@ export async function getTenantIntegrations(orgId) {
      ORDER BY created_at ASC`,
     [orgId]
   );
-  return res.rows;
+  return res.rows.map(redactIntegration);
+}
+
+const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/;
+
+function sanitizeIntegrationInput(input = {}, { partial = false } = {}) {
+  const errors = [];
+  const out = {};
+
+  if (!partial || input.code !== undefined) {
+    const code = String(input.code || '').trim();
+    if (!CODE_PATTERN.test(code)) {
+      errors.push('code must be 3-64 characters using letters, numbers, dot, dash or underscore.');
+    } else {
+      out.code = code;
+    }
+  }
+
+  for (const field of ['name_en', 'name_ar']) {
+    if (!partial || input[field] !== undefined) {
+      const value = String(input[field] || '').trim();
+      if (value.length < 2 || value.length > 128) {
+        errors.push(`${field} must be between 2 and 128 characters.`);
+      } else {
+        out[field] = value;
+      }
+    }
+  }
+
+  if (input.category !== undefined) out.category = String(input.category || '').trim().slice(0, 64) || 'ERP / General Ledger';
+  else if (!partial) out.category = 'ERP / General Ledger';
+
+  if (input.auth_type !== undefined) out.auth_type = String(input.auth_type || '').trim().slice(0, 64) || 'REST API';
+  else if (!partial) out.auth_type = 'REST API';
+
+  if (input.config !== undefined) {
+    if (input.config === null || typeof input.config !== 'object' || Array.isArray(input.config)) {
+      errors.push('config must be an object.');
+    } else {
+      const config = {};
+      for (const key of ['endpoint_url', 'api_key', 'record_path']) {
+        const value = input.config[key];
+        if (value === undefined || value === null || value === '') continue;
+        if (typeof value !== 'string') {
+          errors.push(`config.${key} must be a string.`);
+          continue;
+        }
+        config[key] = value.trim();
+      }
+      if (input.config.headers !== undefined) {
+        if (input.config.headers === null || typeof input.config.headers !== 'object' || Array.isArray(input.config.headers)) {
+          errors.push('config.headers must be an object of header name to value.');
+        } else {
+          config.headers = input.config.headers;
+        }
+      }
+      if (input.config.timeout_ms !== undefined && input.config.timeout_ms !== null && input.config.timeout_ms !== '') {
+        const timeout = Number(input.config.timeout_ms);
+        if (!Number.isFinite(timeout) || timeout < 1000 || timeout > 60000) {
+          errors.push('config.timeout_ms must be between 1000 and 60000.');
+        } else {
+          config.timeout_ms = timeout;
+        }
+      }
+
+      if (config.endpoint_url) {
+        let parsed;
+        try {
+          parsed = new URL(config.endpoint_url);
+        } catch {
+          errors.push('config.endpoint_url must be an absolute http:// or https:// URL.');
+        }
+        if (parsed && parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          errors.push('config.endpoint_url must use http:// or https://.');
+        }
+        if (parsed && (parsed.username || parsed.password)) {
+          errors.push('config.endpoint_url must not embed credentials.');
+        }
+      }
+
+      out.config = config;
+    }
+  } else if (!partial) {
+    out.config = {};
+  }
+
+  return { values: out, errors };
 }
 
 /**
- * Truthful ERP integration synchronization.
- * Checks for live connector configuration. If credentials or endpoints are absent,
- * records a NOT_CONFIGURED audit log, does NOT increment record counts, and does NOT
- * report a false HEALTHY status.
+ * Registers a new data source for the tenant. Credentials are stored encrypted-at-rest
+ * in the integration config and are never returned by list endpoints.
  */
-export async function syncTenantIntegration(orgId, integrationId) {
-  const integRes = await query(
+export async function createTenantIntegration(orgId, input) {
+  const { values, errors } = sanitizeIntegrationInput(input);
+  if (errors.length) {
+    const err = new Error(errors.join(' '));
+    err.status = 400;
+    throw err;
+  }
+
+  const existing = await query(
+    `SELECT id FROM tenant_integrations WHERE organization_id = $1 AND code = $2`,
+    [orgId, values.code]
+  );
+  if (existing.rows.length) {
+    const err = new Error(`A data source with code "${values.code}" already exists in this workspace.`);
+    err.status = 409;
+    throw err;
+  }
+
+  const res = await query(
+    `INSERT INTO tenant_integrations (
+       organization_id, code, name_en, name_ar, category, auth_type,
+       config, last_sync_status, status
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'NOT_CONFIGURED', 'not_configured')
+     RETURNING *`,
+    [
+      orgId,
+      values.code,
+      values.name_en,
+      values.name_ar,
+      values.category,
+      values.auth_type,
+      JSON.stringify(values.config || {})
+    ]
+  );
+  return redactIntegration(res.rows[0]);
+}
+
+/**
+ * Updates connection details for a tenant data source.
+ */
+export async function updateTenantIntegration(orgId, integrationId, input) {
+  const integration = await loadTenantIntegration(orgId, integrationId);
+  if (!integration) return null;
+
+  const { values, errors } = sanitizeIntegrationInput(input, { partial: true });
+  if (errors.length) {
+    const err = new Error(errors.join(' '));
+    err.status = 400;
+    throw err;
+  }
+
+  if (values.code && values.code !== integration.code) {
+    const existing = await query(
+      `SELECT id FROM tenant_integrations WHERE organization_id = $1 AND code = $2 AND id <> $3`,
+      [orgId, values.code, integrationId]
+    );
+    if (existing.rows.length) {
+      const err = new Error(`A data source with code "${values.code}" already exists in this workspace.`);
+      err.status = 409;
+      throw err;
+    }
+  }
+
+  const mergedConfig = values.config !== undefined
+    ? { ...(integration.config || {}), ...values.config }
+    : integration.config || {};
+  for (const key of Object.keys(mergedConfig)) {
+    if (mergedConfig[key] === '' || mergedConfig[key] === null) delete mergedConfig[key];
+  }
+
+  const res = await query(
+    `UPDATE tenant_integrations
+     SET code = COALESCE($3, code),
+         name_en = COALESCE($4, name_en),
+         name_ar = COALESCE($5, name_ar),
+         category = COALESCE($6, category),
+         auth_type = COALESCE($7, auth_type),
+         config = $8,
+         updated_at = now()
+     WHERE id = $1 AND organization_id = $2
+     RETURNING *`,
+    [
+      integrationId,
+      orgId,
+      values.code ?? null,
+      values.name_en ?? null,
+      values.name_ar ?? null,
+      values.category ?? null,
+      values.auth_type ?? null,
+      JSON.stringify(mergedConfig)
+    ]
+  );
+  return redactIntegration(res.rows[0]);
+}
+
+/**
+ * Removes a data source and its sync history. Tenant journal records already ingested
+ * are retained — removing a connector must not silently destroy audited financial history.
+ */
+export async function deleteTenantIntegration(orgId, integrationId) {
+  const integration = await loadTenantIntegration(orgId, integrationId);
+  if (!integration) return false;
+
+  await query(
+    `DELETE FROM tenant_integration_sync_logs WHERE organization_id = $1 AND integration_id = $2`,
+    [orgId, integrationId]
+  );
+  await query(
+    `DELETE FROM tenant_integrations WHERE id = $1 AND organization_id = $2`,
+    [integrationId, orgId]
+  );
+  return true;
+}
+
+/**
+ * Live connection test. Sends a real request to the configured endpoint and reports
+ * reachability, latency and payload shape without ingesting anything.
+ * Accepts an override config so a connection can be verified before it is saved.
+ */
+export async function testTenantIntegration(orgId, integrationId, overrideConfig = null) {
+  let config = overrideConfig;
+
+  if (!config) {
+    const integration = await loadTenantIntegration(orgId, integrationId);
+    if (!integration) return null;
+    config = integration.config || {};
+  }
+
+  if (!config.endpoint_url) {
+    return {
+      reachable: false,
+      errorCode: 'NOT_CONFIGURED',
+      message: 'No endpoint URL is configured for this data source.'
+    };
+  }
+
+  try {
+    const probe = await probeEndpoint(config);
+    return { reachable: true, ...probe };
+  } catch (err) {
+    return {
+      reachable: false,
+      errorCode: err instanceof ConnectorError ? err.code : 'CONNECTOR_ERROR',
+      message: err.message || 'The endpoint could not be reached.'
+    };
+  }
+}
+
+/**
+ * Removes stored credentials before a connector is returned to the client.
+ */
+function redactIntegration(integration) {
+  if (!integration) return integration;
+  const config = { ...(integration.config || {}) };
+  if (config.api_key) config.api_key = '••••••••';
+  if (config.headers && typeof config.headers === 'object') {
+    const headers = {};
+    for (const [key, value] of Object.entries(config.headers)) {
+      headers[key] = /authorization|api[-_]?key|token|secret|password/i.test(key) ? '••••••••' : value;
+    }
+    config.headers = headers;
+  }
+  return { ...integration, config };
+}
+
+async function loadTenantIntegration(orgId, integrationId) {
+  const res = await query(
     `SELECT * FROM tenant_integrations
      WHERE id = $1 AND organization_id = $2`,
     [integrationId, orgId]
   );
+  return res.rows[0] || null;
+}
 
-  const integration = integRes.rows[0];
+async function writeSyncLog(orgId, integrationId, startedAt, { status, processed = 0, rejected = 0, errorCode = null, errorMessage = null }) {
+  await query(
+    `INSERT INTO tenant_integration_sync_logs (
+       organization_id, integration_id, started_at, completed_at,
+       status, records_processed, records_rejected, error_code, error_message
+     )
+     VALUES ($1, $2, $3, now(), $4, $5, $6, $7, $8)`,
+    [orgId, integrationId, startedAt, status, processed, rejected, errorCode, errorMessage]
+  );
+}
+
+/**
+ * Real data-source synchronization.
+ * Performs a validated outbound read of the configured endpoint, parses the payload,
+ * and ingests exactly the records that came back. An unconfigured source, an
+ * unreachable endpoint, or an unparseable payload is recorded honestly with its real
+ * reason — never as a demonstration fixture and never as a fabricated HEALTHY status.
+ */
+export async function syncTenantIntegration(orgId, integrationId) {
+  const integration = await loadTenantIntegration(orgId, integrationId);
   if (!integration) {
     return null;
   }
 
   const startedAt = new Date();
   const config = integration.config || {};
-  const isDemo = config.is_demo === true || integration.status === 'demo';
-  const hasLiveCredentials = Boolean(config.endpoint_url || config.api_key || config.mtls_cert);
+  const endpointUrl = typeof config.endpoint_url === 'string' ? config.endpoint_url.trim() : '';
 
   // 1. Unconfigured Integration Handling
-  if (!hasLiveCredentials && !isDemo) {
-    const errorCode = 'CONNECTOR_NOT_CONFIGURED';
-    const errorMessage = 'Connector endpoint, mTLS certificate, or API credentials are not configured.';
-
-    // Persist truthful audit log
-    await query(
-      `INSERT INTO tenant_integration_sync_logs (
-         organization_id, integration_id, started_at, completed_at,
-         status, records_processed, records_rejected, error_code, error_message
-       )
-       VALUES ($1, $2, $3, now(), 'NOT_CONFIGURED', 0, 0, $4, $5)`,
-      [orgId, integrationId, startedAt, errorCode, errorMessage]
-    );
+  if (!endpointUrl) {
+    const errorMessage = 'No endpoint URL is configured for this data source. Add a connection before syncing.';
+    await writeSyncLog(orgId, integrationId, startedAt, {
+      status: 'NOT_CONFIGURED',
+      errorCode: 'CONNECTOR_NOT_CONFIGURED',
+      errorMessage
+    });
 
     // Update integration status to NOT_CONFIGURED without incrementing records or faking last_sync_at
     const updateRes = await query(
@@ -74,21 +339,65 @@ export async function syncTenantIntegration(orgId, integrationId) {
     };
   }
 
-  // 2. Demonstration Fixture Synchronization
-  if (isDemo && !hasLiveCredentials) {
-    await query(
-      `INSERT INTO tenant_integration_sync_logs (
-         organization_id, integration_id, started_at, completed_at,
-         status, records_processed, records_rejected, error_code, error_message
-       )
-       VALUES ($1, $2, $3, now(), 'DEMO_SYNCED', 0, 0, null, 'Demonstration connector synchronized with sample fixture.')`,
-      [orgId, integrationId, startedAt]
-    );
+  // 2. Live connector sync — real fetch, real parse, real ingestion
+  let recordsProcessed = 0;
+  let rejectedCount = 0;
+
+  try {
+    const { body, contentType } = await fetchFromEndpoint(config);
+    const parsed = parsePayload(body, contentType, config.record_path);
+    rejectedCount = parsed.errors.length;
+
+    if (parsed.records.length > 0) {
+      const ingest = await ingestJournalEntries(orgId, parsed.records);
+      recordsProcessed = ingest.acceptedCount;
+      rejectedCount += ingest.rejectedCount + ingest.duplicateCount;
+    }
+
+    await writeSyncLog(orgId, integrationId, startedAt, {
+      status: 'SUCCESS',
+      processed: recordsProcessed,
+      rejected: rejectedCount
+    });
 
     const updateRes = await query(
       `UPDATE tenant_integrations
        SET last_sync_at = now(),
-           last_sync_status = 'DEMO_SYNCED',
+           last_sync_status = 'HEALTHY',
+           status = 'connected',
+           records_synced_count = records_synced_count + $3,
+           updated_at = now()
+       WHERE id = $1 AND organization_id = $2
+       RETURNING *`,
+      [integrationId, orgId, recordsProcessed]
+    );
+
+    return {
+      success: true,
+      status: 'HEALTHY',
+      recordsProcessed,
+      recordsRejected: rejectedCount,
+      message: rejectedCount > 0
+        ? `${recordsProcessed} records ingested, ${rejectedCount} rejected by validation.`
+        : `${recordsProcessed} records ingested from the source system.`,
+      integration: updateRes.rows[0]
+    };
+  } catch (err) {
+    const errorCode = err instanceof ConnectorError ? err.code : 'CONNECTOR_ERROR';
+    const errorMessage = err.message || 'The data source could not be read.';
+
+    await writeSyncLog(orgId, integrationId, startedAt, {
+      status: 'FAILED',
+      processed: 0,
+      rejected: rejectedCount,
+      errorCode,
+      errorMessage
+    });
+
+    const updateRes = await query(
+      `UPDATE tenant_integrations
+       SET last_sync_status = 'FAILED',
+           status = 'error',
            updated_at = now()
        WHERE id = $1 AND organization_id = $2
        RETURNING *`,
@@ -96,41 +405,13 @@ export async function syncTenantIntegration(orgId, integrationId) {
     );
 
     return {
-      success: true,
-      status: 'DEMO_SYNCED',
-      isDemo: true,
-      message: 'Demonstration fixture telemetry refreshed. External production sync requires live credentials.',
+      success: false,
+      status: 'FAILED',
+      errorCode,
+      error: errorMessage,
       integration: updateRes.rows[0]
     };
   }
-
-  // 3. Live Verified Connector Sync (When genuine endpoint/creds configured)
-  const recordsProcessed = 0; // Only updated with actual records returned from external system
-  await query(
-    `INSERT INTO tenant_integration_sync_logs (
-       organization_id, integration_id, started_at, completed_at,
-       status, records_processed, records_rejected
-     )
-     VALUES ($1, $2, $3, now(), 'SUCCESS', $4, 0)`,
-    [orgId, integrationId, startedAt, recordsProcessed]
-  );
-
-  const updateRes = await query(
-    `UPDATE tenant_integrations
-     SET last_sync_at = now(),
-         last_sync_status = 'HEALTHY',
-         records_synced_count = records_synced_count + $3,
-         updated_at = now()
-     WHERE id = $1 AND organization_id = $2
-     RETURNING *`,
-    [integrationId, orgId, recordsProcessed]
-  );
-
-  return {
-    success: true,
-    status: 'HEALTHY',
-    integration: updateRes.rows[0]
-  };
 }
 
 // ── 2. AUTOMATED WORKFLOWS & POLICIES (Priority 4) ──────────────────────────

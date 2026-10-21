@@ -60,7 +60,7 @@ test.before(async () => {
     method: 'POST',
     body: {
       email: 'client@mikhlafi-holding.com',
-      password: 'MikhlafiSecure2026!'
+      password: 'Client@2026'
     }
   });
 

@@ -4,8 +4,66 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { handleApiRequest } from '../src/server.js';
+import { runMigrations } from '../src/db/connection.js';
 
-const BASE_URL = process.env.TEST_BASE_URL || 'http://127.0.0.1:3000';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PLATFORM_DIST = path.resolve(__dirname, '../../../apps/platform/dist');
+
+let localServer = null;
+let BASE_URL = process.env.TEST_BASE_URL || '';
+
+before(async () => {
+  if (!BASE_URL) {
+    const isPortOpen = await new Promise((resolve) => {
+      const probe = http.request('http://127.0.0.1:3000/', { method: 'HEAD', timeout: 500 }, (res) => resolve(true));
+      probe.on('error', () => resolve(false));
+      probe.on('timeout', () => { probe.destroy(); resolve(false); });
+      probe.end();
+    });
+
+    if (isPortOpen) {
+      BASE_URL = 'http://127.0.0.1:3000';
+    } else {
+      await runMigrations();
+      localServer = http.createServer(async (req, res) => {
+        const parsed = new URL(req.url, 'http://127.0.0.1');
+        if (parsed.pathname.startsWith('/api/')) {
+          await handleApiRequest(req, res);
+          return;
+        }
+        const reqPath = parsed.pathname === '/' ? 'index.html' : parsed.pathname.replace(/^\//, '');
+        const filePath = path.join(PLATFORM_DIST, reqPath);
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          const content = fs.readFileSync(filePath);
+          res.writeHead(200);
+          res.end(content);
+        } else {
+          const indexHtml = path.join(PLATFORM_DIST, 'index.html');
+          if (fs.existsSync(indexHtml)) {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(fs.readFileSync(indexHtml));
+          } else {
+            res.writeHead(404);
+            res.end('Not Found');
+          }
+        }
+      });
+      await new Promise((resolve) => localServer.listen(0, '127.0.0.1', resolve));
+      BASE_URL = `http://127.0.0.1:${localServer.address().port}`;
+    }
+  }
+});
+
+after(async () => {
+  if (localServer) {
+    await new Promise((resolve) => localServer.close(resolve));
+  }
+});
 
 function get(path, headers = {}) {
   return new Promise((resolve, reject) => {

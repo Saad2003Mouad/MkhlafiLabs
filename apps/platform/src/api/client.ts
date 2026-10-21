@@ -65,6 +65,72 @@ export interface DashboardSummaryResponse {
   isolationStatus: string;
 }
 
+/** One engine in the operator-owned services catalog. */
+export interface PlatformService {
+  id: string;
+  engine_number: string;
+  slug: string;
+  badge_ar: string;
+  badge_en: string;
+  title_ar: string;
+  title_en: string;
+  summary_ar: string;
+  summary_en: string;
+  sort_order: number;
+  is_enabled: boolean;
+  updated_at?: string;
+}
+
+export interface IntegrationConfig {
+  endpoint_url?: string;
+  record_path?: string;
+  api_key?: string;
+  timeout_ms?: number;
+  headers?: Record<string, string>;
+}
+
+export interface IntegrationSource {
+  id: string;
+  organization_id: string;
+  code: string;
+  name_en: string;
+  name_ar: string;
+  category: string;
+  auth_type: string;
+  records_synced_count: number | string;
+  last_sync_status: string;
+  last_sync_at: string;
+  status: string;
+  config?: IntegrationConfig;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConnectionProbe {
+  reachable: boolean;
+  errorCode?: string;
+  message?: string;
+  url?: string;
+  httpStatus?: number;
+  contentType?: string;
+  format?: string;
+  candidateRecords?: number;
+  parseMessage?: string;
+  latencyMs?: number;
+}
+
+export interface IngestResult {
+  success: boolean;
+  batchId: string;
+  totalIngested: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  duplicateCount: number;
+  flaggedCount: number;
+  flaggedItems: Array<{ docNum: string; amount: number; vendorName: string; flagReason: string }>;
+  validationErrors: Array<{ row: number; field: string; message: string }>;
+}
+
 export interface RealDecisionItem {
   id: string;
   organization_id: string;
@@ -477,6 +543,37 @@ class ApiClient {
     return this.request('/packages', { method: 'GET' });
   }
 
+  // ── Platform services (engines) catalog ───────────────────────────────────
+
+  /** Full catalog, including disabled engines. Platform operators only. */
+  async getAdminServices(): Promise<{ services: PlatformService[] }> {
+    return this.request('/admin/services', { method: 'GET' });
+  }
+
+  async updateAdminService(
+    serviceId: string,
+    payload: {
+      titleAr?: string;
+      titleEn?: string;
+      badgeAr?: string;
+      badgeEn?: string;
+      summaryAr?: string;
+      summaryEn?: string;
+      sortOrder?: number;
+      isEnabled?: boolean;
+    }
+  ): Promise<{ success: boolean; service: PlatformService }> {
+    return this.request(`/admin/services/${encodeURIComponent(serviceId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  /** Enabled engines only — this is what the public website renders. */
+  async getPublishedServices(): Promise<{ services: PlatformService[] }> {
+    return this.request('/services', { method: 'GET' });
+  }
+
   async createPackage(payload: {
     id: string;
     nameAr: string;
@@ -628,11 +725,60 @@ class ApiClient {
 
 
   // ── Operations: Integrations Hub ──────────────────────────────────────────
-  async getIntegrations(): Promise<{ organizationId: string; integrations: any[] }> {
+  async getIntegrations(): Promise<{ organizationId: string; integrations: IntegrationSource[] }> {
     return this.request('/integrations', { method: 'GET' });
   }
 
-  async syncIntegration(id: string): Promise<{ success: boolean; integration: any }> {
+  async createIntegration(params: {
+    code: string;
+    name_en: string;
+    name_ar: string;
+    category?: string;
+    auth_type?: string;
+    config?: IntegrationConfig;
+  }): Promise<{ success: boolean; integration: IntegrationSource }> {
+    return this.request('/integrations', { method: 'POST', body: JSON.stringify(params) });
+  }
+
+  async updateIntegration(
+    id: string,
+    params: Partial<{
+      code: string;
+      name_en: string;
+      name_ar: string;
+      category: string;
+      auth_type: string;
+      config: IntegrationConfig;
+    }>
+  ): Promise<{ success: boolean; integration: IntegrationSource }> {
+    return this.request(`/integrations/${id}`, { method: 'PUT', body: JSON.stringify(params) });
+  }
+
+  async deleteIntegration(id: string): Promise<{ success: boolean }> {
+    return this.request(`/integrations/${id}`, { method: 'DELETE' });
+  }
+
+  /** Verifies reachability and payload shape without ingesting anything. */
+  async testIntegration(id: string, config?: IntegrationConfig): Promise<ConnectionProbe> {
+    return this.request(`/integrations/${id}/test`, {
+      method: 'POST',
+      body: JSON.stringify(config ? { config } : {})
+    });
+  }
+
+  /** Executes a real outbound read of the source system and ingests what returns. */
+  async syncIntegration(
+    id: string
+  ): Promise<{
+    success: boolean;
+    status: string;
+    recordsProcessed?: number;
+    recordsRejected?: number;
+    message?: string;
+    errorCode?: string;
+    error?: string;
+    integration: IntegrationSource;
+  }> {
     return this.request(`/integrations/${id}/sync`, { method: 'POST' });
   }
 
@@ -664,16 +810,22 @@ class ApiClient {
   }
 
   // ── Operations: ERP Journal Entry Ingestion ───────────────────────────────
-  async ingestJournalEntries(entries: any[], batchId?: string): Promise<{
-    success: boolean;
-    batchId: string;
-    totalIngested: number;
-    flaggedCount: number;
-    flaggedItems: any[];
-  }> {
+  async ingestJournalEntries(entries: any[], batchId?: string): Promise<IngestResult> {
     return this.request('/ingest/journal-entries', {
       method: 'POST',
       body: JSON.stringify({ entries, batchId })
+    });
+  }
+
+  /**
+   * Connects a source system by uploading a spreadsheet/CSV export.
+   * Parsing and row-level validation run server-side; rejected rows come back
+   * with their line number instead of being silently coerced.
+   */
+  async ingestJournalCsv(csv: string, batchId?: string): Promise<IngestResult> {
+    return this.request('/ingest/journal-csv', {
+      method: 'POST',
+      body: JSON.stringify({ csv, batchId })
     });
   }
 }

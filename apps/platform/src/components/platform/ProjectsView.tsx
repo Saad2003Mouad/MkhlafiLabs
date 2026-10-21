@@ -1,336 +1,392 @@
-import React, { useState, useEffect } from 'react';
+// MIKHLAFI LABS — Project Performance & Contract Intelligence (protected workspace view)
+// Records are loaded exclusively from api.getProjects; claims audits call
+// api.verifyProjectClaims and reflect the real backend response. No demo
+// fallbacks and no simulated records are ever rendered.
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../../types';
-import { IconProjects, IconCheck, IconFileText, IconAlertTriangle } from '../Icons';
+import { IconProjects, IconCheck, IconFileText, IconAlert, IconFilter, IconLock } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { ProjectMarginWorkbench } from '../projects/ProjectMarginWorkbench';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface ProjectsViewProps {
   locale: LocaleMode;
 }
 
+type ProjectRecord = {
+  id: string;
+  code: string;
+  name_en?: string;
+  name_ar?: string;
+  client_name?: string;
+  budget_total_sar?: string | number;
+  spent_sar?: string | number;
+  variance_sar?: string | number;
+  planned_progress?: number;
+  actual_progress?: number;
+  health?: string;
+  change_orders_count?: number;
+  contractor_claims_audited?: boolean;
+};
+
+interface NoticeState {
+  type: 'success' | 'error';
+  message: string;
+}
+
 export const ProjectsView: React.FC<ProjectsViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const { isAuthenticated } = useAuth();
-  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
-  const [projects, setProjects] = useState<any[]>([]);
-  const [totalBudgetSAR, setTotalBudgetSAR] = useState<number>(0);
-  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [healthFilter, setHealthFilter] = useState<string>('all');
-  const [notice, setNotice] = useState<{ message: string; type: 'success' | 'error' | 'warning' } | null>(null);
-  const [auditedClaims, setAuditedClaims] = useState<{ [key: string]: boolean }>({});
+  const { isAuthenticated, tenant, openAuthModal } = useAuth();
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [totalBudgetSAR, setTotalBudgetSAR] = useState<number>(0);
+  const [healthFilter, setHealthFilter] = useState<string>('all');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const currency = tenant?.currency || 'SAR';
+
+  const fetchProjects = useCallback(async () => {
     if (!isAuthenticated) {
       setProjects([]);
       setTotalBudgetSAR(0);
-      setIsDemoDataset(false);
+      setError(null);
       setLoading(false);
       return;
     }
-
+    setLoading(true);
+    setError(null);
     try {
       const res = await api.getProjects();
-      if (res && Array.isArray(res.projects)) {
-        setProjects(res.projects);
-        setTotalBudgetSAR(res.totalCapitalBudgetSAR || 0);
-        setIsDemoDataset(false);
-        const map: { [key: string]: boolean } = {};
-        res.projects.forEach((p: any) => {
-          map[p.id] = !!p.contractor_claims_audited;
-        });
-        setAuditedClaims(map);
-      } else {
-        setProjects([]);
-        setTotalBudgetSAR(0);
-      }
-    } catch (err: any) {
-      setNotice({
-        type: 'error',
-        message: err.message || (isAr ? 'فشل جلب بيانات المشاريع' : 'Failed to load project records')
-      });
+      setProjects(Array.isArray(res.projects) ? (res.projects as ProjectRecord[]) : []);
+      setTotalBudgetSAR(res.totalCapitalBudgetSAR || 0);
+    } catch (err) {
+      setProjects([]);
+      setTotalBudgetSAR(0);
+      setError(
+        err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تحميل سجلات المشاريع.' : 'Failed to fetch project records.')
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
     fetchProjects();
-  }, [isAuthenticated]);
+  }, [fetchProjects, tenant?.organizationId]);
 
-  const handleVerifyClaims = async (projectId: string, code: string) => {
+  const showNotice = (state: NoticeState) => {
+    setNotice(state);
+    setTimeout(() => setNotice(null), 5000);
+  };
+
+  const handleVerifyClaims = async (project: ProjectRecord) => {
     if (!isAuthenticated) {
-      setNotice({
-        type: 'warning',
-        message: isAr ? 'يتطلب تدقيق المستخلصات تسجيل الدخول لمساحة عمل المنشأة.' : 'Authentication required to audit contractor claims.'
-      });
+      openAuthModal();
       return;
     }
-
+    setBusyId(project.id);
     try {
-      await api.verifyProjectClaims(projectId);
-      setAuditedClaims((prev) => ({ ...prev, [projectId]: true }));
-      setNotice({
+      const res = await api.verifyProjectClaims(project.id);
+      const code = res.project?.code || project.code;
+      showNotice({
         type: 'success',
         message: isAr
-          ? `تم تدقيق مطالبات المقاول لمشروع ${code} بنجاح وتسجيل حدث التدقيق في PostgreSQL.`
-          : `Contractor claims audited for ${code} & recorded in PostgreSQL.`
+          ? `تم تدقيق مستخلصات المقاول لمشروع (${code}) وتسجيل الحدث في سجل التدقيق.`
+          : `Contractor claims audited for project ${code} and recorded in the audit trail.`
       });
-      setTimeout(() => setNotice(null), 4000);
       await fetchProjects();
-    } catch (err: any) {
-      setNotice({
+    } catch (err) {
+      showNotice({
         type: 'error',
-        message: err.message || (isAr ? 'فشل تدقيق المستخلصات' : 'Error auditing claims')
+        message: err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تنفيذ تدقيق المستخلصات.' : 'Failed to audit the contractor claims.')
       });
-      setTimeout(() => setNotice(null), 4000);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const filteredProjects = projects.filter((p) => {
-    if (healthFilter === 'all') return true;
-    return p.health === healthFilter;
-  });
+  const healthBadgeClass = (health?: string) => {
+    const h = (health || '').toLowerCase();
+    if (h === 'on-track') return 'ml-badge ml-badge--success';
+    if (h === 'at-risk') return 'ml-badge ml-badge--warning';
+    if (h === 'delayed') return 'ml-badge ml-badge--danger';
+    return 'ml-badge';
+  };
+
+  const healthLabel = (health?: string) => {
+    const h = (health || '').toLowerCase();
+    if (h === 'on-track') return isAr ? 'ضمن الخطة' : 'ON TRACK';
+    if (h === 'at-risk') return isAr ? 'في دائرة الخطر' : 'AT RISK';
+    if (h === 'delayed') return isAr ? 'متأخر' : 'DELAYED';
+    return (health || '').toUpperCase();
+  };
+
+  const healthOptions = Array.from(
+    new Set(projects.map((p) => p.health).filter((h): h is string => !!h))
+  );
+
+  const filteredProjects = projects.filter((p) =>
+    healthFilter === 'all' ? true : p.health === healthFilter
+  );
+
+  const auditedCount = projects.filter((p) => !!p.contractor_claims_audited).length;
+
+  const formatAmount = (value?: string | number) =>
+    `${(Number(value) || 0).toLocaleString()} ${currency}`;
 
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'محركات الذكاء' : 'Intelligence Suite'}</span>
-            <span>/</span>
-            <span className="current">{isAr ? 'ذكاء أداء المشاريع والعقود' : 'Project Intelligence'}</span>
-          </div>
-          <h1 className="page-title">
-            <IconProjects size={24} />
-            <span>{isAr ? 'محرك ذكاء أداء المشاريع ومطابقة العقود' : 'Project Performance & Contract Intelligence'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'مقارنة المخطط بالمنجز الفعلي، كشف انحراف التكاليف عن الميزانية المعتمدة، وتدقيق أوامر التغيير والمستخلصات التعاقدية.'
-              : 'Tracking planned vs actual execution milestones, budget burn velocity, and unapproved change order claims.'}
-          </p>
-        </div>
+      <PageHeader
+        locale={locale}
+        icon={<IconProjects size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'محركات الذكاء' : 'Intelligence Engines']}
+        title={isAr ? 'محرك ذكاء أداء المشاريع والعقود' : 'Project Performance & Contract Intelligence'}
+        subtitle={
+          isAr
+            ? 'مقارنة المخطط بالمنجز الفعلي، رصد انحراف التكاليف عن الميزانيات المعتمدة، وتدقيق أوامر التغيير والمستخلصات التعاقدية قبل اعتمادها.'
+            : 'Comparing planned versus actual execution, tracking cost variance against approved budgets, and auditing change orders and contractor claims before approval.'
+        }
+        action={
+          isAuthenticated ? (
+            <div className="kpi-micro-badge">
+              <span className="label">{isAr ? 'إجمالي الميزانيات المراقَبة' : 'Monitored Budgets'}</span>
+              <span className="value">{totalBudgetSAR.toLocaleString()} {currency}</span>
+            </div>
+          ) : undefined
+        }
+      />
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {isDemoDataset && (
-            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
-              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
-            </span>
-          )}
-          <div className="kpi-micro-badge">
-            <span className="label">{isAr ? 'إجمالي الميزانيات قيد المراقبة' : 'Monitored Capital Budget'}</span>
-            <span className="value">{(totalBudgetSAR / 1e6).toFixed(1)}M SAR</span>
-          </div>
-        </div>
-      </div>
-
-      {/* View Switcher Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
-        <button
-          onClick={() => setViewMode('workbench')}
-          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
-          style={{
-            fontWeight: viewMode === 'workbench' ? 800 : 500,
-            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(99, 102, 241, 0.15))' : undefined,
-            borderColor: viewMode === 'workbench' ? '#8B5CF6' : undefined,
-            color: viewMode === 'workbench' ? '#C4B5FD' : undefined
-          }}
-        >
-          {isAr ? '🔬 رادار إدارة القيمة المكتسبة (EVM) وتدقيق أوامر التغيير (Workbench)' : '🔬 Project EVM & Variation Order Assurance Workbench'}
-        </button>
-        <button
-          onClick={() => setViewMode('database')}
-          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
-          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
-        >
-          {isAr
-            ? `📋 سجل عقود ومشاريع المنشأة الحالية (${projects.length})`
-            : `📋 Enterprise Active Project Contracts (${projects.length})`}
-        </button>
-      </div>
-
-      {viewMode === 'workbench' ? (
-        <ProjectMarginWorkbench
-          locale={locale}
-          initialScenario="infrastructure"
-          isEmbeddedInPublicPage={false}
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconLock size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض سجل مشاريع مؤسستك' : 'Sign in to view your organization’s project registry'}
+          description={
+            isAr
+              ? 'تُسترجع الميزانيات ومؤشرات الإنجاز وحالة المستخلصات مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Budgets, progress indicators, and claims status are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
+            </button>
+          }
         />
       ) : (
         <>
           {notice && (
-            <div className={`alert-feedback-banner ${notice.type === 'error' ? 'error' : notice.type === 'warning' ? 'warning' : 'success'}`}>
-              {notice.type === 'error' || notice.type === 'warning' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
-              <span>{notice.message}</span>
-            </div>
-          )}
-
-          {/* Filter Bar */}
-          <div className="page-filter-bar">
-        <div className="filter-group">
-          <span className="filter-label">{isAr ? 'حالة المشروع:' : 'Health Status:'}</span>
-          <button
-            onClick={() => setHealthFilter('all')}
-            className={`filter-chip ${healthFilter === 'all' ? 'active' : ''}`}
-          >
-            {isAr ? `كافة المشاريع (${projects.length})` : `All Projects (${projects.length})`}
-          </button>
-          <button
-            onClick={() => setHealthFilter('on-track')}
-            className={`filter-chip ${healthFilter === 'on-track' ? 'active' : ''}`}
-          >
-            {isAr ? 'ضمن الخطة' : 'On Track'}
-          </button>
-          <button
-            onClick={() => setHealthFilter('at-risk')}
-            className={`filter-chip ${healthFilter === 'at-risk' ? 'active' : ''}`}
-          >
-            {isAr ? 'في دائرة الخطر' : 'At Risk'}
-          </button>
-        </div>
-      </div>
-
-      {/* Empty State */}
-      {!loading && filteredProjects.length === 0 && (
-        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
-          <IconProjects size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-            {isAr ? 'لا توجد مشاريع مسجلة حالياً في مساحة العمل' : 'No Monitored Projects Found'}
-          </h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '500px', margin: '0 auto' }}>
-            {isAr
-              ? 'يمكنك ربط نظام إدارة المشاريع (ERP/Oracle) أو استيراد عقود المشاريع لبدء تدقيق الإنجاز الفعلي والمستخلصات.'
-              : 'Connect your ERP project management module or import project baseline schedules to track milestone variance.'}
-          </p>
-        </div>
-      )}
-
-      {/* Projects Grid */}
-      <div className="decisions-grid">
-        {filteredProjects.length === 0 ? (
-          <div
-            className="content-panel"
-            style={{
-              gridColumn: '1 / -1',
-              textAlign: 'center',
-              padding: '48px 20px',
-              border: '1px dashed var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)'
-            }}
-          >
-            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>🏗️</span>
-            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
-              {isAr ? 'لا توجد مشاريع رأسمالية مسجلة حالياً' : 'No Capital Projects Registered'}
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
-              {isAr
-                ? 'يتم تتبع مؤشرات الإنجاز الميداني وأوامر التغيير فور تسجيل مشاريع المؤسسة أو ربط نظام إدارة المشاريع.'
-                : 'Project performance baselines and contractor claims track dynamically once capital projects are configured.'}
-            </p>
-          </div>
-        ) : (
-          filteredProjects.map((p) => {
-          const isClaimsAudited = auditedClaims[p.id] || p.contractor_claims_audited;
-          const name = isAr ? (p.name_ar || p.nameAr) : (p.name_en || p.nameEn);
-          const planned = Number(p.planned_progress ?? p.plannedProgress ?? 0);
-          const actual = Number(p.actual_progress ?? p.actualProgress ?? 0);
-          const budget = p.budgetTotal || (p.budget_total_sar ? `${(parseFloat(p.budget_total_sar) / 1e6).toFixed(1)}M SAR` : '0 SAR');
-          const variance = p.varianceSAR || (p.variance_sar ? `+${parseFloat(p.variance_sar).toLocaleString()} SAR` : '0 SAR');
-          const changeOrders = p.change_orders_count ?? p.changeOrdersCount ?? 0;
-
-          return (
-            <div key={p.id} className="decision-card">
-              <div className="decision-card-header">
-                <div className="badge-row">
-                  <span className={`severity-tag ${p.health === 'on-track' ? 'optimal' : 'high'}`}>
-                    {p.health === 'on-track' ? (isAr ? 'ضمن الخطة' : 'ON TRACK') : (isAr ? 'في دائرة الخطر' : 'AT RISK')}
-                  </span>
-                  <span className="decision-code">{p.code}</span>
-                </div>
-                <div className="decision-financial">
-                  <span className="label">{isAr ? 'الميزانية المعتمدة' : 'Approved Budget'}</span>
-                  <span className="amount">{budget}</span>
-                </div>
-              </div>
-
-              <h3 className="decision-title">
-                {name}
-              </h3>
-
-              {p.client_name && (
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                  {isAr ? `الجهة المالكة: ${p.client_name}` : `Client: ${p.client_name}`}
+                <div className={`alert-feedback-banner ${notice.type === 'success' ? 'success' : 'error'}`}>
+                  {notice.type === 'success' ? <IconCheck size={16} /> : <IconAlert size={16} />}
+                  <span>{notice.message}</span>
                 </div>
               )}
 
-              {/* Progress Bars */}
-              <div style={{ margin: '14px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>{isAr ? 'الإنجاز الفعلي' : 'Actual Progress'}</span>
-                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{actual}%</span>
-                  </div>
-                  <div style={{ height: '6px', background: 'var(--border-subtle)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, Math.max(0, actual))}%`, height: '100%', background: p.health === 'on-track' ? 'var(--status-success)' : 'var(--status-warning)' }} />
-                  </div>
+              {loading ? (
+                <div className="skeleton-grid">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="skeleton-card" />
+                  ))}
                 </div>
+              ) : error ? (
+                <EmptyState
+                  icon={<IconAlert size={30} />}
+                  title={isAr ? 'تعذر تحميل سجل المشاريع' : 'Unable to load the project registry'}
+                  description={error}
+                  action={
+                    <button onClick={fetchProjects} className="ml-btn ml-btn--primary">
+                      {isAr ? 'إعادة المحاولة' : 'Retry'}
+                    </button>
+                  }
+                />
+              ) : (
+                <>
+                  <div className="stat-grid">
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'المشاريع المراقَبة' : 'Monitored Projects'}</div>
+                      <div className="stat-tile__value">{projects.length}</div>
+                      <div className="stat-tile__hint">{isAr ? 'عقود نشطة ضمن النطاق' : 'Active contracts in scope'}</div>
+                    </div>
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'إجمالي الميزانيات' : 'Total Budgets'}</div>
+                      <div className="stat-tile__value">{totalBudgetSAR.toLocaleString()} {currency}</div>
+                      <div className="stat-tile__hint">{isAr ? 'كما هو مسجّل في السجلات' : 'As recorded in the registry'}</div>
+                    </div>
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'مستخلصات مدققة' : 'Audited Claims'}</div>
+                      <div className="stat-tile__value">{auditedCount}</div>
+                      <div className="stat-tile__hint">{isAr ? 'تم تدقيقها فعلياً' : 'Actually verified'}</div>
+                    </div>
+                  </div>
 
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>{isAr ? 'المخطط التعاقدي' : 'Planned Baseline'}</span>
-                    <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{planned}%</span>
-                  </div>
-                  <div style={{ height: '4px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, Math.max(0, planned))}%`, height: '100%', background: 'var(--border-strong)' }} />
-                  </div>
-                </div>
-              </div>
+                  {projects.length === 0 ? (
+                    <EmptyState
+                      icon={<IconProjects size={30} />}
+                      title={isAr ? 'لا توجد مشاريع مسجلة حالياً' : 'No projects registered right now'}
+                      description={
+                        isAr
+                          ? 'تُسجَّل المشاريع والعقود في هذه المساحة عبر ربط أنظمة تخطيط الموارد أو استيراد العقود؛ فور التسجيل تظهر هنا مع مؤشرات الإنجاز.'
+                          : 'Projects and contracts are registered in this workspace by connecting ERP systems or importing contracts; once registered they appear here with progress indicators.'
+                      }
+                    />
+                  ) : (
+                    <>
+                      {healthOptions.length > 0 && (
+                        <div className="page-filter-bar">
+                          <div className="filter-group">
+                            <IconFilter size={14} />
+                            <span className="filter-label">{isAr ? 'الحالة:' : 'Health:'}</span>
+                            <button
+                              onClick={() => setHealthFilter('all')}
+                              className={`filter-chip ${healthFilter === 'all' ? 'active' : ''}`}
+                            >
+                              {isAr ? 'الكل' : 'All'} ({projects.length})
+                            </button>
+                            {healthOptions.map((h) => {
+                              const count = projects.filter((p) => p.health === h).length;
+                              return (
+                                <button
+                                  key={h}
+                                  onClick={() => setHealthFilter(h)}
+                                  className={`filter-chip ${healthFilter === h ? 'active' : ''}`}
+                                >
+                                  {healthLabel(h)} ({count})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
-              <div className="risk-metric-strip">
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'انحراف التكلفة' : 'Cost Variance'}</span>
-                  <span className="v" style={{ color: p.health === 'on-track' ? 'var(--status-success)' : 'var(--status-warning)' }}>
-                    {variance}
-                  </span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'أوامر التغيير' : 'Change Orders'}</span>
-                  <span className="v">{changeOrders}</span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'تدقيق المطالبات' : 'Claims Audit'}</span>
-                  <span className="v" style={{ color: isClaimsAudited ? 'var(--status-success)' : 'var(--text-secondary)' }}>
-                    {isClaimsAudited ? (isAr ? 'مدقق ومطابق' : 'Verified') : (isAr ? 'بانتظار الفحص' : 'Pending')}
-                  </span>
-                </div>
-              </div>
+                      {filteredProjects.length === 0 ? (
+                        <EmptyState
+                          icon={<IconFilter size={30} />}
+                          title={isAr ? 'لا توجد مشاريع بهذه الحالة' : 'No projects with this status'}
+                          description={
+                            isAr
+                              ? 'اختر حالة أخرى لعرض بقية سجل المشاريع.'
+                              : 'Select a different status to view the rest of the project registry.'
+                          }
+                          action={
+                            <button onClick={() => setHealthFilter('all')} className="ml-btn ml-btn--ghost">
+                              {isAr ? 'عرض الكل' : 'Show All'}
+                            </button>
+                          }
+                        />
+                      ) : (
+                        <div className="record-list">
+                          {filteredProjects.map((project) => {
+                            const planned = Math.min(100, Math.max(0, Number(project.planned_progress) || 0));
+                            const actual = Math.min(100, Math.max(0, Number(project.actual_progress) || 0));
+                            const variance = Number(project.variance_sar) || 0;
+                            const varianceColor = variance > 0 ? 'var(--status-warning)' : 'var(--status-success)';
+                            const name = isAr
+                              ? (project.name_ar || project.name_en || project.code)
+                              : (project.name_en || project.name_ar || project.code);
 
-              <div className="decision-actions-row">
-                <button
-                  onClick={() => handleVerifyClaims(p.id, p.code)}
-                  className={isClaimsAudited ? 'btn-secondary' : 'btn-primary'}
-                  disabled={isClaimsAudited}
-                  style={{ fontSize: '12px', padding: '8px 14px' }}
-                >
-                  <IconFileText size={14} />
-                  <span>
-                    {isClaimsAudited
-                      ? (isAr ? 'تم تدقيق مطالبات المقاول' : 'Contractor Claims Audited')
-                      : (isAr ? 'تدقيق ومطابقة مستخلصات المقاول' : 'Audit Contractor Claims')}
-                  </span>
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
-      </div>
-      </>
+                            return (
+                              <div key={project.id} className="record-row" style={{ alignItems: 'flex-start' }}>
+                                <div className="record-row__main">
+                                  <div className="va-row-head">
+                                    <div className="va-tags">
+                                      <span className={healthBadgeClass(project.health)}>
+                                        <span className="ml-dot" />
+                                        {healthLabel(project.health)}
+                                      </span>
+                                      <span className="va-mono-id">{project.code}</span>
+                                      {project.client_name && <span className="ml-badge">{project.client_name}</span>}
+                                    </div>
+                                    <span className="va-amount">{formatAmount(project.budget_total_sar)}</span>
+                                  </div>
+
+                                  <div className="record-row__title" style={{ marginTop: 6 }}>{name}</div>
+
+                                  <div className="va-progress">
+                                    <div>
+                                      <div className="va-progress-row">
+                                        <span>{isAr ? 'المنجز فعلياً' : 'Actual progress'}</span>
+                                        <strong>{actual.toFixed(0)}%</strong>
+                                      </div>
+                                      <div className="va-progress-track">
+                                        <div
+                                          className={`va-progress-fill ${
+                                            project.health === 'on-track' ? 'va-progress-fill--success' : 'va-progress-fill--warning'
+                                          }`}
+                                          style={{ width: `${actual}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div className="va-progress-row">
+                                        <span>{isAr ? 'المخطط المتعاقد' : 'Contracted plan'}</span>
+                                        <strong>{planned.toFixed(0)}%</strong>
+                                      </div>
+                                      <div className="va-progress-track va-progress-track--thin">
+                                        <div className="va-progress-fill va-progress-fill--planned" style={{ width: `${planned}%` }} />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="va-metric-grid">
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'انحراف التكلفة' : 'Cost variance'}</span>
+                                      <span
+                                        className="va-metric__v"
+                                        style={{ color: varianceColor }}
+                                      >
+                                        {variance > 0 ? '+' : ''}{variance.toLocaleString()} {currency}
+                                      </span>
+                                    </div>
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'أوامر التغيير' : 'Change orders'}</span>
+                                      <span className="va-metric__v">{Number(project.change_orders_count) || 0}</span>
+                                    </div>
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'المستخلصات' : 'Claims'}</span>
+                                      <span className={`va-metric__v ${project.contractor_claims_audited ? 'va-metric__v--success' : 'va-metric__v--muted'}`}>
+                                        {project.contractor_claims_audited
+                                          ? (isAr ? 'مدققة' : 'Audited')
+                                          : (isAr ? 'بانتظار التدقيق' : 'Pending audit')}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="record-row__actions">
+                                  <button
+                                    onClick={() => handleVerifyClaims(project)}
+                                    disabled={busyId === project.id || !!project.contractor_claims_audited}
+                                    className={`ml-btn ml-btn--sm ${
+                                      project.contractor_claims_audited ? 'ml-btn--subtle' : 'ml-btn--primary'
+                                    }`}
+                                  >
+                                    <IconFileText size={14} />
+                                    <span>
+                                      {busyId === project.id
+                                        ? (isAr ? 'جارِ التدقيق…' : 'Auditing…')
+                                        : project.contractor_claims_audited
+                                          ? (isAr ? 'تم التدقيق' : 'Audited')
+                                          : (isAr ? 'تدقيق المستخلصات' : 'Audit Claims')}
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+        </>
       )}
     </div>
   );

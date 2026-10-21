@@ -1,234 +1,287 @@
-import React, { useState, useEffect } from 'react';
+// MIKHLAFI LABS — Data Quality & Governance Intelligence
+// All audits are loaded exclusively from the authenticated backend.
+// No simulated or demonstration records are ever rendered.
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../../types';
-import { IconDataQuality, IconCheck, IconRefresh } from '../Icons';
+import { IconDataQuality, IconCheck, IconRefresh, IconRisk } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { DataQualityWorkbench } from '../governance/DataQualityWorkbench';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface DataQualityViewProps {
   locale: LocaleMode;
 }
 
+interface QualityAuditRecord {
+  id: string;
+  check_code: string;
+  rule_name: string;
+  source_system: string;
+  compliance_rate: string | number;
+  unmapped_records: string | number;
+  status: string;
+  last_checked: string;
+}
+
 export const DataQualityView: React.FC<DataQualityViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const { isAuthenticated } = useAuth();
-  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
-  const [checks, setChecks] = useState<any[]>([]);
-  const [overallScore, setOverallScore] = useState<number>(0);
+  const { isAuthenticated, openAuthModal } = useAuth();
+  const [audits, setAudits] = useState<QualityAuditRecord[]>([]);
+  const [overallScore, setOverallScore] = useState<number | null>(null);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'passed' | 'attention'>('all');
   const [isScanning, setIsScanning] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchAudits = async () => {
-    if (!isAuthenticated) return;
+  const fetchAudits = useCallback(async () => {
+    if (!isAuthenticated) {
+      setAudits([]);
+      setOverallScore(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
       const res = await api.getDataQualityAudits();
-      if (res.audits && res.audits.length > 0) {
-        setChecks(res.audits);
-        setOverallScore(res.overallComplianceScore);
-      }
-    } catch {
-      // Fallback
+      const rows = Array.isArray(res.audits) ? res.audits : [];
+      setAudits(rows);
+      setOverallScore(rows.length > 0 ? Number(res.overallComplianceScore) : null);
+    } catch (err: any) {
+      setAudits([]);
+      setOverallScore(null);
+      setError(err.message || (isAr ? 'تعذّر تحميل نتائج تدقيق جودة البيانات.' : 'Unable to load data quality audits.'));
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
     fetchAudits();
-  }, [isAuthenticated]);
+  }, [fetchAudits]);
 
   const handleRunScan = async () => {
-    setIsScanning(true);
-    if (isAuthenticated) {
-      try {
-        const res = await api.runDataQualityScan();
-        if (res.audits) {
-          setChecks(res.audits);
-          setOverallScore(res.overallComplianceScore);
-        }
-        setNotice(
-          isAr
-            ? `اكتمل فحص تكامل وسلامة القيود عبر كافة الأنظمة في PostgreSQL. نسبة الامتثال الكلية: ${res.overallComplianceScore}%.`
-            : `System-wide ledger integrity scan complete in PostgreSQL. Overall compliance: ${res.overallComplianceScore}%.`
-        );
-        setTimeout(() => setNotice(null), 4000);
-      } catch (err: any) {
-        setNotice(err.message || 'Error running scan');
-        setTimeout(() => setNotice(null), 4000);
-      } finally {
-        setIsScanning(false);
-      }
+    if (!isAuthenticated) {
+      openAuthModal();
       return;
     }
-
-    // Demo fallback
-    setTimeout(() => {
+    setIsScanning(true);
+    try {
+      const res = await api.runDataQualityScan();
+      const rows = Array.isArray(res.audits) ? res.audits : [];
+      setError(null);
+      setNotice({
+        type: 'success',
+        message: isAr
+          ? `اكتمل فحص سلامة البيانات وتسجيل حدث التدقيق.${rows.length > 0 ? ` متوسط الامتثال المحسوب: ${Number(res.overallComplianceScore)}%.` : ''}`
+          : `Data integrity scan complete and audit event recorded.${rows.length > 0 ? ` Computed average compliance: ${Number(res.overallComplianceScore)}%.` : ''}`
+      });
+      await fetchAudits();
+    } catch (err: any) {
+      setNotice({ type: 'error', message: err.message || (isAr ? 'تعذّر تنفيذ الفحص.' : 'Unable to run the scan.') });
+    } finally {
       setIsScanning(false);
-      setChecks((prev) =>
-        prev.map((c) => ({
-          ...c,
-          lastChecked: isAr ? 'الآن (محدث)' : 'Just now (Synced)'
-        }))
-      );
-      setNotice(isAr ? 'اكتمل فحص تكامل وسلامة القيود (عرض تجريبي). نسبة الامتثال الكلية: 97.4%.' : 'System-wide scan complete (demo).');
       setTimeout(() => setNotice(null), 4000);
-    }, 1200);
+    }
+  };
+
+  const isPassed = (a: QualityAuditRecord) => (a.status || '').toLowerCase() === 'passed';
+
+  const filteredAudits = audits.filter((a) => {
+    if (filterStatus === 'all') return true;
+    if (filterStatus === 'passed') return isPassed(a);
+    return !isPassed(a);
+  });
+
+  const counts = {
+    all: audits.length,
+    passed: audits.filter(isPassed).length,
+    attention: audits.filter((a) => !isPassed(a)).length
   };
 
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'محركات الذكاء' : 'Intelligence Suite'}</span>
-            <span>/</span>
-            <span className="current">{isAr ? 'جودة وحوكمة البيانات' : 'Data Quality Intelligence'}</span>
-          </div>
-          <h1 className="page-title">
-            <IconDataQuality size={24} />
-            <span>{isAr ? 'محرك جودة وحوكمة البيانات وتدقيق السجلات' : 'Data Quality & Governance Intelligence'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'فحص اكتمال القيود المحاسبية، كشف الحقول الشاغرة في أوامر الشراء، وتدقيق تطابق الفواتير مع السجل الضريبي ZATCA.'
-              : 'Verifying ledger integrity, missing-field anomalies in POs, and bi-directional reconciliation with tax compliance bridges.'}
-          </p>
-        </div>
+      <PageHeader
+        locale={locale}
+        icon={<IconDataQuality size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'محركات الذكاء' : 'Intelligence Suite']}
+        title={isAr ? 'جودة البيانات وحوكمة السجلات' : 'Data Quality & Governance Intelligence'}
+        subtitle={
+          isAr
+            ? 'فحص اكتمال القيود والسجلات ورصد الحقول الشاغرة وعدم تطابق المصادر عبر أنظمة مؤسستك، مع امتثال محسوب من نتائج التدقيق الفعلية.'
+            : 'Auditing record completeness, flagging missing fields and cross-system mismatches across your organization’s sources, with compliance computed from actual audit results.'
+        }
+        action={
+          <button onClick={handleRunScan} disabled={isScanning} className="ml-btn ml-btn--primary">
+            <IconRefresh size={14} className={isScanning ? 'vb-spin' : undefined} />
+            {isScanning
+              ? (isAr ? 'جارِ الفحص...' : 'Scanning...')
+              : (isAr ? 'تشغيل فحص سلامة البيانات' : 'Run Integrity Scan')}
+          </button>
+        }
+      />
 
-        <button
-          onClick={handleRunScan}
-          disabled={isScanning}
-          className="btn-primary"
-          style={{ fontSize: '13px', padding: '10px 18px' }}
-        >
-          <IconRefresh size={14} className={isScanning ? 'spin' : ''} />
-          <span>{isScanning ? (isAr ? 'جارِ فحص القيود...' : 'Scanning Ledgers...') : (isAr ? 'إجراء فحص سلامة القيود' : 'Run Integrity Audit Scan')}</span>
-        </button>
-      </div>
-
-      {/* View Switcher Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
-        <button
-          onClick={() => setViewMode('workbench')}
-          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
-          style={{
-            fontWeight: viewMode === 'workbench' ? 800 : 500,
-            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(20, 184, 166, 0.25), rgba(13, 148, 136, 0.15))' : undefined,
-            borderColor: viewMode === 'workbench' ? '#14B8A6' : undefined,
-            color: viewMode === 'workbench' ? '#2DD4BF' : undefined
-          }}
-        >
-          {isAr ? '🔬 منصة حوكمة وجودة الدفاتر (Workbench)' : '🔬 Data Governance & Quality Workbench'}
-        </button>
-        <button
-          onClick={() => setViewMode('database')}
-          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
-          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
-        >
-          {isAr ? '📊 جدول الفحوصات والامتثال المباشر (Direct Ledger Audits)' : '📊 Direct Ledger Audits'}
-        </button>
-      </div>
-
-      {viewMode === 'workbench' ? (
-        <DataQualityWorkbench
-          locale={locale}
-          initialScenario="retail_distribution"
-        />
-      ) : (
-        <>
       {notice && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{notice}</span>
+        <div className={`alert-feedback-banner ${notice.type === 'error' ? 'error' : 'success'}`}>
+          {notice.type === 'error' ? <IconRisk size={16} /> : <IconCheck size={16} />}
+          <span>{notice.message}</span>
         </div>
       )}
 
-      {/* Compliance Overview Badge */}
-      <div className="page-filter-bar">
-        <div className="filter-group">
-          <span className="filter-label">{isAr ? 'معدل الامتثال الكلي:' : 'Overall Compliance:'}</span>
-          <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--status-success)' }}>
-            {overallScore}%
-          </span>
-        </div>
-        <div className="meta-stats">
-          <span>{isAr ? 'فحص حتمي مطابق لمعايير ZATCA & IFRS' : 'Deterministic ZATCA & IFRS Validation'}</span>
-        </div>
-      </div>
-
-      {/* Overview Cards */}
-      <div className="decisions-grid">
-        {checks.length === 0 ? (
-          <div
-            className="content-panel"
-            style={{
-              gridColumn: '1 / -1',
-              textAlign: 'center',
-              padding: '48px 20px',
-              border: '1px dashed var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)'
-            }}
-          >
-            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>🔍</span>
-            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
-              {isAr ? 'لم يتم تشغيل فحص جودة البيانات حتى الآن' : 'No Data Quality Audits Run Yet'}
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
-              {isAr
-                ? 'انقر على "تشغيل فحص شامل وتدقيق النزاهة" أعلاه للتحقق من سلامة القيود والامتثال لمعايير ZATCA و IFRS.'
-                : 'Click "Run Quality Audit Scan" above to verify ledger integrity against ZATCA & IFRS rules.'}
-            </p>
-          </div>
-        ) : (
-          checks.map((check) => {
-          const ruleName = check.rule_name || check.ruleName;
-          const source = check.source_system || check.sourceSystem;
-          const compliance = check.compliance_rate ?? check.complianceRate ?? 99;
-          const unmapped = check.unmapped_records ?? check.unmappedRecords ?? 0;
-          const lastChecked = check.last_checked || check.lastChecked || 'الآن';
-          const isPassed = check.status === 'passed' || check.status === 'PASS';
-
-          return (
-            <div key={check.id} className="decision-card">
-              <div className="decision-card-header">
-                <div className="badge-row">
-                  <span className={`severity-tag ${isPassed ? 'optimal' : 'medium'}`}>
-                    {isPassed ? (isAr ? 'سليم ومطابق' : 'PASSED') : (isAr ? 'تنبيه تدقيق' : 'WARNING')}
-                  </span>
-                  <span className="category-pill">{source}</span>
+          {!isAuthenticated ? (
+            <EmptyState
+              icon={<IconDataQuality size={30} />}
+              title={isAr ? 'سجّل الدخول لعرض نتائج تدقيق البيانات' : 'Sign in to view your data quality audits'}
+              description={
+                isAr
+                  ? 'تُسترجَع نتائج تدقيق جودة البيانات ومؤشرات الامتثال مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+                  : 'Data quality audit results and compliance metrics are loaded directly from your organization workspace after signing in.'
+              }
+              action={
+                <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+                  {isAr ? 'تسجيل الدخول' : 'Sign In'}
+                </button>
+              }
+            />
+          ) : (
+            <>
+              <div className="stat-grid">
+                <div className="stat-tile">
+                  <div className="stat-tile__label">{isAr ? 'متوسط الامتثال العام' : 'Overall Compliance'}</div>
+                  <div className="stat-tile__value">
+                    {overallScore !== null ? `${overallScore}%` : '—'}
+                  </div>
+                  <div className="stat-tile__hint">
+                    {overallScore !== null
+                      ? (isAr ? 'محسوب من نتائج التدقيق الفعلية' : 'Computed from actual audit results')
+                      : (isAr ? 'لا توجد نتائج تدقيق بعد' : 'No audit results yet')}
+                  </div>
                 </div>
-                <div className="decision-financial">
-                  <span className="label">{isAr ? 'معدل الامتثال' : 'Compliance Rate'}</span>
-                  <span className="amount" style={{ color: isPassed ? 'var(--status-success)' : 'var(--status-warning)' }}>
-                    {compliance}%
-                  </span>
+                <div className="stat-tile">
+                  <div className="stat-tile__label">{isAr ? 'قواعد التدقيق' : 'Audit Rules'}</div>
+                  <div className="stat-tile__value">{counts.all}</div>
+                  <div className="stat-tile__hint">
+                    {isAr ? 'قواعد مسجلة لهذه المؤسسة' : 'Rules registered for this organization'}
+                  </div>
+                </div>
+                <div className="stat-tile">
+                  <div className="stat-tile__label">{isAr ? 'تحتاج مراجعة' : 'Need Attention'}</div>
+                  <div className="stat-tile__value">{counts.attention}</div>
+                  <div className="stat-tile__hint">
+                    {isAr ? 'نتائج غير مطابقة للقاعدة' : 'Results not passing their rule'}
+                  </div>
                 </div>
               </div>
 
-              <h3 className="decision-title">
-                {ruleName}
-              </h3>
+              {error ? (
+                <EmptyState
+                  icon={<IconRisk size={30} />}
+                  title={isAr ? 'تعذّر تحميل نتائج التدقيق' : 'Unable to load audit results'}
+                  description={error}
+                  action={
+                    <button onClick={fetchAudits} className="ml-btn ml-btn--primary">
+                      {isAr ? 'إعادة المحاولة' : 'Retry'}
+                    </button>
+                  }
+                />
+              ) : (
+                <>
+                  <div className="page-filter-bar">
+                    <div className="filter-group">
+                      <span className="filter-label">{isAr ? 'الحالة:' : 'Status:'}</span>
+                      <button onClick={() => setFilterStatus('all')} className={`filter-chip ${filterStatus === 'all' ? 'active' : ''}`}>
+                        {isAr ? `الكل (${counts.all})` : `All (${counts.all})`}
+                      </button>
+                      <button onClick={() => setFilterStatus('passed')} className={`filter-chip ${filterStatus === 'passed' ? 'active' : ''}`}>
+                        <span className="dot high" style={{ background: 'var(--status-success)' }} />
+                        {isAr ? `مطابق (${counts.passed})` : `Passed (${counts.passed})`}
+                      </button>
+                      <button onClick={() => setFilterStatus('attention')} className={`filter-chip ${filterStatus === 'attention' ? 'active' : ''}`}>
+                        <span className="dot critical" />
+                        {isAr ? `يحتاج مراجعة (${counts.attention})` : `Needs Attention (${counts.attention})`}
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="risk-metric-strip">
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'القيود غير المتطابقة' : 'Unmapped Records'}</span>
-                  <span className="v" style={{ color: unmapped > 0 ? 'var(--status-warning)' : 'var(--status-success)' }}>
-                    {unmapped} {isAr ? 'قيود' : 'records'}
-                  </span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'آخر تدقيق' : 'Last Check'}</span>
-                  <span className="v">{lastChecked}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })
-      )}
-      </div>
-      </>
-      )}
+                  {loading ? (
+                    <div className="skeleton-grid">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className="skeleton-card" />
+                      ))}
+                    </div>
+                  ) : filteredAudits.length === 0 ? (
+                    <EmptyState
+                      icon={<IconDataQuality size={30} />}
+                      title={isAr ? 'لا توجد نتائج تدقيق جودة بيانات' : 'No data quality audits yet'}
+                      description={
+                        isAr
+                          ? 'شغّل فحص السلامة لقياس اكتمال السجلات وعدم تطابق المصادر عبر أنظمة مؤسستك، وستظهر نتائج قواعد التدقيق هنا مباشرة من قاعدة البيانات.'
+                          : 'Run the integrity scan to measure record completeness and source mismatches across your organization’s systems. Rule results will appear here directly from the database.'
+                      }
+                      action={
+                        <button onClick={handleRunScan} disabled={isScanning} className="ml-btn ml-btn--primary">
+                          <IconRefresh size={14} className={isScanning ? 'vb-spin' : undefined} />
+                          {isScanning
+                            ? (isAr ? 'جارِ الفحص...' : 'Scanning...')
+                            : (isAr ? 'تشغيل فحص السلامة' : 'Run Integrity Scan')}
+                        </button>
+                      }
+                    />
+                  ) : (
+                    <div className="record-list">
+                      {filteredAudits.map((a) => {
+                        const passed = isPassed(a);
+                        const compliance = Number(a.compliance_rate);
+                        const unmapped = Number(a.unmapped_records) || 0;
+
+                        return (
+                          <div key={a.id} className="record-row">
+                            <span className="vb-record-icon" aria-hidden="true">
+                              <IconDataQuality size={18} />
+                            </span>
+
+                            <div className="record-row__main">
+                              <div className="vb-record-title-row">
+                                <span className="record-row__title">{a.rule_name}</span>
+                                <span className={`vb-sev ${passed ? 'vb-sev--success' : 'vb-sev--warning'}`}>
+                                  {passed ? (isAr ? 'مطابق' : 'Passed') : (isAr ? 'يحتاج مراجعة' : 'Needs Attention')}
+                                </span>
+                                <span className="ml-badge">{a.check_code}</span>
+                              </div>
+                              <div className="record-row__meta">
+                                <span className="vb-metric">
+                                  {isAr ? 'المصدر:' : 'Source:'} {a.source_system || '—'}
+                                </span>
+                                <span className="vb-metric">
+                                  {isAr ? 'قيود غير مطابقة:' : 'Unmapped Records:'} {unmapped.toLocaleString()}
+                                </span>
+                                <span className="vb-metric">
+                                  {isAr ? 'آخر فحص:' : 'Last Checked:'} {a.last_checked || '—'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="vb-record-stats">
+                              <span className="vb-stat">
+                                <span className="k">{isAr ? 'معدل الامتثال' : 'Compliance Rate'}</span>
+                                <span className={`v ${passed ? 'is-success' : 'is-warning'}`}>
+                                  {Number.isFinite(compliance) ? `${compliance}%` : '—'}
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
     </div>
   );
 };

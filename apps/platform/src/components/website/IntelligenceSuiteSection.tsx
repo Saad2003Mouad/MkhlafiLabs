@@ -1,16 +1,22 @@
+// MIKHLAFI LABS — Public Website: Operational Intelligence Engines
+// The eight engines presented as one cohesive layer above existing systems.
+// Renders capability titles and taglines from the shared services catalog.
+// Benchmark metrics are intentionally not displayed — no fabricated figures.
+
 import React from 'react';
 import { LocaleMode } from '../../types';
-import { SOLUTIONS } from '../../data/mockData';
+import { usePublishedEngines } from '../../hooks/publishedEngines';
 import {
-  IconFinance,
-  IconDecisions,
-  IconRisk,
-  IconProjects,
-  IconSupplier,
-  IconCustomer,
-  IconAssistant,
-  IconDataQuality,
-  IconArrowRight
+  IconArrowRight,
+  IconFileText,
+  IconCheckCircle,
+  IconAlertTriangle,
+  IconTrendingUp,
+  IconTruck,
+  IconUsers,
+  IconBot,
+  IconDatabase,
+  IconShield
 } from '../Icons';
 
 interface IntelligenceSuiteSectionProps {
@@ -23,89 +29,62 @@ export const IntelligenceSuiteSection: React.FC<IntelligenceSuiteSectionProps> =
   onSelectModule
 }) => {
   const isAr = locale === 'ar';
+  const engines = usePublishedEngines();
+  const engineCount = engines.length.toLocaleString(isAr ? 'ar' : 'en');
 
-  const getIcon = (iconName: string) => {
+  const getEngineIcon = (iconName: string, size = 20) => {
     switch (iconName) {
-      case 'file-text': return <IconFinance size={22} />;
-      case 'check-circle': return <IconDecisions size={22} />;
-      case 'alert-triangle': return <IconRisk size={22} />;
-      case 'trending-up': return <IconProjects size={22} />;
-      case 'truck': return <IconSupplier size={22} />;
-      case 'users': return <IconCustomer size={22} />;
-      case 'bot': return <IconAssistant size={22} />;
-      case 'database': return <IconDataQuality size={22} />;
-      default: return <IconFinance size={22} />;
+      case 'file-text': return <IconFileText size={size} />;
+      case 'check-circle': return <IconCheckCircle size={size} />;
+      case 'alert-triangle': return <IconAlertTriangle size={size} />;
+      case 'trending-up': return <IconTrendingUp size={size} />;
+      case 'truck': return <IconTruck size={size} />;
+      case 'users': return <IconUsers size={size} />;
+      case 'bot': return <IconBot size={size} />;
+      case 'database': return <IconDatabase size={size} />;
+      default: return <IconShield size={size} />;
     }
   };
 
   return (
-    <section className="site-section" id="solutions">
-      <div className="site-container">
-        <div className="section-head">
-          <span className="section-eyebrow">
-            {isAr ? 'منظومة الذكاء المتكاملة' : 'THE 8 INTELLIGENCE ENGINES'}
-          </span>
-          <h2 className="section-title">
+    <section className="site-section" id="engines">
+      <div className="ml-container">
+        <div className="site-section__head">
+          <span className="ml-eyebrow">{isAr ? 'محركات الذكاء التشغيلية' : 'OPERATIONAL INTELLIGENCE ENGINES'}</span>
+          <h2 className="ml-heading site-section__title">
             {isAr
-              ? 'ثمانية محركات حتمية لتغطية أدق مفاصل الأداء المؤسسي'
-              : 'Eight deterministic engines engineered for granular enterprise control'}
+              ? `${engineCount} محركات تعمل كطبقة واحدة فوق أنظمتكم`
+              : `${engineCount} engines working as one layer above your systems`}
           </h2>
-          <p className="section-subtitle">
+          <p className="ml-lead site-section__lead">
             {isAr
-              ? 'تعمل معاً كطبقة استخباراتية موحدة فوق أنظمتك القائمة، أو تتكامل تدريجياً بحسب أولويات مؤسستك.'
-              : 'Functioning as a unified intelligence layer on top of your existing systems, deployable modularly based on organizational priority.'}
+              ? 'كل محرك يغطي نطاقاً تشغيلياً محدداً — من ضبط الحركات وعلاقات الموردين إلى المخاطر والمشاريع والمساعد التنفيذي — وتتشارك جميعها المصدر ذاته ومسار التدقيق ذاته.'
+              : 'Each engine covers a defined operational scope — from record-level control and supplier relationships to risk, projects, and the executive assistant — all sharing the same sources and the same audit trail.'}
           </p>
         </div>
 
-        <div className="solutions-grid">
-          {SOLUTIONS.map((item) => (
-            <div key={item.id} className="solution-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ color: 'var(--accent-light)' }}>
-                  {getIcon(item.icon)}
-                </div>
-                <span className="solution-badge">
-                  {isAr ? item.badgeAr : item.badgeEn}
-                </span>
-              </div>
-
-              <div>
-                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
-                  ENGINE #{item.num}
-                </span>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-                  {isAr ? item.titleAr : item.titleEn}
-                </h3>
-              </div>
-
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', flex: 1 }}>
-                {isAr ? item.outcomeAr : item.outcomeEn}
-              </p>
-
-              <button
-                onClick={() => onSelectModule(item.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 12px',
-                  borderRadius: 'var(--radius-xs)',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '12.5px',
-                  color: 'var(--accent-light)',
-                  fontWeight: 700,
-                  marginTop: '10px',
-                  cursor: 'pointer',
-                  width: '100%',
-                  transition: 'all 0.15s ease'
-                }}
-                className="engine-card-cta"
-              >
-                <span>{isAr ? 'شرح المحرك والمحاكاة الحية' : 'Full Engine Specs & Demo'}</span>
-                <IconArrowRight size={14} />
-              </button>
-            </div>
+        <div className="site-grid site-grid--4">
+          {engines.map((engine) => (
+            <button
+              type="button"
+              key={engine.id}
+              className="site-tile home-engine"
+              onClick={() => onSelectModule(engine.id)}
+              aria-label={`${isAr ? engine.titleAr : engine.titleEn} — ${isAr ? 'استكشف المحرك' : 'Explore engine'}`}
+            >
+              <span className="site-tile__index">
+                {isAr ? `المحرك ${engine.engineNumber}` : `ENGINE ${engine.engineNumber}`}
+              </span>
+              <span className="site-tile__icon" style={{ color: engine.accentColor }}>
+                {getEngineIcon(engine.iconName)}
+              </span>
+              <span className="site-tile__title">{isAr ? engine.titleAr : engine.titleEn}</span>
+              <span className="site-tile__desc">{isAr ? engine.taglineAr : engine.taglineEn}</span>
+              <span className="home-tile__link">
+                {isAr ? 'استكشف قدرات المحرك' : 'Explore engine capabilities'}
+                <IconArrowRight size={13} />
+              </span>
+            </button>
           ))}
         </div>
       </div>

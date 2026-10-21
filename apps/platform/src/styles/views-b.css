@@ -1,0 +1,312 @@
+/* ==========================================================================
+   MIKHLAFI LABS — Protected Workspace View Styles (views-b)
+   Covers: CustomersView, DataQualityView, AssistantView, ReportsView,
+   AlertsView. Uses tokens from tokens.css and primitives from system.css
+   and app.css. All logical properties — RTL-safe by construction.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Shared: severity tags, record accents, metrics
+   -------------------------------------------------------------------------- */
+
+.vb-sev {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+[dir="rtl"] .vb-sev { letter-spacing: normal; }
+
+.vb-sev--critical { background: var(--status-danger-subtle); color: var(--status-danger); }
+.vb-sev--warning { background: var(--status-warning-subtle); color: var(--status-warning); }
+.vb-sev--info { background: var(--status-info-subtle); color: var(--status-info); }
+.vb-sev--success { background: var(--status-success-subtle); color: var(--status-success); }
+
+.vb-record-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-light);
+}
+
+.vb-record-title-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.record-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.vb-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.vb-record-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.vb-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+}
+[dir="rtl"] .vb-stat { text-align: start; align-items: flex-start; }
+
+.vb-stat .k { font-size: 10px; color: var(--text-muted); }
+.vb-stat .v {
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+.vb-stat .v.is-success { color: var(--status-success); }
+.vb-stat .v.is-warning { color: var(--status-warning); }
+
+.record-row.is-acknowledged { opacity: 0.72; }
+
+.vb-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Spin (loading indicators) */
+.vb-spin { animation: vb-rot 0.8s linear infinite; }
+@keyframes vb-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .vb-spin { animation: none; }
+}
+
+/* --------------------------------------------------------------------------
+   Assistant chat console
+   -------------------------------------------------------------------------- */
+
+.vb-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.vb-suggest-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.vb-chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: var(--space-6);
+  min-height: 320px;
+  max-height: 560px;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.vb-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 85%;
+  padding: 13px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.vb-msg--user {
+  align-self: flex-end;
+  background: var(--accent-subtle);
+  border-color: var(--accent-base);
+}
+
+.vb-msg--assistant {
+  align-self: flex-start;
+  background: var(--bg-surface-elevated);
+}
+
+.vb-msg--error {
+  align-self: flex-start;
+  background: var(--status-danger-subtle);
+  border-color: var(--status-danger);
+}
+
+.vb-msg--thinking {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: var(--bg-surface-elevated);
+}
+
+.vb-msg__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  flex-wrap: wrap;
+}
+
+.vb-msg__head strong { color: var(--text-secondary); }
+
+.vb-msg--error .vb-msg__head strong { color: var(--status-danger); }
+
+.vb-msg__provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  color: var(--accent-light);
+}
+
+.vb-msg__time { margin-inline-start: auto; font-family: var(--font-mono); }
+
+.vb-msg__text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-line;
+}
+
+.vb-citations {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.vb-citations__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent-light);
+}
+
+.vb-citation {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+}
+
+.vb-dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-base);
+  animation: vb-pulse 1s ease-in-out infinite;
+}
+@keyframes vb-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vb-dot-pulse { animation: none; }
+}
+
+.vb-chat-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.vb-chat-input { flex: 1; }
+
+.vb-chat-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Reports: audit trail table
+   -------------------------------------------------------------------------- */
+
+.vb-table-wrap { overflow-x: auto; }
+
+.vb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: start;
+}
+
+.vb-table th {
+  padding: 11px 16px;
+  text-align: start;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  background: var(--bg-surface-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+[dir="rtl"] .vb-table th { letter-spacing: normal; }
+
+.vb-table td {
+  padding: 11px 16px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.vb-table tbody tr:last-child td { border-bottom: 0; }
+.vb-table tbody tr:hover td { background: var(--bg-surface-subtle); }
+
+.vb-cell-mono { font-family: var(--font-mono); font-size: 11.5px; }
+.vb-cell-accent { color: var(--accent-light); font-weight: 600; }
+.vb-cell-muted { color: var(--text-tertiary); }
+
+/* --------------------------------------------------------------------------
+   Responsive tweaks
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .vb-msg { max-width: 100%; }
+  .record-row { flex-wrap: wrap; }
+  .vb-record-stats { flex-basis: 100%; justify-content: flex-start; }
+  [dir="rtl"] .vb-record-stats { justify-content: flex-start; }
+  .vb-chat-form { flex-direction: column; }
+}

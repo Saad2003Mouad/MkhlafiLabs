@@ -1,589 +1,318 @@
-import React, { useState, useEffect } from 'react';
-import { LocaleMode, KpiItem } from '../types';
-import { KpiCard } from './KpiCard';
-import { ChartPreview } from './ChartPreview';
-import { IconArrowRight } from './Icons';
+// MIKHLAFI LABS — Executive Command Center (protected workspace overview)
+// Every metric and record on this screen is fetched live from the
+// authenticated backend (api.getDashboardSummary, api.getDecisions,
+// api.getFinancialLeaks). No simulated or demonstration data is rendered.
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { LocaleMode } from '../types';
+import {
+  IconDashboard,
+  IconDecisions,
+  IconActivity,
+  IconArrowRight,
+  IconLock,
+  IconAlert
+} from './Icons';
 import { useAuth } from '../context/AuthContext';
 import { api, DashboardSummaryResponse, RealDecisionItem } from '../api/client';
+import { EmptyState } from './common/EmptyState';
+import { PageHeader } from './common/PageHeader';
 
 interface ExecutiveDashboardProps {
   locale: LocaleMode;
   onNavigateDetail: () => void;
 }
 
-interface FinancialAnomaly {
-  id: string;
-  case_number: string;
-  rule_code: string;
-  severity: string;
-  confidence_pct: number;
-  target_vendor: string;
-  flagged_amount: number;
-  currency: string;
-  narrative_en: string;
-  narrative_ar: string;
-  status: string;
-  created_at: string;
-}
+type LeakAnomaly = Awaited<ReturnType<typeof api.getFinancialLeaks>>['anomalies'][number];
 
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ locale, onNavigateDetail }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated, tenant, openAuthModal } = useAuth();
-  const [selectedPeriod, setSelectedPeriod] = useState('q4');
-  const [liveSummary, setLiveSummary] = useState<DashboardSummaryResponse | null>(null);
-  const [anomalies, setAnomalies] = useState<FinancialAnomaly[]>([]);
+
+  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [decisions, setDecisions] = useState<RealDecisionItem[]>([]);
-  const [isLoadingLive, setIsLoadingLive] = useState<boolean>(false);
-  const [errorLive, setErrorLive] = useState<string | null>(null);
+  const [anomalies, setAnomalies] = useState<LeakAnomaly[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currency = tenant?.currency || summary?.organization.currency || 'SAR';
+
+  const fetchData = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSummary(null);
+      setDecisions([]);
+      setAnomalies([]);
+      setError(null);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [summaryData, decisionsData, leaksData] = await Promise.all([
+        api.getDashboardSummary(),
+        api.getDecisions(),
+        api.getFinancialLeaks()
+      ]);
+      setSummary(summaryData);
+      setDecisions(decisionsData.decisions || []);
+      setAnomalies(leaksData.anomalies || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : (isAr ? 'تعذر تحميل مؤشرات مساحة العمل.' : 'Failed to load workspace metrics.'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
-    let isMounted = true;
-    if (isAuthenticated) {
-      setIsLoadingLive(true);
-      setErrorLive(null);
+    fetchData();
+  }, [fetchData, tenant?.organizationId]);
 
-      Promise.all([
-        api.getDashboardSummary(),
-        api.getFinancialLeaks(),
-        api.getDecisions()
-      ])
-        .then(([summaryData, leaksData, decisionsData]) => {
-          if (isMounted) {
-            setLiveSummary(summaryData);
-            setAnomalies(leaksData.anomalies || []);
-            setDecisions(decisionsData.decisions || []);
-          }
-        })
-        .catch((err) => {
-          if (isMounted) setErrorLive(err.message || 'Failed to load live metrics');
-        })
-        .finally(() => {
-          if (isMounted) setIsLoadingLive(false);
-        });
-    } else {
-      setLiveSummary(null);
-      setAnomalies([]);
-      setDecisions([]);
+  const formatAmount = (value: number | string, code?: string) =>
+    `${(Number(value) || 0).toLocaleString()} ${code || currency}`;
+
+  const formatDate = (value: string) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleDateString(isAr ? 'ar-SA' : 'en-US');
+    } catch {
+      return '—';
     }
-    return () => {
-      isMounted = false;
-    };
-  }, [isAuthenticated, tenant?.organizationId]);
+  };
 
-  // Live PostgreSQL metrics mapped honestly
-  const liveKpis: KpiItem[] = liveSummary
-    ? [
-        {
-          id: 'kpi-live-1',
-          titleAr: 'قرارات تنفيذية بانتظار الاعتماد',
-          titleEn: 'Pending Executive Decisions',
-          value: String(liveSummary.kpis.pendingDecisionsCount || 0),
-          delta: isAr ? 'محدث لحظياً' : 'Live Sync',
-          isPositive: true,
-          unitAr: 'قرار',
-          unitEn: 'Actions',
-          sourceAr: 'PostgreSQL: tenant_decisions',
-          sourceEn: 'PostgreSQL: tenant_decisions',
-          qualityStatus: 'fresh'
-        },
-        {
-          id: 'kpi-live-2',
-          titleAr: 'الأثر المالي للقرارات المعلقة',
-          titleEn: 'Pending Decision Impact',
-          value: (Number(liveSummary.kpis.pendingImpactSAR) || 0).toLocaleString(),
-          delta: isAr ? 'عالي التأثير' : 'High Impact',
-          isPositive: true,
-          unitAr: liveSummary.organization.currency || 'SAR',
-          unitEn: liveSummary.organization.currency || 'SAR',
-          sourceAr: 'PostgreSQL: tenant_decisions',
-          sourceEn: 'PostgreSQL: tenant_decisions',
-          qualityStatus: 'fresh'
-        },
-        {
-          id: 'kpi-live-3',
-          titleAr: 'قرارات منفذة ومدققة',
-          titleEn: 'Executed & Audited Actions',
-          value: String(liveSummary.kpis.executedDecisionsCount || 0),
-          delta: `${(Number(liveSummary.kpis.executedImpactSAR) || 0).toLocaleString()} SAR`,
-          isPositive: true,
-          unitAr: 'منفذ',
-          unitEn: 'Executed',
-          sourceAr: 'PostgreSQL: audit_logs',
-          sourceEn: 'PostgreSQL: audit_logs',
-          qualityStatus: 'fresh'
-        },
-        {
-          id: 'kpi-live-4',
-          titleAr: 'سجلات التدقيق والأمان المسجلة',
-          titleEn: 'Audited Governance Events',
-          value: String(liveSummary.kpis.auditEventsLogged || 0),
-          delta: isAr ? 'سجل غير قابل للتعديل' : 'Immutable Log',
-          isPositive: true,
-          unitAr: 'حدث',
-          unitEn: 'Events',
-          sourceAr: 'PostgreSQL: audit_logs',
-          sourceEn: 'PostgreSQL: audit_logs',
-          qualityStatus: 'fresh'
-        }
-      ]
-    : [
-        {
-          id: 'kpi-init-1',
-          titleAr: 'قرارات تنفيذية بانتظار الاعتماد',
-          titleEn: 'Pending Executive Decisions',
-          value: '0',
-          delta: isAr ? 'بانتظار تسجيل الدخول' : 'Awaiting Auth',
-          isPositive: true,
-          unitAr: 'قرار',
-          unitEn: 'Actions',
-          sourceAr: 'PostgreSQL: tenant_decisions',
-          sourceEn: 'PostgreSQL: tenant_decisions',
-          qualityStatus: 'partial'
-        },
-        {
-          id: 'kpi-init-2',
-          titleAr: 'الأثر المالي المتوقع',
-          titleEn: 'Pending Decision Impact',
-          value: '0',
-          delta: isAr ? 'بانتظار تسجيل الدخول' : 'Awaiting Auth',
-          isPositive: true,
-          unitAr: 'SAR',
-          unitEn: 'SAR',
-          sourceAr: 'PostgreSQL: tenant_decisions',
-          sourceEn: 'PostgreSQL: tenant_decisions',
-          qualityStatus: 'partial'
-        },
-        {
-          id: 'kpi-init-3',
-          titleAr: 'قرارات منفذة ومدققة',
-          titleEn: 'Executed & Audited Actions',
-          value: '0',
-          delta: '0 SAR',
-          isPositive: true,
-          unitAr: 'منفذ',
-          unitEn: 'Executed',
-          sourceAr: 'PostgreSQL: audit_logs',
-          sourceEn: 'PostgreSQL: audit_logs',
-          qualityStatus: 'partial'
-        },
-        {
-          id: 'kpi-init-4',
-          titleAr: 'سجلات التدقيق والأمان المسجلة',
-          titleEn: 'Audited Governance Events',
-          value: '0',
-          delta: isAr ? 'مسار تدقيق نشط' : 'Active Trail',
-          isPositive: true,
-          unitAr: 'حدث',
-          unitEn: 'Events',
-          sourceAr: 'PostgreSQL: audit_logs',
-          sourceEn: 'PostgreSQL: audit_logs',
-          qualityStatus: 'partial'
-        }
-      ];
-
+  const kpis = summary?.kpis;
   const pendingDecisions = decisions.filter((d) => d.status !== 'executed');
+  const recentAnomalies = [...anomalies]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5);
+  const hasAnyRecords = decisions.length > 0 || anomalies.length > 0 ||
+    (kpis != null && (kpis.auditEventsLogged > 0 || kpis.totalBranches > 0));
+
+  const severityBadge = (severity: string) => {
+    const s = (severity || '').toLowerCase();
+    if (s === 'critical') return 'ml-badge ml-badge--danger';
+    if (s === 'high') return 'ml-badge ml-badge--warning';
+    if (s === 'medium') return 'ml-badge ml-badge--info';
+    return 'ml-badge';
+  };
 
   return (
-    <div className="content-scroll">
-      {/* Top Header & Date Range Controls */}
-      <div className="page-intro">
-        <div>
-          <h1 className="page-title">
-            {isAr ? 'مركز القيادة والذكاء التنفيذي الموحد' : 'Executive Command Center'}
-          </h1>
-          <p className="page-desc">
-            {isAr
-              ? 'مراقبة حية وشاملة لأداء المؤسسة، كشف الانحرافات المالية والتشغيلية، ودعم اتخاذ القرارات الاستراتيجية.'
-              : 'Holistic business monitoring, early operational anomaly detection, and unified decision intelligence.'}
-          </p>
-        </div>
-
-        {/* Date Range Selector & Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', padding: '2px' }}>
-            <button
-              onClick={() => setSelectedPeriod('m')}
-              className={`ctrl-btn ${selectedPeriod === 'm' ? 'active' : ''}`}
-              style={{ padding: '4px 10px', fontSize: '11px', border: 'none' }}
-            >
-              {isAr ? 'الشهر الحالي' : 'Month'}
+    <div className="platform-page-container">
+      <PageHeader
+        locale={locale}
+        icon={<IconDashboard size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'مساحة العمل' : 'Workspace']}
+        title={isAr ? 'مركز القيادة والذكاء التنفيذي' : 'Executive Command Center'}
+        subtitle={
+          isAr
+            ? 'نظرة تشغيلية موحدة على مؤشرات مؤسستك: القرارات قيد الاعتماد، الإشارات والانحرافات المرصودة، وسجل الأحداث التدقيقية — كلها مأخوذة مباشرة من مساحة عملك.'
+            : 'A unified operational view across your organization: decisions awaiting approval, detected signals and variances, and the governance event trail — all loaded live from your workspace.'
+        }
+        action={
+          isAuthenticated ? (
+            <button onClick={onNavigateDetail} className="ml-btn ml-btn--ghost ml-btn--sm">
+              <span>{isAr ? 'الذكاء المالي والتدقيق' : 'Financial Intelligence'}</span>
+              <IconArrowRight size={14} />
             </button>
-            <button
-              onClick={() => setSelectedPeriod('q4')}
-              className={`ctrl-btn ${selectedPeriod === 'q4' ? 'active' : ''}`}
-              style={{ padding: '4px 10px', fontSize: '11px', border: 'none' }}
-            >
-              {isAr ? 'الربع المالي Q4' : 'Q4 Quarter'}
+          ) : undefined
+        }
+      />
+
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconLock size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض مؤشرات مؤسستك' : 'Sign in to view your organization’s metrics'}
+          description={
+            isAr
+              ? 'تُسترجع المؤشرات التنفيذية وسجلات القرارات والإشارات مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Executive metrics, decision records, and detected signals are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
             </button>
-            <button
-              onClick={() => setSelectedPeriod('y')}
-              className={`ctrl-btn ${selectedPeriod === 'y' ? 'active' : ''}`}
-              style={{ padding: '4px 10px', fontSize: '11px', border: 'none' }}
-            >
-              {isAr ? 'العام الحالي' : 'YTD'}
+          }
+        />
+      ) : isLoading ? (
+        <div className="skeleton-grid">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="skeleton-card" />
+          ))}
+        </div>
+      ) : error ? (
+        <EmptyState
+          icon={<IconAlert size={30} />}
+          title={isAr ? 'تعذر تحميل مؤشرات مساحة العمل' : 'Unable to load workspace metrics'}
+          description={error}
+          action={
+            <button onClick={fetchData} className="ml-btn ml-btn--primary">
+              {isAr ? 'إعادة المحاولة' : 'Retry'}
             </button>
-          </div>
-
-          <button
-            onClick={onNavigateDetail}
-            className="btn-primary"
-            style={{ fontSize: '12px', padding: '7px 14px' }}
-          >
-            <span>{isAr ? 'التدقيق المالي الكامل' : 'Open Financial Audit'}</span>
-            <IconArrowRight size={13} />
-          </button>
-        </div>
-      </div>
-
-      {/* Honest Demo Mode / Live Connection Banner */}
-      {isAuthenticated && isLoadingLive && (
-        <div className="honest-alert" style={{ borderColor: 'var(--accent-base)', background: 'rgba(59, 130, 246, 0.08)' }}>
-          <span style={{ fontSize: '20px' }}>⏳</span>
-          <div style={{ flex: 1 }}>
-            <strong>{isAr ? 'جارِ استرجاع المؤشرات الحية من PostgreSQL...' : 'Loading live metrics from PostgreSQL...'}</strong>
-          </div>
-        </div>
-      )}
-
-      {isAuthenticated && errorLive && (
-        <div className="honest-alert" style={{ borderColor: 'var(--status-danger)', background: 'rgba(239, 68, 68, 0.08)' }}>
-          <span style={{ fontSize: '20px' }}>⚠️</span>
-          <div style={{ flex: 1 }}>
-            <strong style={{ color: 'var(--status-danger)' }}>{errorLive}</strong>
-          </div>
-        </div>
-      )}
-
-      {isAuthenticated && liveSummary ? (
-        <div className="honest-alert" style={{ borderColor: 'var(--status-success)', background: 'rgba(16, 185, 129, 0.08)' }}>
-          <span style={{ fontSize: '20px' }}>🟢</span>
-          <div style={{ flex: 1 }}>
-            <strong style={{ color: 'var(--status-success)' }}>
-              {isAr ? 'جلسة تشغيلية حقيقية متصلة بقاعدة البيانات (Live Production Backend):' : 'Live Verified Database Connection (Multi-Tenant Active):'}
-            </strong>{' '}
-            {isAr
-              ? `المؤسسة الحالية: ${liveSummary.organization.nameAr || liveSummary.organization.nameEn} — محرك البيانات: ${liveSummary.databaseEngine} — حالة عزل البيانات: ${liveSummary.isolationStatus}`
-              : `Active Tenant: ${liveSummary.organization.nameEn} — Engine: ${liveSummary.databaseEngine} — Isolation: ${liveSummary.isolationStatus}`}
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--status-success)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-            POSTGRESQL_TENANT_ISOLATED
-          </span>
-        </div>
+          }
+        />
       ) : (
-        <div className="honest-alert">
-          <span style={{ fontSize: '20px' }}>ℹ️</span>
-          <div style={{ flex: 1 }}>
-            <strong style={{ color: 'var(--text-primary)' }}>
-              {isAr ? 'بيانات حقيقية خالية من التزييف (Zero Synthetic Benchmarks):' : 'Zero Synthetic Benchmarks Mode:'}
-            </strong>{' '}
-            {isAr
-              ? 'يتم عرض البيانات الحقيقية لمؤسستك مباشرة من قاعدة البيانات. يرجى تسجيل الدخول للوصول إلى المؤشرات وسجلات التدقيق.'
-              : 'Live metrics are fetched directly from your PostgreSQL tenant database. Sign in to view isolated records.'}
-          </div>
-          <button
-            onClick={openAuthModal}
-            className="btn-primary"
-            style={{ fontSize: '11px', padding: '5px 12px' }}
-          >
-            <span>{isAr ? 'تسجيل الدخول' : 'Sign In'}</span>
-          </button>
-        </div>
-      )}
-
-      {/* KPI Summary Cards Grid */}
-      <div className="kpi-grid">
-        {liveKpis.map((kpi) => (
-          <KpiCard key={kpi.id} item={kpi} locale={locale} />
-        ))}
-      </div>
-
-      {/* Onboarding Callout — shown only when authenticated but no data ingested yet */}
-      {isAuthenticated && !isLoadingLive && liveSummary &&
-        liveSummary.kpis.pendingDecisionsCount === 0 &&
-        liveSummary.kpis.auditEventsLogged === 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(135,108,54,0.12), rgba(135,108,54,0.04))',
-          border: '1px solid var(--border-glow)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '28px 32px',
-          display: 'flex',
-          gap: '24px',
-          alignItems: 'flex-start',
-          marginBottom: '24px'
-        }}>
-          <span style={{ fontSize: '40px', flexShrink: 0 }}>🚀</span>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-              {isAr
-                ? `مرحباً بك في مؤسستك، ${tenant?.orgNameAr || tenant?.orgNameEn} — ابدأ رحلة الذكاء التشغيلي`
-                : `Welcome to ${tenant?.orgNameEn} Workspace — Start Your Intelligence Journey`}
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.7 }}>
-              {isAr
-                ? 'مساحة عملك جاهزة وآمنة. للبدء، ارفع قيودك المحاسبية عبر ملف CSV وسيقوم المحرك فوراً بكشف الانحرافات المالية وتوليد توصيات تنفيذية.'
-                : 'Your workspace is ready and secure. To begin, upload your accounting ledger via CSV — the engine will instantly detect financial anomalies and generate executive recommendations.'}
-            </p>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <a href="/app/integrations" style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 18px',
-                background: 'var(--accent-base)',
-                color: '#fff',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '13px',
-                fontWeight: 700,
-                textDecoration: 'none',
-                border: 'none',
-                cursor: 'pointer'
-              }}>
-                <span>📊</span>
-                <span>{isAr ? 'رفع بيانات CSV الآن ←' : 'Upload CSV Data Now →'}</span>
-              </a>
-              <a href="/app/decisions" style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 18px',
-                background: 'var(--bg-surface-elevated)',
-                color: 'var(--text-primary)',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '13px',
-                fontWeight: 600,
-                textDecoration: 'none',
-                border: '1px solid var(--border-default)',
-                cursor: 'pointer'
-              }}>
-                <span>⚖️</span>
-                <span>{isAr ? 'استعراض نموذج القرارات' : 'Preview Decision Examples'}</span>
-              </a>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
-            {[
-              { step: '1', textAr: 'رفع CSV', textEn: 'Upload CSV', done: false },
-              { step: '2', textAr: 'كشف الشذوذ', textEn: 'Detect Anomalies', done: false },
-              { step: '3', textAr: 'قرارات تنفيذية', textEn: 'Get Decisions', done: false }
-            ].map((s) => (
-              <div key={s.step} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800, color: 'var(--accent-light)', flexShrink: 0 }}>{s.step}</span>
-                <span>{isAr ? s.textAr : s.textEn}</span>
+        <>
+          {/* Live KPI tiles — values straight from the dashboard summary endpoint */}
+          {kpis && (
+            <div className="stat-grid">
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'قرارات بانتظار الاعتماد' : 'Pending Decisions'}</div>
+                <div className="stat-tile__value">{kpis.pendingDecisionsCount || 0}</div>
+                <div className="stat-tile__hint">{isAr ? 'بانتظار اعتماد مخوّل' : 'Awaiting authorized execution'}</div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'أثر القرارات المعلّقة' : 'Pending Decision Impact'}</div>
+                <div className="stat-tile__value">{formatAmount(kpis.pendingImpactSAR || 0)}</div>
+                <div className="stat-tile__hint">{isAr ? 'الأثر المجمّع للقرارات المفتوحة' : 'Combined impact of open decisions'}</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'قرارات منفّذة' : 'Executed Decisions'}</div>
+                <div className="stat-tile__value">{kpis.executedDecisionsCount || 0}</div>
+                <div className="stat-tile__hint">
+                  {isAr ? 'الأثر المنفّذ:' : 'Executed impact:'} {formatAmount(kpis.executedImpactSAR || 0)}
+                </div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'أحداث التدقيق المسجلة' : 'Audit Events Logged'}</div>
+                <div className="stat-tile__value">{kpis.auditEventsLogged || 0}</div>
+                <div className="stat-tile__hint">{isAr ? 'سجل حوكمة غير قابل للتعديل' : 'Immutable governance trail'}</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'الفروع' : 'Branches'}</div>
+                <div className="stat-tile__value">{kpis.totalBranches || 0}</div>
+                <div className="stat-tile__hint">{isAr ? 'وحدات تقارير ضمن النطاق' : 'Reporting units in scope'}</div>
+              </div>
+            </div>
+          )}
 
-      {/* Bento Grid: Trend Chart & Executive Action Queue */}
-      <div className="bento-grid">
-        {/* Trend Chart Panel */}
-        <div className="content-panel">
-          <div className="panel-header">
-            <div>
-              <h2 className="panel-title">
-                {isAr ? 'منحنى مؤشر الاستقرار التشغيلي ومعدل تلافي الهدر' : 'Operational Stability Index & Loss Mitigation Trend'}
+          {/* Onboarding — shown only when the workspace genuinely has no activity yet */}
+          {!hasAnyRecords && (
+            <EmptyState
+              icon={<IconActivity size={30} />}
+              title={isAr ? 'مساحة العمل جاهزة وتفتقر إلى السجلات التشغيلية' : 'Your workspace is ready but has no operational records yet'}
+              description={
+                isAr
+                  ? 'تظهر القرارات التنفيذية والإشارات المرصودة تلقائياً بمجرد ربط مصادر بيانات مؤسستك (أنظمة تخطيط الموارد، قنوات البيانات، استيراد الملفات) من شاشة التكاملات.'
+                  : 'Executive decisions and detected signals appear automatically once your organization’s data sources (ERP systems, data channels, file imports) are connected from the Integrations screen.'
+              }
+            />
+          )}
+
+          {/* Pending executive actions */}
+          <div className="ml-panel va-section-gap">
+            <div className="ml-panel__head">
+              <h2 className="ml-title" style={{ fontSize: 16 }}>
+                {isAr ? 'القرارات التنفيذية قيد الانتظار' : 'Pending Executive Decisions'}
               </h2>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                {isAr ? 'تطور الأداء المجمع ومعدل تلافي المخاطر الشهرية مقابل الحدود المرجعية' : 'Aggregate operational performance vs mitigation baselines over rolling quarters'}
+              <span className="ml-badge ml-badge--accent">
+                {pendingDecisions.length} {isAr ? 'معلّقة' : 'Pending'}
               </span>
             </div>
-            <button
-              onClick={onNavigateDetail}
-              style={{
-                fontSize: '12px',
-                color: 'var(--accent-light)',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              <span>{isAr ? 'التفاصيل والتدقيق' : 'Deep-Dive'}</span>
-              <IconArrowRight size={13} />
-            </button>
-          </div>
-
-          <ChartPreview locale={locale} />
-        </div>
-
-        {/* Priority Action Items / Executive Decisions Queue */}
-        <div className="content-panel">
-          <div className="panel-header">
-            <h2 className="panel-title">
-              {isAr ? 'التوصيات والقرارات التنفيذية العاجلة' : 'Executive Action Priorities'}
-            </h2>
-            <span className={`severity-tag ${pendingDecisions.length > 0 ? 'high' : 'optimal'}`}>
-              {pendingDecisions.length} {isAr ? 'معلقة' : 'PENDING'}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {pendingDecisions.length > 0 ? (
-              pendingDecisions.slice(0, 3).map((dec) => (
-                <div
-                  key={dec.id}
-                  style={{
-                    padding: '12px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--bg-surface-elevated)',
-                    borderInlineStart: `3px solid ${dec.risk_level === 'CRITICAL' ? 'var(--status-danger)' : 'var(--status-warning)'}`
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                      {dec.title}
-                    </strong>
-                    <span style={{ fontSize: '11px', color: 'var(--status-danger)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
-                      {(Number(dec.impact_amount) || 0).toLocaleString()} {dec.currency || 'SAR'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    {isAr
-                      ? `تصنيف القرار: ${dec.category} — مستوى الخطورة: ${dec.risk_level}`
-                      : `Category: ${dec.category} — Severity: ${dec.risk_level}`}
-                  </div>
-                  <button
-                    onClick={onNavigateDetail}
-                    style={{ fontSize: '11px', color: 'var(--accent-light)', fontWeight: 700, marginTop: '6px' }}
-                  >
-                    {isAr ? 'فحص الأدلة واتخاذ إجراء ←' : 'Inspect Evidence & Mitigate →'}
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div
-                style={{
-                  padding: '28px 16px',
-                  textAlign: 'center',
-                  background: 'var(--bg-surface-elevated)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px dashed var(--border-subtle)',
-                  color: 'var(--text-secondary)'
-                }}
-              >
-                <span style={{ fontSize: '20px', display: 'block', marginBottom: '6px' }}>✅</span>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {isAr ? 'لا توجد قرارات أو توصيات معلقة حالياً' : 'No Pending Action Items'}
-                </span>
-                <p style={{ margin: '4px 0 0', fontSize: '11px' }}>
-                  {isAr
-                    ? 'يتم رصد القرارات التنفيذية آلياً عند اكتشاف انحرافات محاسبية أو تسجيل عقود موردين جديدة.'
-                    : 'Action items populate automatically upon detecting accounting variance or contract drift.'}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Anomalies Table Panel */}
-      <div className="content-panel">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">
-              {isAr ? 'سجل الانحرافات وحالات التدقيق الجنائي المفتوحة' : 'Open Forensic Anomaly Audit Log'}
-            </h2>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              {isAr ? 'قائمة الحالات التي تتطلب مراجعة من الإدارة المالية والتشغيلية' : 'Algorithmic flags generated via deterministic reconciliation rules'}
-            </span>
-          </div>
-
-          <button
-            onClick={onNavigateDetail}
-            className="ctrl-btn"
-            style={{ fontSize: '12px' }}
-          >
-            <span>🔍</span>
-            <span>{isAr ? 'فتح شاشة التدقيق المالي الكامل' : 'Open Financial Intelligence'}</span>
-          </button>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>{isAr ? 'رمز الحالة' : 'Code'}</th>
-                <th>{isAr ? 'المورد المستهدف / الوصف' : 'Target Vendor / Narrative'}</th>
-                <th>{isAr ? 'القاعدة الرقابية' : 'Rule Code'}</th>
-                <th>{isAr ? 'الأثر المالي' : 'Impact Value'}</th>
-                <th>{isAr ? 'مستوى الخطورة' : 'Severity'}</th>
-                <th>{isAr ? 'نسبة الثقة' : 'Confidence'}</th>
-                <th>{isAr ? 'وقت الرصد' : 'Detected At'}</th>
-                <th>{isAr ? 'الحالة' : 'Status'}</th>
-                <th>{isAr ? 'الإجراء' : 'Action'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {anomalies.length > 0 ? (
-                anomalies.map((an) => (
-                  <tr key={an.id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-light)' }}>
-                      {an.case_number}
-                    </td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      <div>{an.target_vendor}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 400 }}>
-                        {isAr ? an.narrative_ar : an.narrative_en}
-                      </div>
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>{an.rule_code}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--status-danger)' }}>
-                      {(Number(an.flagged_amount) || 0).toLocaleString()} {an.currency || 'SAR'}
-                    </td>
-                    <td>
-                      <span className={`severity-tag ${an.severity.toLowerCase()}`}>
-                        {an.severity}
-                      </span>
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>
-                      {Number(an.confidence_pct || 90).toFixed(1)}%
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
-                      {an.created_at ? new Date(an.created_at).toLocaleDateString() : 'Recent'}
-                    </td>
-                    <td>
-                      <span className={`severity-tag ${an.status === 'FROZEN' ? 'optimal' : 'warning'}`} style={{ fontSize: '11px' }}>
-                        {an.status}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        onClick={onNavigateDetail}
-                        style={{
-                          fontSize: '11px',
-                          color: 'var(--accent-light)',
-                          fontWeight: 700,
-                          textDecoration: 'underline',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {isAr ? 'فحص الأدلة' : 'Inspect'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+            <div className="ml-panel__body">
+              {pendingDecisions.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<IconDecisions size={26} />}
+                  title={isAr ? 'لا توجد قرارات معلّقة حالياً' : 'No decisions awaiting approval'}
+                  description={
+                    isAr
+                      ? 'تُنشأ القرارات التنفيذية تلقائياً عند رصد انحرافات في بيانات المؤسسة المرتبطة بمحركات الذكاء، وتظهر هنا فور اكتشافها.'
+                      : 'Executive decisions are created automatically when variances are detected in your connected operational data, and appear here as soon as they are found.'
+                  }
+                />
               ) : (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text-secondary)' }}>
-                    <span style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}>🛡️</span>
-                    <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                      {isAr ? 'لا توجد حالات تسرب أو انحرافات مرصودة حالياً' : 'Zero Forensic Anomalies Flagged'}
-                    </strong>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px' }}>
-                      {isAr
-                        ? 'دفتر الأستاذ الحالي متطابق حسابياً. قم باستيراد فواتير جديدة أو ملف CSV من شاشة التكاملات لفحص القيود.'
-                        : 'General ledger entries are clean. Ingest new invoices or upload a CSV via Integrations to run forensic audits.'}
-                    </p>
-                  </td>
-                </tr>
+                <div className="record-list">
+                  {pendingDecisions.slice(0, 5).map((decision) => (
+                    <div key={decision.id} className="record-row">
+                      <div className="record-row__main">
+                        <div className="va-row-head">
+                          <div className="va-tags">
+                            <span className={severityBadge(decision.risk_level)}>
+                              <span className="ml-dot" />
+                              {(decision.risk_level || '').toUpperCase()}
+                            </span>
+                            <span className="va-mono-id">DEC-{decision.id.substring(0, 6).toUpperCase()}</span>
+                          </div>
+                          <span className="va-amount">{formatAmount(decision.impact_amount, decision.currency)}</span>
+                        </div>
+                        <div className="record-row__title" style={{ marginTop: 6 }}>{decision.title}</div>
+                        <div className="record-row__meta">
+                          {decision.category} · {isAr ? 'تاريخ الإنشاء:' : 'Created:'} {formatDate(decision.created_at)}
+                        </div>
+                      </div>
+                      <div className="record-row__actions">
+                        <button onClick={onNavigateDetail} className="ml-btn ml-btn--subtle ml-btn--sm">
+                          <span>{isAr ? 'فحص الأدلة' : 'Inspect Evidence'}</span>
+                          <IconArrowRight size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+          </div>
+
+          {/* Recently detected signals */}
+          <div className="ml-panel va-section-gap">
+            <div className="ml-panel__head">
+              <h2 className="ml-title" style={{ fontSize: 16 }}>
+                {isAr ? 'أحدث الإشارات والانحرافات المرصودة' : 'Recently Detected Signals'}
+              </h2>
+              <span className="ml-badge">
+                {anomalies.length} {isAr ? 'إشارات' : 'Signals'}
+              </span>
+            </div>
+            <div className="ml-panel__body">
+              {recentAnomalies.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<IconActivity size={26} />}
+                  title={isAr ? 'لا توجد انحرافات مرصودة حالياً' : 'No variances detected right now'}
+                  description={
+                    isAr
+                      ? 'تُفحص السجلات التشغيلية المرتبطة بمؤسستك باستمرار؛ تظهر الإشارات هنا فور رصد أي انحراف عن النطاقات المرجعية.'
+                      : 'Your connected operational records are monitored continuously; signals appear here the moment a variance is detected against reference baselines.'
+                  }
+                />
+              ) : (
+                <div className="record-list">
+                  {recentAnomalies.map((anomaly) => (
+                    <div key={anomaly.id} className="record-row">
+                      <div className="record-row__main">
+                        <div className="va-row-head">
+                          <div className="va-tags">
+                            <span className={severityBadge(anomaly.severity)}>
+                              <span className="ml-dot" />
+                              {(anomaly.severity || '').toUpperCase()}
+                            </span>
+                            <span className="va-mono-id">{anomaly.case_number}</span>
+                          </div>
+                          <span className="va-amount va-amount--danger">
+                            {formatAmount(anomaly.flagged_amount, anomaly.currency)}
+                          </span>
+                        </div>
+                        <div className="record-row__title" style={{ marginTop: 6 }}>{anomaly.target_vendor}</div>
+                        <div className="record-row__meta">
+                          {isAr ? anomaly.narrative_ar : anomaly.narrative_en}
+                        </div>
+                        <div className="record-row__meta">
+                          <span className="va-mono-id">{anomaly.rule_code}</span> · {formatDate(anomaly.created_at)}
+                        </div>
+                      </div>
+                      <div className="record-row__actions">
+                        <button onClick={onNavigateDetail} className="ml-btn ml-btn--subtle ml-btn--sm">
+                          <span>{isAr ? 'فحص الحالة' : 'Inspect Case'}</span>
+                          <IconArrowRight size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -1,337 +1,378 @@
-import React, { useState, useEffect } from 'react';
+// MIKHLAFI LABS — Predictive Risk Intelligence (protected workspace view)
+// Records are loaded exclusively from api.getRisks; mitigation toggles call
+// api.toggleRiskMitigation and reflect the real backend response. No demo
+// fallbacks and no simulated records are ever rendered.
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../../types';
-import { IconRisk, IconShield, IconCheck } from '../Icons';
+import { IconRisk, IconShield, IconCheck, IconAlert, IconFilter, IconLock } from '../Icons';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { PredictiveRiskWorkbench } from '../risk/PredictiveRiskWorkbench';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface RiskViewProps {
   locale: LocaleMode;
 }
 
+type RiskRecord = {
+  id: string;
+  code: string;
+  title_en?: string;
+  title_ar?: string;
+  category_en?: string;
+  category_ar?: string;
+  probability?: string;
+  severity?: string;
+  financial_exposure_sar?: string | number;
+  exposure_formatted?: string;
+  status?: string;
+  is_mitigated?: boolean;
+  mitigation_plan_en?: string;
+  mitigation_plan_ar?: string;
+  owner_name?: string;
+  created_at?: string;
+};
+
+interface NoticeState {
+  type: 'success' | 'error';
+  message: string;
+}
+
 export const RiskView: React.FC<RiskViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const { isAuthenticated } = useAuth();
-  const [viewMode, setViewMode] = useState<'workbench' | 'database'>('workbench');
-  const [risks, setRisks] = useState<any[]>([]);
-  const [totalExposureSAR, setTotalExposureSAR] = useState<number>(0);
-  const [selectedRiskCategory, setSelectedRiskCategory] = useState<string>('all');
-  const [simulatedMitigations, setSimulatedMitigations] = useState<{ [key: string]: boolean }>({});
-  const [bannerNotice, setBannerNotice] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [isDemoDataset, setIsDemoDataset] = useState<boolean>(false);
+  const { isAuthenticated, tenant, openAuthModal } = useAuth();
 
-  const fetchRisks = async () => {
-    setLoading(true);
+  const [risks, setRisks] = useState<RiskRecord[]>([]);
+  const [totalExposureSAR, setTotalExposureSAR] = useState<number>(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const currency = tenant?.currency || 'SAR';
+
+  const fetchRisks = useCallback(async () => {
     if (!isAuthenticated) {
       setRisks([]);
       setTotalExposureSAR(0);
-      setIsDemoDataset(false);
+      setError(null);
       setLoading(false);
       return;
     }
+    setLoading(true);
+    setError(null);
     try {
       const res = await api.getRisks();
-      if (res && Array.isArray(res.risks)) {
-        setRisks(res.risks);
-        setTotalExposureSAR(res.totalMonitoredExposureSAR || 0);
-        setIsDemoDataset(false);
-        const map: { [key: string]: boolean } = {};
-        res.risks.forEach((r: any) => {
-          map[r.id] = !!r.is_mitigated;
-        });
-        setSimulatedMitigations(map);
-      } else {
-        setRisks([]);
-        setTotalExposureSAR(0);
-        setIsDemoDataset(false);
-      }
-    } catch (err: any) {
+      setRisks(Array.isArray(res.risks) ? (res.risks as RiskRecord[]) : []);
+      setTotalExposureSAR(res.totalMonitoredExposureSAR || 0);
+    } catch (err) {
       setRisks([]);
       setTotalExposureSAR(0);
-      setIsDemoDataset(false);
-      setBannerNotice(err.message || (isAr ? 'فشل تحميل بيانات المخاطر' : 'Failed to fetch risk records'));
+      setError(
+        err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تحميل سجلات المخاطر.' : 'Failed to fetch risk records.')
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
     fetchRisks();
-  }, [isAuthenticated]);
+  }, [fetchRisks, tenant?.organizationId]);
 
-  const toggleMitigation = async (riskId: string) => {
-    if (isAuthenticated) {
-      try {
-        const res = await api.toggleRiskMitigation(riskId);
-        const nextMitigated = res.risk?.is_mitigated;
-        setSimulatedMitigations((prev) => ({ ...prev, [riskId]: nextMitigated }));
-        const risk = risks.find((r) => r.id === riskId);
-        const code = risk?.code || res.risk?.code;
-        const msg = nextMitigated
-          ? (isAr ? `تم تفعيل خطة التحوط للمخاطر (${code}) وتحديث السجلات في PostgreSQL.` : `Mitigation plan activated for ${code} & recorded in PostgreSQL.`)
-          : (isAr ? `تمت إعادة مؤشر المخاطر (${code}) للوضع النشط.` : `Risk indicator ${code} reset to active baseline.`);
-        setBannerNotice(msg);
-        setTimeout(() => setBannerNotice(null), 3500);
-        await fetchRisks();
-        return;
-      } catch (err: any) {
-        setBannerNotice(err.message || 'Error updating risk');
-        setTimeout(() => setBannerNotice(null), 3500);
-      }
-    }
-
-    // Demo fallback for unauthenticated
-    setSimulatedMitigations((prev) => {
-      const updated = { ...prev, [riskId]: !prev[riskId] };
-      const risk = risks.find((r) => r.id === riskId);
-      const isNowMitigated = updated[riskId];
-      const msg = isNowMitigated
-        ? (isAr ? `(عرض تجريبي) تمت محاكاة تفعيل خطة التحوط للمخاطر (${risk?.code}).` : `(Demo) Mitigation plan simulated for ${risk?.code}.`)
-        : (isAr ? `(عرض تجريبي) تمت إعادة مؤشر المخاطر (${risk?.code}) للوضع النشط.` : `(Demo) Risk indicator ${risk?.code} reset.`);
-      setBannerNotice(msg);
-      setTimeout(() => setBannerNotice(null), 3500);
-      return updated;
-    });
+  const showNotice = (state: NoticeState) => {
+    setNotice(state);
+    setTimeout(() => setNotice(null), 5000);
   };
 
+  const toggleMitigation = async (risk: RiskRecord) => {
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
+    setBusyId(risk.id);
+    try {
+      const res = await api.toggleRiskMitigation(risk.id);
+      const nextMitigated = !!res.risk?.is_mitigated;
+      const code = res.risk?.code || risk.code;
+      showNotice({
+        type: 'success',
+        message: nextMitigated
+          ? (isAr
+              ? `تم تفعيل خطة التحوط للمخاطرة (${code}).`
+              : `Mitigation plan activated for risk ${code}.`)
+          : (isAr
+              ? `تمت إعادة المخاطرة (${code}) إلى وضع المتابعة النشط.`
+              : `Risk ${code} returned to active monitoring.`)
+      });
+      await fetchRisks();
+    } catch (err) {
+      showNotice({
+        type: 'error',
+        message: err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تحديث حالة التحوط.' : 'Failed to update the mitigation status.')
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const severityBadgeClass = (severity?: string, mitigated?: boolean) => {
+    if (mitigated) return 'ml-badge ml-badge--success';
+    const s = (severity || '').toLowerCase();
+    if (s === 'critical') return 'ml-badge ml-badge--danger';
+    if (s === 'high') return 'ml-badge ml-badge--warning';
+    if (s === 'medium') return 'ml-badge ml-badge--info';
+    return 'ml-badge';
+  };
+
+  // Category filter options are derived from the records the API actually returned
+  const categories = Array.from(
+    new Set(
+      risks
+        .map((r) => (isAr ? (r.category_ar || r.category_en) : (r.category_en || r.category_ar)))
+        .filter((c): c is string => !!c)
+    )
+  ).slice(0, 6);
+
   const filteredRisks = risks.filter((r) => {
-    if (selectedRiskCategory === 'all') return true;
-    const cat = (r.category_en || r.categoryEn || '').toLowerCase();
-    return cat.includes(selectedRiskCategory);
+    if (selectedCategory === 'all') return true;
+    const cat = isAr ? (r.category_ar || r.category_en) : (r.category_en || r.category_ar);
+    return cat === selectedCategory;
   });
+
+  const mitigatedCount = risks.filter((r) => !!r.is_mitigated).length;
 
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'محركات الذكاء' : 'Intelligence Suite'}</span>
-            <span>/</span>
-            <span className="current">{isAr ? 'التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence'}</span>
-          </div>
-          <h1 className="page-title">
-            <IconRisk size={24} />
-            <span>{isAr ? 'محرك التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence Engine'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'مراقبة نقاط الاختناق في سلاسل التوريد والسيولة النقدية وتآكل العقود قبل تفاقمها إلى أزمات تشغيلية، مع خطط تحوط قابلة للقياس.'
-              : 'Continuous monitoring of supply bottlenecks, cash flow stress, and contract attrition before operational crises manifest.'}
-          </p>
-        </div>
+      <PageHeader
+        locale={locale}
+        icon={<IconRisk size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'محركات الذكاء' : 'Intelligence Engines']}
+        title={isAr ? 'محرك التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence Engine'}
+        subtitle={
+          isAr
+            ? 'مراقبة استباقية لنقاط الاختناق في سلاسل التوريد والتدفقات التشغيلية وتآكل العقود قبل تفاقمها إلى أزمات، مع خطط تحوط قابلة للقياس والتتبّع.'
+            : 'Proactive monitoring of supply bottlenecks, operational flows, and contract attrition before they escalate into crises, with measurable and trackable mitigation plans.'
+        }
+        action={
+          isAuthenticated ? (
+            <div className="kpi-micro-badge">
+              <span className="label">{isAr ? 'إجمالي التعرض المفتوح' : 'Open Exposure'}</span>
+              <span className="value">{totalExposureSAR.toLocaleString()} {currency}</span>
+            </div>
+          ) : undefined
+        }
+      />
 
-        {/* Aggregate Exposure Pill */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {isDemoDataset && (
-            <span className="severity-tag warning" style={{ fontSize: '11px', padding: '6px 12px' }}>
-              {isAr ? 'نموذج بيانات توضيحي' : 'Demonstration Dataset'}
-            </span>
-          )}
-          <div className="kpi-micro-badge warning">
-            <span className="label">{isAr ? 'إجمالي التعرض المالي المرصود' : 'Aggregate Monitored Exposure'}</span>
-            <span className="value">{totalExposureSAR.toLocaleString()} SAR</span>
-          </div>
-        </div>
-      </div>
-
-      {/* View Switcher Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', margin: '14px 0 20px 0', overflowX: 'auto' }}>
-        <button
-          onClick={() => setViewMode('workbench')}
-          className={`ctrl-btn ${viewMode === 'workbench' ? 'active' : ''}`}
-          style={{
-            fontWeight: viewMode === 'workbench' ? 800 : 500,
-            background: viewMode === 'workbench' ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.15))' : undefined,
-            borderColor: viewMode === 'workbench' ? '#F59E0B' : undefined,
-            color: viewMode === 'workbench' ? '#F59E0B' : undefined
-          }}
-        >
-          {isAr ? '🔬 رادار التنبؤ التفاعلي ومحاكي السيولة لـ 13 أسبوعاً (Workbench)' : '🔬 Predictive Risk Workbench & 13-Week Cash Runway'}
-        </button>
-        <button
-          onClick={() => setViewMode('database')}
-          className={`ctrl-btn ${viewMode === 'database' ? 'active' : ''}`}
-          style={{ fontWeight: viewMode === 'database' ? 700 : 500 }}
-        >
-          {isAr
-            ? `📋 سجل مؤشرات المخاطر المسجلة (${risks.length})`
-            : `📋 Tenant Risk Records (${risks.length})`}
-        </button>
-      </div>
-
-      {viewMode === 'workbench' ? (
-        <PredictiveRiskWorkbench
-          locale={locale}
-          initialScenario="contracting"
-          isEmbeddedInPublicPage={false}
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconLock size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض سجل المخاطر لمؤسستك' : 'Sign in to view your organization’s risk registry'}
+          description={
+            isAr
+              ? 'تُسترجع مؤشرات المخاطر والتعرض المالي وخطط التحوط مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Risk indicators, financial exposure, and mitigation plans are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
+            </button>
+          }
         />
       ) : (
         <>
-          {bannerNotice && (
-            <div className="alert-feedback-banner success">
-              <IconCheck size={16} />
-              <span>{bannerNotice}</span>
-            </div>
-          )}
-
-      {/* Category Pills & Matrix Summary */}
-      <div className="page-filter-bar">
-        <div className="filter-group">
-          <span className="filter-label">{isAr ? 'تصنيف المخاطر:' : 'Risk Category:'}</span>
-          <button
-            onClick={() => setSelectedRiskCategory('all')}
-            className={`filter-chip ${selectedRiskCategory === 'all' ? 'active' : ''}`}
-          >
-            {isAr ? `كافة القطاعات (${risks.length})` : `All Domains (${risks.length})`}
-          </button>
-          <button
-            onClick={() => setSelectedRiskCategory('supply')}
-            className={`filter-chip ${selectedRiskCategory === 'supply' ? 'active' : ''}`}
-          >
-            {isAr ? 'سلاسل الإمداد' : 'Supply Chain'}
-          </button>
-          <button
-            onClick={() => setSelectedRiskCategory('liquid')}
-            className={`filter-chip ${selectedRiskCategory === 'liquid' ? 'active' : ''}`}
-          >
-            {isAr ? 'السيولة والتدفقات' : 'Liquidity & Cash'}
-          </button>
-          <button
-            onClick={() => setSelectedRiskCategory('customer')}
-            className={`filter-chip ${selectedRiskCategory === 'customer' ? 'active' : ''}`}
-          >
-            {isAr ? 'إيرادات العملاء' : 'Customer Retention'}
-          </button>
-        </div>
-
-        <div className="meta-stats">
-          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--status-warning)' }} />
-            {isAr ? 'مصفوفة الاحتمالية: نشطة' : 'Predictive Matrix: Active'}
-          </span>
-        </div>
-      </div>
-
-      {/* Empty State */}
-      {!loading && filteredRisks.length === 0 && (
-        <div className="decision-card" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '20px' }}>
-          <IconRisk size={36} style={{ color: 'var(--text-secondary)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-            {isAr ? 'لا توجد مخاطر مسجلة حالياً' : 'No Monitored Risks Found'}
-          </h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
-            {isAr
-              ? 'لم يتم رصد أي مخاطر نشطة في سلاسل الإمداد أو السيولة لمساحة العمل الحالية.'
-              : 'Zero active risks detected for the current workspace.'}
-          </p>
-        </div>
-      )}
-
-      {/* Risk Cards */}
-      <div className="decisions-grid">
-        {filteredRisks.length === 0 ? (
-          <div
-            className="content-panel"
-            style={{
-              gridColumn: '1 / -1',
-              textAlign: 'center',
-              padding: '48px 20px',
-              border: '1px dashed var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)'
-            }}
-          >
-            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>🛡️</span>
-            <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', marginBottom: '6px' }}>
-              {isAr ? 'لا توجد مخاطر تشغيلية مسجلة حالياً' : 'Zero Operational Risks Flagged'}
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto' }}>
-              {isAr
-                ? 'كافة المؤشرات التشغيلية وسلاسل الإمداد ومسارات التوريد ضمن الحدود المرجعية الآمنة.'
-                : 'All operational parameters and supply chain routes are operating within safe baselines.'}
-            </p>
-          </div>
-        ) : (
-          filteredRisks.map((risk) => {
-          const isMitigated = simulatedMitigations[risk.id];
-          const severity = risk.severity || 'high';
-          const code = risk.code;
-          const title = isAr ? (risk.title_ar || risk.titleAr) : (risk.title_en || risk.titleEn);
-          const category = isAr ? (risk.category_ar || risk.categoryAr) : (risk.category_en || risk.categoryEn);
-          const exposure = risk.exposure_formatted || (risk.financial_exposure_sar ? `${parseFloat(risk.financial_exposure_sar).toLocaleString()} SAR` : risk.impactSAR);
-          const mitigationPlan = isAr ? (risk.mitigation_plan_ar || risk.mitigationPlanAr) : (risk.mitigation_plan_en || risk.mitigationPlanEn);
-
-          return (
-            <div key={risk.id} className={`decision-card ${isMitigated ? 'mitigated' : `priority-${severity}`}`}>
-              <div className="decision-card-header">
-                <div className="badge-row">
-                  <span className={`severity-tag ${isMitigated ? 'optimal' : severity}`}>
-                    {isMitigated ? (isAr ? 'تم التحوط' : 'MITIGATED') : severity.toUpperCase()}
-                  </span>
-                  <span className="decision-code">{code}</span>
-                  <span className="category-pill">{category}</span>
+          {notice && (
+                <div className={`alert-feedback-banner ${notice.type === 'success' ? 'success' : 'error'}`}>
+                  {notice.type === 'success' ? <IconCheck size={16} /> : <IconAlert size={16} />}
+                  <span>{notice.message}</span>
                 </div>
-                <div className="decision-financial">
-                  <span className="label">{isAr ? 'التعرض المالي المحسوب' : 'Exposure Estimate'}</span>
-                  <span className="amount" style={{ textDecoration: isMitigated ? 'line-through' : 'none' }}>
-                    {exposure}
-                  </span>
-                </div>
-              </div>
+              )}
 
-              <h3 className="decision-title">
-                {title}
-              </h3>
+              {loading ? (
+                <div className="skeleton-grid">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="skeleton-card" />
+                  ))}
+                </div>
+              ) : error ? (
+                <EmptyState
+                  icon={<IconAlert size={30} />}
+                  title={isAr ? 'تعذر تحميل سجل المخاطر' : 'Unable to load the risk registry'}
+                  description={error}
+                  action={
+                    <button onClick={fetchRisks} className="ml-btn ml-btn--primary">
+                      {isAr ? 'إعادة المحاولة' : 'Retry'}
+                    </button>
+                  }
+                />
+              ) : (
+                <>
+                  <div className="stat-grid">
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'إجمالي المخاطر المسجلة' : 'Registered Risks'}</div>
+                      <div className="stat-tile__value">{risks.length}</div>
+                      <div className="stat-tile__hint">{isAr ? 'في نطاق المراقبة' : 'Within monitoring scope'}</div>
+                    </div>
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'التعرض المفتوح' : 'Open Exposure'}</div>
+                      <div className="stat-tile__value">{totalExposureSAR.toLocaleString()} {currency}</div>
+                      <div className="stat-tile__hint">{isAr ? 'بدون احتساب المخاطر المحتوَّرة' : 'Mitigated risks excluded'}</div>
+                    </div>
+                    <div className="stat-tile">
+                      <div className="stat-tile__label">{isAr ? 'خطط تحوط مفعّلة' : 'Mitigations Active'}</div>
+                      <div className="stat-tile__value">{mitigatedCount}</div>
+                      <div className="stat-tile__hint">{isAr ? 'خطط قيد التنفيذ فعلياً' : 'Plans actually in effect'}</div>
+                    </div>
+                  </div>
 
-              <div className="risk-metric-strip">
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'الاحتمالية المحسوبة' : 'Calculated Probability'}</span>
-                  <span className="v">{(risk.probability || 'MEDIUM').toUpperCase()}</span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'مستوى الخطورة' : 'Severity Level'}</span>
-                  <span className="v">{severity.toUpperCase()}</span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'طريقة الرصد' : 'Detection Signal'}</span>
-                  <span className="v">{isAr ? 'حسابي حتمي' : 'Deterministic'}</span>
-                </div>
-              </div>
+                  {risks.length === 0 ? (
+                    <EmptyState
+                      icon={<IconShield size={30} />}
+                      title={isAr ? 'لا توجد مخاطر مسجلة حالياً' : 'No risks registered right now'}
+                      description={
+                        isAr
+                          ? 'تُسجَّل مؤشرات المخاطر في هذه المساحة عبر محركات المنصة من بيانات مؤسستك المرتبطة؛ فور رصد أي مؤشر تشغيلي يظهر هنا.'
+                          : 'Risk indicators are registered in this workspace by the platform engines from your connected organizational data; anything detected appears here.'
+                      }
+                    />
+                  ) : (
+                    <>
+                      {categories.length > 0 && (
+                        <div className="page-filter-bar">
+                          <div className="filter-group">
+                            <IconFilter size={14} />
+                            <span className="filter-label">{isAr ? 'التصنيف:' : 'Category:'}</span>
+                            <button
+                              onClick={() => setSelectedCategory('all')}
+                              className={`filter-chip ${selectedCategory === 'all' ? 'active' : ''}`}
+                            >
+                              {isAr ? 'الكل' : 'All'} ({risks.length})
+                            </button>
+                            {categories.map((cat) => {
+                              const count = risks.filter((r) => {
+                                const c = isAr ? (r.category_ar || r.category_en) : (r.category_en || r.category_ar);
+                                return c === cat;
+                              }).length;
+                              return (
+                                <button
+                                  key={cat}
+                                  onClick={() => setSelectedCategory(cat)}
+                                  className={`filter-chip ${selectedCategory === cat ? 'active' : ''}`}
+                                >
+                                  {cat} ({count})
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
-              <div className="mitigation-box">
-                <div className="mitigation-header">
-                  <IconShield size={14} />
-                  <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-primary)' }}>
-                    {isAr ? 'خطة التحوط وخفض المخاطر المعتمدة:' : 'Approved Risk Mitigation Protocol:'}
-                  </span>
-                </div>
-                <p className="mitigation-text">
-                  {mitigationPlan}
-                </p>
-              </div>
+                      {filteredRisks.length === 0 ? (
+                        <EmptyState
+                          icon={<IconFilter size={30} />}
+                          title={isAr ? 'لا توجد مخاطر ضمن هذا التصنيف' : 'No risks in this category'}
+                          description={
+                            isAr
+                              ? 'اختر تصنيفاً آخر لعرض بقية سجل المخاطر.'
+                              : 'Select a different category to view the rest of the risk registry.'
+                          }
+                          action={
+                            <button onClick={() => setSelectedCategory('all')} className="ml-btn ml-btn--ghost">
+                              {isAr ? 'عرض الكل' : 'Show All'}
+                            </button>
+                          }
+                        />
+                      ) : (
+                        <div className="record-list">
+                          {filteredRisks.map((risk) => {
+                            const mitigated = !!risk.is_mitigated;
+                            const title = isAr ? (risk.title_ar || risk.title_en || risk.code) : (risk.title_en || risk.title_ar || risk.code);
+                            const category = isAr ? (risk.category_ar || risk.category_en) : (risk.category_en || risk.category_ar);
+                            const exposure = risk.exposure_formatted ||
+                              `${(Number(risk.financial_exposure_sar) || 0).toLocaleString()} ${currency}`;
+                            const mitigationPlan = isAr
+                              ? (risk.mitigation_plan_ar || risk.mitigation_plan_en)
+                              : (risk.mitigation_plan_en || risk.mitigation_plan_ar);
 
-              <div className="decision-actions-row">
-                <button
-                  onClick={() => toggleMitigation(risk.id)}
-                  className={isMitigated ? 'btn-secondary' : 'btn-primary'}
-                  style={{ fontSize: '12px', padding: '8px 14px' }}
-                >
-                  <IconShield size={14} />
-                  <span>
-                    {isMitigated
-                      ? (isAr ? 'إلغاء التحوط وإعادة التعرض المالي' : 'Reset Baseline Exposure')
-                      : (isAr ? 'تفعيل خطة التحوط المؤسسية' : 'Activate Mitigation Plan')}
-                  </span>
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
-      </div>
+                            return (
+                              <div key={risk.id} className="record-row" style={{ alignItems: 'flex-start' }}>
+                                <div className="record-row__main">
+                                  <div className="va-row-head">
+                                    <div className="va-tags">
+                                      <span className={severityBadgeClass(risk.severity, mitigated)}>
+                                        <span className="ml-dot" />
+                                        {mitigated
+                                          ? (isAr ? 'محتوَّرة' : 'MITIGATED')
+                                          : (risk.severity || '').toUpperCase()}
+                                      </span>
+                                      <span className="va-mono-id">{risk.code}</span>
+                                      {category && <span className="ml-badge">{category}</span>}
+                                    </div>
+                                    <span className="va-amount" style={mitigated ? { textDecoration: 'line-through', opacity: 0.6 } : undefined}>
+                                      {exposure}
+                                    </span>
+                                  </div>
+
+                                  <div className="record-row__title" style={{ marginTop: 6 }}>{title}</div>
+
+                                  <div className="va-metric-grid">
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'الاحتمالية' : 'Probability'}</span>
+                                      <span className="va-metric__v">{(risk.probability || '—').toUpperCase()}</span>
+                                    </div>
+                                    <div className="va-metric">
+                                      <span className="va-metric__k">{isAr ? 'مستوى الخطورة' : 'Severity'}</span>
+                                      <span className="va-metric__v">{(risk.severity || '—').toUpperCase()}</span>
+                                    </div>
+                                    {risk.owner_name && (
+                                      <div className="va-metric">
+                                        <span className="va-metric__k">{isAr ? 'المسؤول' : 'Owner'}</span>
+                                        <span className="va-metric__v va-metric__v--muted">{risk.owner_name}</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {mitigationPlan && (
+                                    <div className="va-plan">
+                                      <strong style={{ color: 'var(--text-primary)' }}>
+                                        {isAr ? 'خطة التحوط:' : 'Mitigation plan:'}
+                                      </strong>{' '}
+                                      {mitigationPlan}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="record-row__actions">
+                                  <button
+                                    onClick={() => toggleMitigation(risk)}
+                                    disabled={busyId === risk.id}
+                                    className={`ml-btn ml-btn--sm ${mitigated ? 'ml-btn--subtle' : 'ml-btn--primary'}`}
+                                  >
+                                    <IconShield size={14} />
+                                    <span>
+                                      {busyId === risk.id
+                                        ? (isAr ? 'جارِ التحديث…' : 'Updating…')
+                                        : mitigated
+                                          ? (isAr ? 'إلغاء التحوط' : 'Reset Mitigation')
+                                          : (isAr ? 'تفعيل التحوط' : 'Activate Mitigation')}
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
         </>
       )}
     </div>

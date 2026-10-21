@@ -1,96 +1,143 @@
-// MIKHLAFI LABS — Public Homepage Sections
-// Renders the marketing narrative, hero cockpit showcase, 8 engines, methodology, and FAQ
+// MIKHLAFI LABS — Public Homepage
+// Grand Sovereign Master Website — Full-page experience with cinematic hero, threat vectors, 8 engines, sovereign architecture, ROI simulator, trajectory, and executive FAQ
 
-import React, { useState } from 'react';
-import { LocaleMode, PricingPackage } from '../../types';
+import React from 'react';
+import { LocaleMode } from '../../types';
 import { HeroSection } from './HeroSection';
 import { ChallengesSection } from './ChallengesSection';
 import { IntelligenceSuiteSection } from './IntelligenceSuiteSection';
-import { RoiCalculatorSection } from './RoiCalculatorSection';
+import { SovereignArchitectureSection } from './SovereignArchitectureSection';
 import { HowItWorksSection } from './HowItWorksSection';
-import { PhilosophySection } from './PhilosophySection';
-import { IntegrationsSection } from './IntegrationsSection';
 import { CrossIndustrySection } from './CrossIndustrySection';
-import { SecurityGovernanceSection } from './SecurityGovernanceSection';
-import { PricingPackagesSection } from './PricingPackagesSection';
 import { FaqSection } from './FaqSection';
-import { DemoModal } from './DemoModal';
+import { IconArrowRight } from '../Icons';
 
 interface WebsiteHomeProps {
   locale: LocaleMode;
   onNavigatePlatform: () => void;
   onNavigateDetail: (moduleId?: string) => void;
+  onNavigateContact?: () => void;
+  onNavigateIndustries?: () => void;
 }
 
 export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
   locale,
   onNavigatePlatform,
-  onNavigateDetail
+  onNavigateDetail,
+  onNavigateContact,
+  onNavigateIndustries
 }) => {
-  const [demoModalOpen, setDemoModalOpen] = useState(false);
-  const [selectedPkg, setSelectedPkg] = useState<PricingPackage | null>(null);
+  const isAr = locale === 'ar';
 
-  const handleOpenDemo = (pkg?: PricingPackage) => {
-    setSelectedPkg(pkg || null);
-    setDemoModalOpen(true);
+  const handleContactAction = () => {
+    if (onNavigateContact) {
+      onNavigateContact();
+    } else {
+      window.history.pushState({}, '', '/contact');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
   };
 
+  const handleIndustriesAction = () => {
+    if (onNavigateIndustries) {
+      onNavigateIndustries();
+    } else {
+      window.history.pushState({}, '', '/industries');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  };
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
+
+    const sections = document.querySelectorAll('.section-v2');
+    sections.forEach((sec) => {
+      sec.classList.add('section-v2--animated');
+    });
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('section-v2--visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    sections.forEach((sec) => observer.observe(sec));
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="website-wrapper">
-      {/* Hero Section with Purpose-Built Cockpit Preview */}
+    <div className="home-v2">
+      {/* ═══ 01: HERO SECTION (CINEMATIC & SOVEREIGN CORE) ═══ */}
       <HeroSection
         locale={locale}
-        onExplorePlatform={onNavigatePlatform}
-        onRequestDemo={() => handleOpenDemo()}
+        onExplorePlatform={() => {
+          const el = document.getElementById('engines');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+          else onNavigatePlatform();
+        }}
+        onRequestConsultation={handleContactAction}
       />
 
-      {/* The 6 Real Business Challenges */}
+      {/* ═══ 02: THE SILENT MARGIN DRAIN & COMPARISON ═══ */}
       <ChallengesSection locale={locale} />
 
-      {/* The 8 Modular Intelligence Engines */}
+      {/* ═══ 03: THE 8 DETERMINISTIC ENGINES ═══ */}
       <IntelligenceSuiteSection
         locale={locale}
-        onSelectModule={(modId) => onNavigateDetail(modId)}
+        onSelectModule={onNavigateDetail}
       />
 
-      {/* Interactive Margin Leak & ROI Simulator */}
-      <RoiCalculatorSection
-        locale={locale}
-        onRequestAudit={() => handleOpenDemo()}
-      />
+      {/* ═══ 04: SOVEREIGN ARCHITECTURE & ZERO-DISRUPTION INTEGRATION ═══ */}
+      <SovereignArchitectureSection locale={locale} />
 
-      {/* 4-Step Deterministic Forensic Methodology */}
+      {/* ═══ 05: 4-STAGE OPERATIONAL TRAJECTORY ═══ */}
       <HowItWorksSection locale={locale} />
 
-      {/* Sovereign Philosophy & Architecture Mesh Showcase */}
-      <PhilosophySection locale={locale} />
-
-      {/* Non-Invasive Enterprise ERP Integrations Strip */}
-      <IntegrationsSection locale={locale} />
-
-      {/* Cross-Industry Agnosticism & Sectors */}
-      <CrossIndustrySection locale={locale} />
-
-      {/* Sovereign Security & Governance */}
-      <SecurityGovernanceSection locale={locale} />
-
-      {/* Transparent Subscription Packages */}
-      <PricingPackagesSection
+      {/* ═══ 06: CROSS-INDUSTRY DOMAIN READINESS ═══ */}
+      <CrossIndustrySection
         locale={locale}
-        onSelectPackage={(pkg) => handleOpenDemo(pkg)}
+        onNavigateIndustries={handleIndustriesAction}
       />
 
-      {/* Frequently Asked Questions */}
+      {/* ═══ 07: EXECUTIVE FREQUENTLY ASKED QUESTIONS ═══ */}
       <FaqSection locale={locale} />
 
-      {/* Interactive Demo / Free Trial Modal */}
-      <DemoModal
-        locale={locale}
-        isOpen={demoModalOpen}
-        selectedPackage={selectedPkg}
-        onClose={() => setDemoModalOpen(false)}
-        onSuccessLaunch={onNavigatePlatform}
-      />
+      {/* ═══ 08: STRATEGIC CLOSING ACTION BANNER ═══ */}
+      <section className="ml-section">
+        <div className="ml-container">
+          <div className="site-cta">
+            <span className="ml-eyebrow" style={{ position: 'relative' }}>
+              {isAr ? 'الخطوة التالية' : 'Next step'}
+            </span>
+            <h2 className="ml-heading" style={{ marginTop: 16, position: 'relative' }}>
+              {isAr
+                ? 'هل ترغب أن نُظهر لك ما تُخفيه أنظمتكم؟'
+                : 'Want us to show you what your systems keep hidden?'}
+            </h2>
+            <p className="ml-lead" style={{ margin: '16px auto 0', position: 'relative' }}>
+              {isAr
+                ? 'نبدأ بتقييم أولي غير مقتحم لبياناتكم التشغيلية عبر مسارات قراءة آمنة — دون أي التزام ودون أي تغيير في برامجكم القائمة.'
+                : 'We start with a non-invasive assessment of your operational data through secure read-only paths — with no commitment and no changes to your existing software.'}
+            </p>
+            <div className="site-cta__actions">
+              <button onClick={handleContactAction} className="ml-btn ml-btn--primary ml-btn--lg">
+                <span>{isAr ? 'احجز جلسة تعارف' : 'Book an introduction call'}</span>
+                <IconArrowRight size={16} />
+              </button>
+              <button onClick={onNavigatePlatform} className="ml-btn ml-btn--ghost ml-btn--lg">
+                {isAr ? 'استعرض المنصة' : 'Review the platform'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };

@@ -34,3 +34,6 @@ Thumbs.db
 data/benchmark/*.csv
 data/*.csv
 data/tenants/
+
+# Local persistent demo database (PGlite data directory)
+.data/

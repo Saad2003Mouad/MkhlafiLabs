@@ -1,0 +1,210 @@
+/* ==========================================================================
+   MIKHLAFI LABS — Homepage Sections (rebuild)
+   Scoped styles for the homepage sections only. Everything is token-driven
+   and RTL-safe (logical properties only). Layout primitives (.site-section,
+   .site-grid, .site-tile, .site-steps, .faq-row …) live in site.css.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Engine tiles rendered as <button> (keyboard accessible, .site-tile look)
+   -------------------------------------------------------------------------- */
+
+.home-engine {
+  border: 0;
+  font: inherit;
+  text-align: start;
+  width: 100%;
+}
+
+.home-engine:focus-visible {
+  outline: 2px solid var(--accent-base);
+  outline-offset: -2px;
+}
+
+.home-tile__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-light);
+}
+
+.home-tile__link svg {
+  transition: transform var(--transition-fast);
+}
+
+[dir="rtl"] .home-tile__link svg {
+  transform: scaleX(-1);
+}
+
+.home-engine:hover .home-tile__link svg {
+  transform: translateX(3px);
+}
+
+[dir="rtl"] .home-engine:hover .home-tile__link svg {
+  transform: scaleX(-1) translateX(3px);
+}
+
+/* --------------------------------------------------------------------------
+   Structural comparison (challenges section)
+   -------------------------------------------------------------------------- */
+
+.home-compare-wrap {
+  margin-top: clamp(44px, 6vw, 72px);
+}
+
+.home-compare {
+  margin-top: 22px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-surface);
+}
+
+.home-compare__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.1fr) minmax(0, 1.1fr);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.home-compare__row:first-child {
+  border-top: 0;
+}
+
+.home-compare__row--head {
+  background: var(--bg-surface-subtle);
+}
+
+.home-compare__cell {
+  padding: 16px 20px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-compare__cell--dim {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home-compare__row--head .home-compare__cell {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.home-compare__row--head .home-compare__cell--accent {
+  color: var(--accent-light);
+}
+
+.home-compare__point {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.home-compare__point svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--text-muted);
+}
+
+.home-compare__point--accent svg {
+  color: var(--accent-light);
+}
+
+.home-compare__mobile-label {
+  display: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+@media (max-width: 760px) {
+  .home-compare__row { grid-template-columns: 1fr; }
+  .home-compare__row--head { display: none; }
+  .home-compare__cell { padding-block: 10px; }
+  .home-compare__cell--dim {
+    background: var(--bg-inset);
+    font-size: 13px;
+    padding-block: 12px;
+  }
+  .home-compare__cell + .home-compare__cell { border-top: 1px dashed var(--border-subtle); }
+  .home-compare__cell--dim + .home-compare__cell { border-top: 0; }
+  .home-compare__mobile-label { display: block; }
+}
+
+/* --------------------------------------------------------------------------
+   Connectivity strip (sovereign architecture section)
+   -------------------------------------------------------------------------- */
+
+.home-connectors {
+  margin-top: clamp(32px, 4vw, 48px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  padding: clamp(20px, 3vw, 28px);
+}
+
+.home-connectors__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.home-connectors__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home-connectors__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Sector strip (cross-industry section)
+   -------------------------------------------------------------------------- */
+
+.home-sectors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: clamp(28px, 4vw, 40px);
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.home-sectors__label {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  margin-inline-end: 4px;
+}
+
+.home-industries__cta {
+  margin-top: clamp(28px, 4vw, 40px);
+}
+
+/* --------------------------------------------------------------------------
+   FAQ accordion — allow taller answers than the generic site.css cap
+   -------------------------------------------------------------------------- */
+
+.home-faq .faq-row.is-open .faq-row__answer {
+  max-height: 640px;
+}
+
+.home-faq .faq-row__trigger:focus-visible {
+  outline: 2px solid var(--accent-base);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}

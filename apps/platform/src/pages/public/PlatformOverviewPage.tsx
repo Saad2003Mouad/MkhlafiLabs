@@ -1,6 +1,6 @@
 // MIKHLAFI LABS — Public Platform Overview Page (/platform)
-// Product architecture showcase, decision intelligence capabilities, and technical specifications
-// Accessible without authentication — DOES NOT expose customer data or dashboard
+// Architecture, intelligence engines, and integration model — public, unauthenticated.
+// Exposes NO customer data: every number shown is derived from the static catalog.
 
 import React from 'react';
 import { LocaleMode } from '../../types';
@@ -14,8 +14,11 @@ import {
   IconDataQuality,
   IconAssistant,
   IconShield,
-  IconArrowRight
+  IconArrowRight,
+  IconServer,
+  IconWorkflow
 } from '../../components/Icons';
+import { usePublishedEngines } from '../../hooks/publishedEngines';
 
 interface PlatformOverviewPageProps {
   locale: LocaleMode;
@@ -31,283 +34,324 @@ export const PlatformOverviewPage: React.FC<PlatformOverviewPageProps> = ({
   onRequestDemo
 }) => {
   const isAr = locale === 'ar';
+  const engineCount = usePublishedEngines().length;
 
   const coreEngines = [
     {
       id: 'decision-mesh',
-      icon: <IconDecisions size={24} />,
+      icon: <IconDecisions size={22} />,
       titleEn: 'Autonomous Decision Engine',
       titleAr: 'محرك القرارات الحتمي',
-      descEn: 'Evaluates capital allocations, operational bottlenecks, and procurement tradeoffs against codified business policies.',
-      descAr: 'يقيّم تخصيص رأس المال والاختناقات التشغيلية ومفاضلات المشتريات مقابل سياسات الأعمال المحددة بدقة.'
+      descEn: 'Evaluates allocations, operational bottlenecks, and procurement tradeoffs against codified business policies.',
+      descAr: 'يقيّم تخصيص الموارد والاختناقات التشغيلية ومفاضلات المشتريات مقابل سياسات الأعمال المعتمدة.'
     },
     {
       id: 'financial-variance',
-      icon: <IconFinance size={24} />,
+      icon: <IconFinance size={22} />,
       titleEn: 'Financial Variance & Leak Detector',
       titleAr: 'كاشف الهدر والانحراف المالي',
-      descEn: 'Scans continuous ledger transactions to identify duplicate disbursements, margin erosions, and unauthorized pricing variances.',
-      descAr: 'يمسح حركات القيود المحاسبية باستمرار لكشف المدفوعات المكررة وتآكل الهوامش وانحرافات التسعير غير المصرح بها.'
+      descEn: 'Scans ledger transactions to identify duplicate disbursements, margin erosion, and unapproved pricing variances.',
+      descAr: 'يمسح حركات القيود لكشف المدفوعات المكررة وتآكل الهوامش وانحرافات التسعير غير المعتمدة.'
     },
     {
       id: 'predictive-risk',
-      icon: <IconRisk size={24} />,
+      icon: <IconRisk size={22} />,
       titleEn: 'Early Warning Risk Radar',
       titleAr: 'رادار الإنذار المبكر للمخاطر',
-      descEn: 'Calculates multi-dimensional operational and liquidity vulnerability scores across entities, projects, and cash flows.',
-      descAr: 'يحسب درجات الهشاشة التشغيلية والسيولية متعددة الأبعاد عبر الكيانات والمشاريع والتدفقات النقدية.'
+      descEn: 'Ranks operational and liquidity exposure across entities, projects, and cash flows.',
+      descAr: 'يرتب المخاطر التشغيلية والسيولية عبر الكيانات والمشاريع والتدفقات النقدية.'
     },
     {
       id: 'project-margin',
-      icon: <IconProjects size={24} />,
+      icon: <IconProjects size={22} />,
       titleEn: 'Project Margin & Contract Intelligence',
       titleAr: 'ذكاء هوامش المشاريع والعقود',
-      descEn: 'Monitors milestone burn rates, change order slippages, and subcontractor performance across all active enterprise contracts.',
-      descAr: 'يراقب معدلات استنزاف الميزانية وانحرافات أوامر التغيير وأداء مقاولي الباطن عبر كافة العقود النشطة.'
+      descEn: 'Monitors milestone burn, change-order slippage, and subcontractor performance across active contracts.',
+      descAr: 'يراقب استنزاف الميزانية وانحرافات أوامر التغيير وأداء مقاولي الباطن عبر العقود النشطة.'
     },
     {
       id: 'supplier-procure',
-      icon: <IconSupplier size={24} />,
+      icon: <IconSupplier size={22} />,
       titleEn: 'Supplier Reliability & Price Intelligence',
       titleAr: 'ذكاء الموردين وعدالة الأسعار',
-      descEn: 'Benchmarks vendor delivery latency, defect rates, and unit price divergence across historical purchase orders.',
-      descAr: 'يقارن تأخيرات التوريد ومعدلات العيوب وتباين أسعار الوحدة عبر طلبات الشراء التاريخية.'
+      descEn: 'Benchmarks delivery latency, defect rates, and unit price divergence across purchase history.',
+      descAr: 'يقارن تأخيرات التوريد ومعدلات العيوب وتباين أسعار الوحدة عبر سجل المشتريات.'
     },
     {
       id: 'customer-retention',
-      icon: <IconCustomer size={24} />,
+      icon: <IconCustomer size={22} />,
       titleEn: 'Customer Retention & Exposure Tracker',
       titleAr: 'مراقبة العملاء ومخاطر الائتمان',
-      descEn: 'Analyzes ordering velocity decline, payment default risks, and receivable aging to protect enterprise operating revenue.',
-      descAr: 'يحلل تباطؤ وتيرة الطلبات ومخاطر التخلف عن السداد وأعمار الذمم المدينة لحماية الإيرادات التشغيلية.'
+      descEn: 'Analyses ordering velocity, payment risk, and receivable ageing to protect operating revenue.',
+      descAr: 'يحلل وتيرة الطلبات ومخاطر السداد وأعمار الذمم المدينة لحماية الإيراد التشغيلي.'
     },
     {
       id: 'data-observability',
-      icon: <IconDataQuality size={24} />,
-      titleEn: 'Enterprise Data Observability & Truth Pipeline',
-      titleAr: 'حوكمة وجودة البيانات المؤسسية',
-      descEn: 'Validates schema consistency, rejects hallucinated records, and ensures mathematical integrity across cross-departmental feeds.',
-      descAr: 'يتحقق من اتساق المخططات ويرفض السجلات غير الموثوقة ويضمن السلامة الرياضية للبيانات بين الإدارات.'
+      icon: <IconDataQuality size={22} />,
+      titleEn: 'Data Observability & Truth Pipeline',
+      titleAr: 'حوكمة وجودة البيانات',
+      descEn: 'Validates schema consistency, rejects unverifiable records, and keeps cross-department feeds intact.',
+      descAr: 'يتحقق من اتساق المخططات ويرفض السجلات غير القابلة للتحقق ويحافظ على سلامة البيانات بين الإدارات.'
     },
     {
       id: 'executive-assistant',
-      icon: <IconAssistant size={24} />,
+      icon: <IconAssistant size={22} />,
       titleEn: 'Evidence-Grounded AI Assistant',
       titleAr: 'المساعد التنفيذي المدعوم بالأدلة',
-      descEn: 'Provides leadership teams with natural-language query capabilities strictly anchored to verified transactional records and audit proofs.',
-      descAr: 'يمكّن القيادات من الاستعلام باللغة الطبيعية مع إسناد صارم لسجلات المعاملات الموثقة وأدلة التدقيق.'
+      descEn: 'Natural-language queries anchored strictly to verified records and audit evidence.',
+      descAr: 'استعلام باللغة الطبيعية مع إسناد صارم للسجلات الموثقة وأدلة التدقيق.'
     }
   ];
 
   const architecturalPillars = [
     {
-      titleEn: 'Deterministic Auditability',
-      titleAr: 'قابلية التدقيق الحتمية',
-      descEn: 'Zero black-box hallucinations. Every generated decision includes complete mathematical provenance and verifiable ledger links.',
-      descAr: 'لا مخرجات غامضة أو افتراضية. كل قرار استراتيجي يتضمن سلسلة إسناد رياضي كاملة وروابط قيود محاسبية موثقة.'
+      titleEn: 'Deterministic auditability',
+      titleAr: 'قابلية تدقيق حتمية',
+      descEn: 'No black-box output. Each recommendation carries its provenance and a link back to the underlying records.',
+      descAr: 'لا مخرجات غامضة. كل توصية تحمل مصدرها وارتباطها بالسجلات الأساسية.'
     },
     {
-      titleEn: 'Strict Multi-Tenant Isolation',
-      titleAr: 'عزل صارم للمستأجرين',
-      descEn: 'Row-level security, separate database schemas, and cryptographic tenant boundary validation prevent cross-organization data leakage.',
-      descAr: 'أمان على مستوى الصفوف، مخططات قاعدة بيانات معزولة، وتحقق تشفيري من حدود المستأجر يمنع أي تسريب بين المنظمات.'
+      titleEn: 'Strict multi-tenant isolation',
+      titleAr: 'عزل صارم بين المستأجرين',
+      descEn: 'Row-level security, separate schemas, and boundary validation prevent cross-organization exposure.',
+      descAr: 'أمان على مستوى الصفوف ومخططات منفصلة وتحقق من الحدود يمنع أي تداخل بين المنظمات.'
     },
     {
-      titleEn: 'Sovereign Deployment Models',
-      titleAr: 'نماذج النشر السيادي المحلي',
-      descEn: 'Deployable on GCC/KSA sovereign cloud infrastructure or air-gapped on-premises data centers complying with NCA regulations.',
-      descAr: 'قابلة للنشر على السحابة السيادية داخل المملكة أو مراكز البيانات المغلقة المتوافقة مع معايير الهيئة الوطنية للأمن السيبراني.'
+      titleEn: 'Sovereign deployment models',
+      titleAr: 'نماذج نشر سيادية',
+      descEn: 'Deploy on sovereign cloud infrastructure or air-gapped on-premises estates, per your compliance regime.',
+      descAr: 'النشر على بنية سحابية سيادية أو داخل مراكز بيانات مغلقة حسب متطلبات امتثالك.'
     },
     {
-      titleEn: 'Bi-Directional ERP Connectors',
-      titleAr: 'موائمات تكامل ERP ثنائية الاتجاه',
-      descEn: 'Seamless ingestion pipelines for SAP, Oracle NetSuite, Microsoft Dynamics 365, Odoo, and custom PostgreSQL/REST backends.',
-      descAr: 'خطوط استيعاب مرنة لأنظمة SAP وOracle وDynamics 365 وOdoo وواجهات برمجة التطبيقات وقواعد البيانات الخاصة.'
+      titleEn: 'Bi-directional ERP connectors',
+      titleAr: 'موائمات ERP ثنائية الاتجاه',
+      descEn: 'Ingestion pipelines for SAP, Oracle, Microsoft Dynamics 365, Odoo, and custom PostgreSQL or REST backends.',
+      descAr: 'خطوط استيعاب لأنظمة SAP وOracle وDynamics 365 وOdoo وقواعد PostgreSQL وواجهات REST الخاصة.'
+    }
+  ];
+
+  const flowStages = [
+    {
+      n: '01',
+      titleAr: 'الاستيعاب',
+      titleEn: 'Ingestion',
+      descAr: 'سحب دوري ولحظي من أنظمة ERP والبنوك وسجلات المخزون والمناقصات مع تشفير أثناء النقل.',
+      descEn: 'Scheduled and near-real-time pulls from ERP, banking, inventory, and contract systems, encrypted in transit.',
+      outAr: 'مصادر بيانات موصولة',
+      outEn: 'Connected data sources'
+    },
+    {
+      n: '02',
+      titleAr: 'التحقق',
+      titleEn: 'Validation',
+      descAr: 'فحص التناقضات الحسابية، وعزل القيود الناقصة، وتوحيد مسميات الحسابات والتصنيفات.',
+      descEn: 'Reconciliation checks, incomplete-entry isolation, and unified entity and account mapping.',
+      outAr: 'سجلات موحّدة وموثوقة',
+      outEn: 'Normalized, verified records'
+    },
+    {
+      n: '03',
+      titleAr: 'التحليل',
+      titleEn: 'Synthesis',
+      descAr: 'تطبيق محركات الذكاء الثمانية: الانحرافات، المخاطر، الهوامش، الموردين، والعملاء.',
+      descEn: 'The eight engines run across variance, risk, margins, suppliers, customers, and governance.',
+      outAr: 'نتائج مرتبة حسب الأولوية',
+      outEn: 'Prioritized findings'
+    },
+    {
+      n: '04',
+      titleAr: 'القرار',
+      titleEn: 'Execution',
+      descAr: 'توجيهات قابلة للتنفيذ مع سجل تدقيق غير قابل للتعديل يوضح سبب كل توصية وصاحب الاعتماد.',
+      descEn: 'Actionable directives with a tamper-evident trail showing the rationale and approval owner.',
+      outAr: 'توجيه موثّق وقابل للمتابعة',
+      outEn: 'Documented, trackable directive'
     }
   ];
 
   return (
-    <div className="public-page platform-page">
-      {/* Hero Section */}
-      <section className="public-hero" style={{ padding: '6rem 0 4rem', background: 'radial-gradient(circle at 50% 0%, var(--accent-subtle) 0%, transparent 70%)' }}>
-        <div className="site-container" style={{ textAlign: 'center', maxWidth: '960px', margin: '0 auto' }}>
-          <div className="severity-tag optimal" style={{ display: 'inline-flex', marginBottom: '1.5rem', padding: '0.4rem 1rem' }}>
-            {isAr ? 'معمارية المنظومة والتقنيات' : 'PLATFORM ARCHITECTURE & CAPABILITIES'}
-          </div>
-          <h1 style={{ fontSize: 'clamp(2.2rem, 5vw, 3.5rem)', fontWeight: 800, lineHeight: 1.15, marginBottom: '1.5rem' }}>
-            {isAr ? (
-              <>منصة الاستخبارات التشغيلية والقرارات الحتمية</>
-            ) : (
-              <>Cross-Industry Intelligence & Sovereign Decision Mesh</>
-            )}
-          </h1>
-          <p style={{ fontSize: '1.15rem', color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: '780px', margin: '0 auto 2.5rem' }}>
+    <div>
+      {/* Hero */}
+      <section className="pp-hero">
+        <div className="ml-container pp-hero__inner">
+          <span className="pp-hero__eyebrow">
+            {isAr ? 'معمارية المنصة وقدراتها' : 'PLATFORM ARCHITECTURE'}
+          </span>
+          <h1 className="ml-display pp-hero__title">
             {isAr
-              ? 'بنية تحتية متطورة توحد البيانات المبعثرة في أنظمة ERP والمشاريع والمشتريات وتحولها إلى قرارات تنفيذية قابلة للتنفيذ الفوري مع إسناد محاسبي حتمي.'
-              : 'An enterprise intelligence infrastructure that unifies fragmented ERP, project, and supply chain data into deterministically verified operational decisions.'}
+              ? 'طبقة استخبارات تشغيلية موحدة فوق أنظمتك القائمة'
+              : 'A unified operational intelligence layer above your existing systems'}
+          </h1>
+          <p className="ml-lead pp-hero__lead">
+            {isAr
+              ? 'تجمع المنصة البيانات المبعثرة في أنظمة ERP والمشاريع والمشتريات وتحولها إلى نتائج قابلة للتتبع والتحقق، دون تعديل بنيتك التحتية الحالية.'
+              : 'It consolidates fragmented ERP, project, and procurement data into verifiable, traceable outcomes — without changing your underlying infrastructure.'}
           </p>
-
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={onRequestDemo} className="btn-primary" style={{ padding: '0.8rem 1.8rem', fontSize: '1rem' }}>
-              <span>{isAr ? 'طلب عرض تقني مفصل' : 'Request Technical Demo'}</span>
+          <div className="pp-hero__actions">
+            <button onClick={onRequestDemo} className="ml-btn ml-btn--primary ml-btn--lg">
+              <span>{isAr ? 'طلب عرض تقني' : 'Request a technical demo'}</span>
               <IconArrowRight size={16} />
             </button>
-            <button onClick={onNavigateLogin} className="btn-secondary" style={{ padding: '0.8rem 1.8rem', fontSize: '1rem' }}>
-              <span>{isAr ? 'بوابة العملاء المصرح لهم' : 'Authorized Client Portal'}</span>
+            <button onClick={onNavigateLogin} className="ml-btn ml-btn--ghost ml-btn--lg">
+              <span>{isAr ? 'بوابة العملاء' : 'Client portal'}</span>
             </button>
           </div>
+
+          <dl className="pp-hero__meta">
+            <div className="pp-fact">
+              <dt className="pp-fact__value">{engineCount}</dt>
+              <dd className="pp-fact__label">
+                {isAr ? 'محركات ذكاء ضمن الشبكة التشغيلية' : 'intelligence engines in the mesh'}
+              </dd>
+            </div>
+            <div className="pp-fact">
+              <dt className="pp-fact__value">{isAr ? 'قراءة فقط' : 'Read-only'}</dt>
+              <dd className="pp-fact__label">
+                {isAr ? 'بصمة تكامل غير تطفلية على أنظمتك' : 'non-invasive integration footprint'}
+              </dd>
+            </div>
+            <div className="pp-fact">
+              <dt className="pp-fact__value">{isAr ? 'سيادي' : 'Sovereign'}</dt>
+              <dd className="pp-fact__label">
+                {isAr ? 'سحابي محلي أو نشر مغلق داخل مؤسستك' : 'cloud in-KSA or air-gapped on-prem'}
+              </dd>
+            </div>
+          </dl>
         </div>
       </section>
 
-      {/* Architecture Overview Diagram Section */}
-      <section className="site-section" style={{ padding: '4rem 0', borderTop: '1px solid var(--border-subtle)' }}>
-        <div className="site-container">
-          <div className="section-header" style={{ textAlign: 'center', marginBottom: '3rem' }}>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-              {isAr ? 'مخطط تدفق الاستخبارات الحتمية' : 'The Deterministic Intelligence Flow'}
+      {/* Intelligence flow */}
+      <section className="site-section">
+        <div className="ml-container">
+          <div className="site-section__head">
+            <span className="ml-eyebrow">{isAr ? 'تدفق الاستخبارات' : 'INTELLIGENCE FLOW'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'من الحركة الخام إلى القرار الموثق' : 'From raw transactions to an evidenced decision'}
             </h2>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '640px', margin: '0 auto' }}>
+            <p className="ml-lead site-section__lead">
               {isAr
-                ? 'كيف تنتقل البيانات من الأنظمة الأولية حتى القرار التنفيذي المصادق عليه'
-                : 'How raw enterprise transactions transform into audited operational executive directives.'}
+                ? 'أربع مراحل متسقة تفصل بوضوح بين ما تم التحقق منه وما لم يتحقق منه بعد.'
+                : 'Four consistent stages that keep verified facts clearly separated from anything still unconfirmed.'}
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
-            <div className="kpi-card" style={{ padding: '1.8rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-light)', marginBottom: '0.5rem' }}>
-                {isAr ? 'المرحلة ٠١: الاستيعاب' : 'STAGE 01: INGESTION'}
-              </div>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '0.75rem' }}>{isAr ? 'موائمات الأنظمة' : 'Sensor Adapters'}</h3>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                {isAr
-                  ? 'سحب دوري ولحظي من أنظمة ERP، والمصارف، وسجلات المخزون، والمناقصات مع تشفير كامل للبيانات أثناء النقل.'
-                  : 'Real-time and batch ingestion from ERPs, banks, inventory ledgers, and contract management systems with end-to-end TLS 1.3.'}
-              </p>
-            </div>
-
-            <div className="kpi-card" style={{ padding: '1.8rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--status-optimal)', marginBottom: '0.5rem' }}>
-                {isAr ? 'المرحلة ٠٢: التدقيق' : 'STAGE 02: VALIDATION'}
-              </div>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '0.75rem' }}>{isAr ? 'فلتر جودة البيانات' : 'Truth Pipeline'}</h3>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                {isAr
-                  ? 'فحص التناقضات الحسابية، وعزل القيود غير المكتملة، وتوحيد مسميات الحسابات وتصنيفات الموردين.'
-                  : 'Automated reconciliation, anomaly flagging, missing field isolation, and unified entity mapping across disparate databases.'}
-              </p>
-            </div>
-
-            <div className="kpi-card" style={{ padding: '1.8rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--status-warning)', marginBottom: '0.5rem' }}>
-                {isAr ? 'المرحلة ٠٣: التحليل' : 'STAGE 03: SYNTHESIS'}
-              </div>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '0.75rem' }}>{isAr ? 'محركات الذكاء الثمانية' : 'Intelligence Mesh'}</h3>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                {isAr
-                  ? 'محاكاة السيناريوهات، واكتشاف الهدر، وتقدير مخاطر التعثر، وحساب الأثر المالي المتوقع بالريال السعودي.'
-                  : 'Cross-functional scenario modeling, risk surface calculation, leak detection, and quantified SAR impact projection.'}
-              </p>
-            </div>
-
-            <div className="kpi-card" style={{ padding: '1.8rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--status-high)', marginBottom: '0.5rem' }}>
-                {isAr ? 'المرحلة ٠٤: التنفيذ' : 'STAGE 04: EXECUTION'}
-              </div>
-              <h3 style={{ fontSize: '1.2rem', marginBottom: '0.75rem' }}>{isAr ? 'القرار وسجل التدقيق' : 'Actionable Directives'}</h3>
-              <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                {isAr
-                  ? 'إصدار توجيهات تنفيذية برمجية مع سجل تدقيق مشفر غير قابل للتعديل يوضح سبب القرار وصاحب الاعتماد.'
-                  : 'Direct dispatch of mitigation workflows, approval queues, and immutable cryptographic audit trails.'}
-              </p>
-            </div>
+          <div className="pp-steps">
+            {flowStages.map((s) => (
+              <article key={s.n} className="pp-step">
+                <span className="pp-step__num">{s.n}</span>
+                <h3 className="pp-step__title">{isAr ? s.titleAr : s.titleEn}</h3>
+                <p className="pp-step__desc">{isAr ? s.descAr : s.descEn}</p>
+                <span className="pp-step__out">
+                  {isAr ? 'المخرَج: ' : 'OUTPUT: '}
+                  <strong>{isAr ? s.outAr : s.outEn}</strong>
+                </span>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Core Intelligence Engines Grid */}
-      <section className="site-section" style={{ padding: '4rem 0', background: 'var(--bg-surface)' }}>
-        <div className="site-container">
-          <div className="section-header" style={{ textAlign: 'center', marginBottom: '3rem' }}>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-              {isAr ? 'المحركات والقدرات المتخصصة' : 'Specialized Enterprise Engines'}
+      {/* Engines */}
+      <section className="site-section site-section--alt">
+        <div className="ml-container">
+          <div className="site-section__head">
+            <span className="ml-eyebrow">{isAr ? 'المحركات' : 'THE ENGINES'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'ثمانية محركات تغطي مفاصل العمل الحيوية' : 'Eight engines across the operational core'}
             </h2>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '640px', margin: '0 auto' }}>
+            <p className="ml-lead site-section__lead">
               {isAr
-                ? 'ثمانية محركات مصممة لتغطية كافة المفاصل الحيوية للمؤسسات الكبرى'
-                : 'Eight autonomous intelligence engines covering every mission-critical operational juncture.'}
+                ? 'كل محرك مسؤول عن نطاق واحد واضح، ويمكن تشغيلها مجتمعة أو تدريجياً حسب نطاق مؤسستك.'
+                : 'Each engine owns one clear domain, and they can run together or be introduced progressively.'}
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+          <div className="site-grid site-grid--4">
             {coreEngines.map((engine) => (
-              <div key={engine.id} className="kpi-card" style={{ padding: '1.8rem', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ color: 'var(--accent-light)', marginBottom: '1rem' }}>
+              <article key={engine.id} className="site-tile">
+                <div className="site-tile__icon" aria-hidden="true">
                   {engine.icon}
                 </div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.6rem' }}>
+                <h3 className="site-tile__title">
                   {isAr ? engine.titleAr : engine.titleEn}
                 </h3>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6, flex: 1 }}>
+                <p className="site-tile__desc">
                   {isAr ? engine.descAr : engine.descEn}
                 </p>
-              </div>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Security & Sovereign Architecture */}
-      <section className="site-section" style={{ padding: '4rem 0' }}>
-        <div className="site-container">
-          <div className="section-header" style={{ textAlign: 'center', marginBottom: '3rem' }}>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-              {isAr ? 'الأمان والسيادة المؤسسية' : 'Security, Compliance & Tenancy'}
+      {/* Architecture pillars */}
+      <section className="site-section">
+        <div className="ml-container">
+          <div className="site-section__head">
+            <span className="ml-eyebrow">{isAr ? 'المعمارية' : 'ARCHITECTURE'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'ضوابط معمارية تليق بالبيئات المؤسسية' : 'Architectural controls enterprises expect'}
             </h2>
-            <p style={{ color: 'var(--text-secondary)', maxWidth: '640px', margin: '0 auto' }}>
+            <p className="ml-lead site-section__lead">
               {isAr
-                ? 'معايير أمان بنكية تلبي متطلبات الأمن السيبراني وحماية البيانات الوطنية'
-                : 'Rigorous enterprise safeguards engineered to meet sovereign data classification mandates.'}
+                ? 'أمان، عزل، نشر، وتكامل — أربعة محاور تحكم كيفية تشغيل المنصة داخل مؤسستك.'
+                : 'Security, isolation, deployment, and integration — the four constraints on how the platform runs in your estate.'}
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem' }}>
-            {architecturalPillars.map((pillar, idx) => (
-              <div key={idx} className="kpi-card" style={{ padding: '1.8rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', color: 'var(--status-optimal)' }}>
-                  <IconShield size={20} />
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                    {isAr ? pillar.titleAr : pillar.titleEn}
-                  </h3>
+          <div className="site-grid site-grid--2">
+            {architecturalPillars.map((p, idx) => (
+              <article key={idx} className="site-tile">
+                <div className="site-tile__icon" aria-hidden="true">
+                  {idx === 0 ? <IconShield size={22} /> : idx === 1 ? <IconServer size={22} /> : idx === 2 ? <IconWorkflow size={22} /> : <IconDecisions size={22} />}
                 </div>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                  {isAr ? pillar.descAr : pillar.descEn}
+                <h3 className="site-tile__title">
+                  {isAr ? p.titleAr : p.titleEn}
+                </h3>
+                <p className="site-tile__desc">
+                  {isAr ? p.descAr : p.descEn}
                 </p>
-              </div>
+              </article>
             ))}
+          </div>
+
+          <div className="pp-gap-lg" style={{ textAlign: 'center' }}>
+            <div className="pp-strip">
+              {['SAP', 'Oracle', 'Microsoft Dynamics 365', 'Odoo', 'PostgreSQL', 'REST / Webhooks'].map((n) => (
+                <span key={n} className="ml-badge">
+                  {n}
+                </span>
+              ))}
+            </div>
+            <p className="ml-hint pp-gap-lg" style={{ textAlign: 'center' }}>
+              {isAr ? 'موائمات دعم لأنظمة المؤسسات القائمة' : 'Connector support for common enterprise systems'}
+            </p>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="site-section" style={{ padding: '5rem 0', background: 'radial-gradient(ellipse at 50% 100%, var(--accent-subtle) 0%, var(--bg-surface) 70%)', borderTop: '1px solid var(--border-subtle)' }}>
-        <div className="site-container" style={{ textAlign: 'center', maxWidth: '720px', margin: '0 auto' }}>
-          <h2 style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '1rem' }}>
-            {isAr ? 'جاهز لترقية ذكاء عملياتك؟' : 'Elevate Your Operational Intelligence'}
-          </h2>
-          <p style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '2rem' }}>
-            {isAr
-              ? 'تواصل مع فريقنا الهندسي لحجز استشارة تقنية ونموذج اختبار مخصص لبيانات مؤسستك.'
-              : 'Consult with our principal engineers to schedule an architecture deep dive tailored to your infrastructure.'}
-          </p>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={onRequestDemo} className="btn-primary" style={{ padding: '0.8rem 2rem', fontSize: '1rem' }}>
-              <span>{isAr ? 'حجز جلسة استشارية' : 'Schedule Consultation'}</span>
-              <IconArrowRight size={16} />
-            </button>
-            <button onClick={onNavigateRegister} className="btn-secondary" style={{ padding: '0.8rem 2rem', fontSize: '1rem' }}>
-              <span>{isAr ? 'إنشاء مساحة عمل للمؤسسة' : 'Create Organization Workspace'}</span>
-            </button>
+      {/* CTA */}
+      <section className="site-section site-section--tight">
+        <div className="ml-container">
+          <div className="site-cta">
+            <span className="ml-eyebrow">{isAr ? 'الخطوة التالية' : 'NEXT STEP'}</span>
+            <h2 className="ml-heading site-section__title">
+              {isAr ? 'راجع المعمارية مع فريقنا' : 'Review the architecture with our team'}
+            </h2>
+            <p className="ml-lead site-section__lead" style={{ marginInline: 'auto', textAlign: 'center' }}>
+              {isAr
+                ? 'احجز جلسة استعراض تقنية، أو أنشئ مساحة عمل لتجربة المنصة داخل مؤسستك.'
+                : 'Book a technical walkthrough, or create a workspace to evaluate the platform in your context.'}
+            </p>
+            <div className="site-cta__actions">
+              <button onClick={onRequestDemo} className="ml-btn ml-btn--primary ml-btn--lg">
+                <span>{isAr ? 'حجز جلسة استعراض' : 'Schedule a walkthrough'}</span>
+                <IconArrowRight size={16} />
+              </button>
+              <button onClick={onNavigateRegister} className="ml-btn ml-btn--ghost ml-btn--lg">
+                <span>{isAr ? 'إنشاء مساحة عمل' : 'Create a workspace'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>

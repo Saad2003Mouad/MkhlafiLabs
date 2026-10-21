@@ -1,6 +1,6 @@
 import React from 'react';
 import { LocaleMode, PricingPackage } from '../../types';
-import { PACKAGES } from '../../data/mockData';
+import { PACKAGES } from '../../data/marketingContent';
 import { IconCheckCircle, IconArrowRight } from '../Icons';
 
 interface PricingProps {

@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { handleApiRequest } from './apps/api/src/server.js';
-import { runMigrations } from './apps/api/src/db/connection.js';
+import { runMigrations, query } from './apps/api/src/db/connection.js';
+import { seedDemoWorkspace } from './apps/api/src/db/seedDemoWorkspace.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -123,7 +124,24 @@ const server = http.createServer((req, res) => {
   });
 });
 
-runMigrations().then(() => {
+async function ensureDemoWorkspace() {
+  if (process.env.SEED_DEMO_DATA === '0') return;
+
+  // Some migrations insert a handful of template rows, so the demo organization is
+  // never fully empty. Journal entries are the largest demo dataset and no migration
+  // creates any, which makes them a reliable "has the demo data ever been seeded"
+  // marker. This also means the platform owner's own edits are never overwritten.
+  const existing = await query(`SELECT COUNT(*)::int AS count FROM tenant_journal_entries`);
+
+  if ((existing.rows?.[0]?.count ?? 0) > 0) return;
+
+  console.log('[Seed] Demo workspace is empty — seeding demonstration data...');
+  await seedDemoWorkspace();
+}
+
+runMigrations()
+  .then(() => ensureDemoWorkspace())
+  .then(() => {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n=============================================================`);
     console.log(`  MIKHLAFI LABS — Enterprise Decision Intelligence Platform`);

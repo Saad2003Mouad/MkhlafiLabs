@@ -1,12 +1,15 @@
 // MIKHLAFI LABS — Public Website Layout
-// Provides universal public header, marketing footer, language/theme controls, and demo request modal
-// Never contains customer sidebar or requires authenticated session
+// Shell for the unauthenticated marketing site: sticky header, page body, footer,
+// and the inbound inquiry dialog. Never renders customer navigation and never
+// requires a session. There is no entrance animation gating page content.
 
 import React, { useState } from 'react';
 import { LocaleMode, ThemeMode } from '../types';
 import { WebsiteHeader } from '../components/website/WebsiteHeader';
 import { WebsiteFooter } from '../components/website/WebsiteFooter';
 import { DemoModal } from '../components/website/DemoModal';
+import { AmbientBackdrop } from '../components/common/AmbientBackdrop';
+import { RevealEngine } from '../components/common/RevealEngine';
 
 interface PublicLayoutProps {
   locale: LocaleMode;
@@ -25,11 +28,21 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
   onNavigate,
   children
 }) => {
+  const isAr = locale === 'ar';
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
 
   return (
-    <div className="website-root" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Public Marketing Header */}
+    <div className="site-shell">
+      {/* Decorative animated light field — presentational only */}
+      <AmbientBackdrop />
+      {/* Scroll-linked entrance motion for section content */}
+      <RevealEngine />
+
+      {/* Skip link — first focusable element on the page */}
+      <a className="site-skip-link" href="#main-content">
+        {isAr ? 'تجاوز إلى المحتوى الرئيسي' : 'Skip to main content'}
+      </a>
+
       <WebsiteHeader
         locale={locale}
         theme={theme}
@@ -40,12 +53,10 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
         onNavigate={onNavigate}
       />
 
-      {/* Main Page Body */}
-      <main style={{ flex: 1 }}>
+      <main id="main-content" className="site-main" tabIndex={-1}>
         {children}
       </main>
 
-      {/* Public Marketing Footer */}
       <WebsiteFooter
         locale={locale}
         onExplorePlatform={() => onNavigate('/platform')}
@@ -53,14 +64,14 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
         onNavigate={onNavigate}
       />
 
-      {/* Interactive Demo Request Modal */}
+      {/* Inbound inquiry — records a real lead; grants no access by itself */}
       <DemoModal
         isOpen={isDemoModalOpen}
         onClose={() => setIsDemoModalOpen(false)}
         locale={locale}
         onSuccessLaunch={() => {
           setIsDemoModalOpen(false);
-          onNavigate('/platform');
+          onNavigate('/register');
         }}
       />
     </div>

@@ -1,6 +1,7 @@
-// MIKHLAFI LABS — Customer Application Layout
-// Dedicated layout for authenticated customer workspace under /app/*
-// Manages customer sidebar, tenant switching, user menu, session status, and sign-out
+// MIKHLAFI LABS — Customer Workspace Layout
+// Authenticated shell for /app/*: grouped navigation, organization switcher,
+// session controls, and platform-owner escalation. Navigation labels are
+// industry-neutral; no counts or badges are shown unless they come from the API.
 
 import React, { useState } from 'react';
 import { LocaleMode, ThemeMode } from '../types';
@@ -27,8 +28,10 @@ import {
   IconFileText,
   IconOrganization,
   IconCreditCard,
-  IconSettings
+  IconSettings,
+  IconShield
 } from '../components/Icons';
+import { BrandLogo } from '../components/common/BrandLogo';
 
 interface CustomerLayoutProps {
   theme: ThemeMode;
@@ -38,6 +41,19 @@ interface CustomerLayoutProps {
   onToggleTheme: () => void;
   onToggleLocale: () => void;
   children: React.ReactNode;
+}
+
+interface NavItem {
+  route: string;
+  icon: React.ReactNode;
+  ar: string;
+  en: string;
+}
+
+interface NavGroup {
+  labelAr: string;
+  labelEn: string;
+  items: NavItem[];
 }
 
 export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
@@ -51,27 +67,28 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
 }) => {
   const isAr = locale === 'ar';
   const { user, tenant, logout, switchOrganization } = useAuth();
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
 
-  const availableWorkspaces = (tenant?.availableOrganizations && tenant.availableOrganizations.length > 0)
-    ? tenant.availableOrganizations.map((o) => ({
-        id: o.id,
-        nameAr: o.nameAr || o.nameEn,
-        nameEn: o.nameEn
-      }))
-    : [
-        {
-          id: tenant?.organizationId || 'current-org',
-          nameAr: tenant?.orgNameAr || 'مساحة العمل الحالية',
-          nameEn: tenant?.orgNameEn || 'Current Workspace'
-        }
-      ];
+  const availableWorkspaces =
+    tenant?.availableOrganizations && tenant.availableOrganizations.length > 0
+      ? tenant.availableOrganizations.map((o) => ({
+          id: o.id,
+          nameAr: o.nameAr || o.nameEn,
+          nameEn: o.nameEn
+        }))
+      : [
+          {
+            id: tenant?.organizationId || 'current-org',
+            nameAr: tenant?.orgNameAr || 'مساحة العمل الحالية',
+            nameEn: tenant?.orgNameEn || 'Current Workspace'
+          }
+        ];
 
   const currentOrgId = tenant?.organizationId || availableWorkspaces[0]?.id || '';
 
   const handleNav = (targetPath: string) => {
     onNavigate(targetPath);
-    setMobileSidebarOpen(false);
+    setRailOpen(false);
   };
 
   const handleSignOut = async () => {
@@ -82,421 +99,254 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
     }
   };
 
-  const isActive = (routePath: string) => {
-    return currentPath === routePath;
-  };
+  const isActive = (routePath: string) => currentPath === routePath;
+
+  const groups: NavGroup[] = [
+    {
+      labelAr: 'مساحة العمل',
+      labelEn: 'Workspace',
+      items: [
+        { route: ROUTES.APP.OVERVIEW, icon: <IconDashboard size={16} />, ar: 'مركز القيادة', en: 'Command Center' },
+        { route: ROUTES.APP.ALERTS, icon: <IconBell size={16} />, ar: 'التنبيهات والإشارات', en: 'Alerts & Signals' }
+      ]
+    },
+    {
+      labelAr: 'محركات الذكاء',
+      labelEn: 'Intelligence Engines',
+      items: [
+        { route: ROUTES.APP.FINANCE, icon: <IconFinance size={16} />, ar: 'كشف الانحرافات', en: 'Anomaly Detection' },
+        { route: ROUTES.APP.DECISIONS, icon: <IconDecisions size={16} />, ar: 'مركز القرارات', en: 'Decision Center' },
+        { route: ROUTES.APP.RISK, icon: <IconRisk size={16} />, ar: 'ذكاء المخاطر', en: 'Risk Intelligence' },
+        { route: ROUTES.APP.PROJECTS, icon: <IconProjects size={16} />, ar: 'المشاريع والعقود', en: 'Projects & Contracts' },
+        { route: ROUTES.APP.SUPPLIERS, icon: <IconSupplier size={16} />, ar: 'الموردون والمشتريات', en: 'Suppliers & Procurement' },
+        { route: ROUTES.APP.CUSTOMERS, icon: <IconCustomer size={16} />, ar: 'العملاء والاحتفاظ', en: 'Customers & Retention' },
+        { route: ROUTES.APP.DATA_QUALITY, icon: <IconDataQuality size={16} />, ar: 'جودة البيانات', en: 'Data Quality' }
+      ]
+    },
+    {
+      labelAr: 'المساعد',
+      labelEn: 'Assistant',
+      items: [
+        { route: ROUTES.APP.ASSISTANT, icon: <IconAssistant size={16} />, ar: 'المساعد التنفيذي', en: 'Executive Assistant' }
+      ]
+    },
+    {
+      labelAr: 'العمليات',
+      labelEn: 'Operations',
+      items: [
+        { route: ROUTES.APP.WORKFLOWS, icon: <IconWorkflow size={16} />, ar: 'سير العمل والسياسات', en: 'Workflows & Policies' },
+        { route: ROUTES.APP.REPORTS, icon: <IconFileText size={16} />, ar: 'التقارير وسجل التدقيق', en: 'Reports & Audit Log' }
+      ]
+    },
+    {
+      labelAr: 'الإدارة',
+      labelEn: 'Administration',
+      items: [
+        { route: ROUTES.APP.INTEGRATIONS, icon: <IconServer size={16} />, ar: 'مصادر البيانات والربط', en: 'Data Sources & Integrations' },
+        { route: ROUTES.APP.ORGANIZATION, icon: <IconOrganization size={16} />, ar: 'المؤسسة والفروع', en: 'Organization & Branches' },
+        { route: ROUTES.APP.BILLING, icon: <IconCreditCard size={16} />, ar: 'الاشتراك والفوترة', en: 'Subscription & Billing' },
+        { route: ROUTES.APP.SETTINGS, icon: <IconSettings size={16} />, ar: 'الإعدادات', en: 'Settings' }
+      ]
+    }
+  ];
 
   return (
-    <div className="app-layout">
-      {/* Sidebar Navigation */}
-      <aside
-        className="app-sidebar"
-        style={{
-          display: mobileSidebarOpen ? 'flex' : undefined,
-          position: mobileSidebarOpen ? 'fixed' : undefined,
-          zIndex: mobileSidebarOpen ? 1500 : undefined,
-          height: mobileSidebarOpen ? '100vh' : undefined,
-          top: 0,
-          insetInlineStart: 0
-        }}
-      >
-        {/* Sidebar Header */}
-        <div className="sidebar-header">
+    <div className="app-shell">
+      {/* Workspace navigation rail */}
+      <aside className={`app-rail ${railOpen ? 'is-open' : ''}`}>
+        <div className="app-rail__brand">
           <button
             onClick={() => handleNav(ROUTES.APP.OVERVIEW)}
-            className="brand-emblem"
-            style={{ textAlign: 'start', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'start' }}
+            title="MIKHLAFI LABS"
           >
-            <div className="brand-symbol" style={{ width: '30px', height: '30px', fontSize: '15px' }}>M</div>
-            <div className="brand-meta">
-              <span className="brand-name" style={{ fontSize: '13px' }}>MIKHLAFI LABS</span>
-              <span className="brand-sub" style={{ fontSize: '8px' }}>
-                {isAr ? 'منصة استخبارات الأعمال' : 'ENTERPRISE INTELLIGENCE'}
-              </span>
-            </div>
+            <BrandLogo size="sm" locale={locale} />
           </button>
-          {mobileSidebarOpen && (
-            <button
-              onClick={() => setMobileSidebarOpen(false)}
-              className="ctrl-btn"
-              style={{ marginInlineStart: 'auto' }}
-            >
-              <IconX size={16} />
-            </button>
-          )}
+          <button
+            onClick={() => setRailOpen(false)}
+            className="ml-icon-btn"
+            style={{ marginInlineStart: 'auto', display: railOpen ? 'inline-flex' : 'none' }}
+            aria-label="Close navigation"
+          >
+            <IconX size={16} />
+          </button>
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="sidebar-nav">
-          {/* Platform Owner Quick Switcher */}
+        <nav className="app-rail__scroll" aria-label={isAr ? 'تنقل مساحة العمل' : 'Workspace navigation'}>
           {user?.isPlatformAdmin && (
-            <div style={{ padding: '0 4px', marginBottom: '14px' }}>
+            <div style={{ marginBottom: 18 }}>
               <button
                 onClick={() => handleNav(ROUTES.ADMIN.OVERVIEW)}
                 style={{
                   width: '100%',
-                  padding: '9px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.25), rgba(153, 27, 27, 0.35))',
-                  border: '1px solid #ef4444',
-                  color: '#fca5a5',
-                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  textAlign: 'start',
-                  boxShadow: '0 0 12px rgba(220, 38, 38, 0.2)'
+                  gap: 10,
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-glow)',
+                  background: 'var(--accent-subtle)',
+                  color: 'var(--accent-light)',
+                  cursor: 'pointer',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  textAlign: 'start'
                 }}
-                title={isAr ? 'الانتقال إلى غرفة عمليات مالك المنصة وإدارة الباقات' : 'Switch to Platform Owner Control Center'}
+                title={isAr ? 'الانتقال إلى إدارة المنصة' : 'Go to platform administration'}
               >
-                <span style={{ fontSize: '16px' }}>🛡️</span>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span>{isAr ? 'غرفة عمليات المنصة' : 'Platform Control Room'}</span>
-                  <span style={{ fontSize: '9px', color: '#f87171', fontWeight: 400 }}>
-                    {isAr ? 'لوحة مالك المشروع وإدارة الباقات' : 'Owner Switchboard & Packages'}
-                  </span>
-                </div>
+                <IconShield size={16} />
+                <span style={{ flex: 1 }}>{isAr ? 'إدارة المنصة' : 'Platform Administration'}</span>
               </button>
             </div>
           )}
 
-          {/* Group 1: Workspace */}
-          <div className="nav-section-title">
-            {isAr ? 'مساحة العمل والقيادة' : 'WORKSPACE'}
-          </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.OVERVIEW)}
-            className={`nav-item ${isActive(ROUTES.APP.OVERVIEW) ? 'active' : ''}`}
-          >
-            <IconDashboard size={16} />
-            <span>{isAr ? 'مركز القيادة التنفيذي' : 'Executive Command Center'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.ALERTS)}
-            className={`nav-item ${isActive(ROUTES.APP.ALERTS) ? 'active' : ''}`}
-          >
-            <IconBell size={16} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <span>{isAr ? 'مركز التنبيهات الفورية' : 'Alerts & Telemetry'}</span>
-              <span className="severity-tag high" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                2 {isAr ? 'جديد' : 'new'}
-              </span>
+          {groups.map((group, gi) => (
+            <div key={gi} className="nav-group">
+              <div className="nav-group__label">{isAr ? group.labelAr : group.labelEn}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.route}
+                  onClick={() => handleNav(item.route)}
+                  className={`nav-link ${isActive(item.route) ? 'is-active' : ''}`}
+                  aria-current={isActive(item.route) ? 'page' : undefined}
+                >
+                  <span className="nav-link__icon">{item.icon}</span>
+                  <span>{isAr ? item.ar : item.en}</span>
+                </button>
+              ))}
             </div>
-          </button>
-
-          {/* Group 2: Intelligence Suite */}
-          <div className="nav-section-title">
-            {isAr ? 'محركات الاستخبارات والقرارات' : 'INTELLIGENCE SUITE'}
-          </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.FINANCE)}
-            className={`nav-item ${isActive(ROUTES.APP.FINANCE) ? 'active' : ''}`}
-          >
-            <IconFinance size={16} />
-            <span>{isAr ? 'الذكاء المالي وكشف الشذوذ' : 'Financial Intelligence'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.DECISIONS)}
-            className={`nav-item ${isActive(ROUTES.APP.DECISIONS) ? 'active' : ''}`}
-          >
-            <IconDecisions size={16} />
-            <span>{isAr ? 'مركز القرارات التنفيذية' : 'Decision Center'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.RISK)}
-            className={`nav-item ${isActive(ROUTES.APP.RISK) ? 'active' : ''}`}
-          >
-            <IconRisk size={16} />
-            <span>{isAr ? 'التنبؤ بالمخاطر والإنذار المبكر' : 'Predictive Risk Intelligence'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.PROJECTS)}
-            className={`nav-item ${isActive(ROUTES.APP.PROJECTS) ? 'active' : ''}`}
-          >
-            <IconProjects size={16} />
-            <span>{isAr ? 'ذكاء أداء المشاريع والعقود' : 'Project Intelligence'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.SUPPLIERS)}
-            className={`nav-item ${isActive(ROUTES.APP.SUPPLIERS) ? 'active' : ''}`}
-          >
-            <IconSupplier size={16} />
-            <span>{isAr ? 'ذكاء الموردين والمشتريات' : 'Supplier Intelligence'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.CUSTOMERS)}
-            className={`nav-item ${isActive(ROUTES.APP.CUSTOMERS) ? 'active' : ''}`}
-          >
-            <IconCustomer size={16} />
-            <span>{isAr ? 'ذكاء ومراقبة العملاء (Churn)' : 'Customer Intelligence'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.DATA_QUALITY)}
-            className={`nav-item ${isActive(ROUTES.APP.DATA_QUALITY) ? 'active' : ''}`}
-          >
-            <IconDataQuality size={16} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <span>{isAr ? 'جودة وحوكمة البيانات' : 'Data Quality Intelligence'}</span>
-              <span className="severity-tag optimal" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                97.4%
-              </span>
-            </div>
-          </button>
-
-          {/* Group 3: AI Assistant */}
-          <div className="nav-section-title">
-            {isAr ? 'الذكاء الاصطناعي المدعوم بالأدلة' : 'AI ASSISTANT'}
-          </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.ASSISTANT)}
-            className={`nav-item ${isActive(ROUTES.APP.ASSISTANT) ? 'active' : ''}`}
-          >
-            <IconAssistant size={16} />
-            <span>{isAr ? 'المساعد التنفيذي الذكي' : 'Executive AI Assistant'}</span>
-          </button>
-
-          {/* Group 4: Operations & Mitigation */}
-          <div className="nav-section-title">
-            {isAr ? 'العمليات والسياسات' : 'OPERATIONS & POLICIES'}
-          </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.WORKFLOWS)}
-            className={`nav-item ${isActive(ROUTES.APP.WORKFLOWS) ? 'active' : ''}`}
-          >
-            <IconWorkflow size={16} />
-            <span>{isAr ? 'سير العمل وسياسات الأتمتة' : 'Workflows & Automation'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.REPORTS)}
-            className={`nav-item ${isActive(ROUTES.APP.REPORTS) ? 'active' : ''}`}
-          >
-            <IconFileText size={16} />
-            <span>{isAr ? 'التقارير وسجلات التدقيق' : 'Reports & Audit Trails'}</span>
-          </button>
-
-          {/* Group 5: Administration & Tenancy */}
-          <div className="nav-section-title">
-            {isAr ? 'الإدارة والسيادة' : 'ADMINISTRATION & TENANCY'}
-          </div>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.INTEGRATIONS)}
-            className={`nav-item ${isActive(ROUTES.APP.INTEGRATIONS) ? 'active' : ''}`}
-          >
-            <IconServer size={16} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <span>{isAr ? 'مصادر البيانات وتكامل ERP' : 'Data Sources & ERP'}</span>
-              <span className="severity-tag optimal" style={{ fontSize: '9px', padding: '1px 5px' }}>
-                4
-              </span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.ORGANIZATION)}
-            className={`nav-item ${isActive(ROUTES.APP.ORGANIZATION) ? 'active' : ''}`}
-          >
-            <IconOrganization size={16} />
-            <span>{isAr ? 'المؤسسة والفروع والمستخدمين' : 'Organization & Branches'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.BILLING)}
-            className={`nav-item ${isActive(ROUTES.APP.BILLING) ? 'active' : ''}`}
-          >
-            <IconCreditCard size={16} />
-            <span>{isAr ? 'الاشتراك والاستحقاقات' : 'Subscription & Quotas'}</span>
-          </button>
-
-          <button
-            onClick={() => handleNav(ROUTES.APP.SETTINGS)}
-            className={`nav-item ${isActive(ROUTES.APP.SETTINGS) ? 'active' : ''}`}
-          >
-            <IconSettings size={16} />
-            <span>{isAr ? 'إعدادات المنظومة' : 'Platform Settings'}</span>
-          </button>
+          ))}
         </nav>
+
+        <div className="app-rail__foot">
+          <div className="org-switcher" title={isAr ? 'عزل المؤسسات متعدد المستأجرين' : 'Multi-tenant isolation'}>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 30,
+                height: 30,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--accent-subtle)',
+                color: 'var(--accent-light)',
+                fontSize: 12,
+                fontWeight: 700,
+                flexShrink: 0
+              }}
+            >
+              {(tenant?.orgNameEn || tenant?.orgNameAr || 'O').charAt(0).toUpperCase()}
+            </span>
+            <span className="org-switcher__body">
+              <span className="org-switcher__name">
+                {isAr ? tenant?.orgNameAr || tenant?.orgNameEn : tenant?.orgNameEn || tenant?.orgNameAr}
+              </span>
+              <span className="org-switcher__meta">
+                {tenant?.role ? tenant.role.toUpperCase() : 'MEMBER'} · {tenant?.currency || 'SAR'}
+              </span>
+            </span>
+          </div>
+
+          <select
+            value={currentOrgId}
+            onChange={(e) => switchOrganization(e.target.value)}
+            aria-label={isAr ? 'تبديل مساحة العمل' : 'Switch workspace'}
+            style={{
+              width: '100%',
+              marginTop: 9,
+              padding: '7px 9px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
+              fontSize: 12,
+              fontFamily: 'inherit',
+              cursor: 'pointer'
+            }}
+          >
+            {availableWorkspaces.map((w) => (
+              <option key={w.id} value={w.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
+                {isAr ? w.nameAr : w.nameEn}
+              </option>
+            ))}
+          </select>
+        </div>
       </aside>
 
-      {/* Main App Content View */}
-      <main className="app-main">
-        {/* Top Header */}
-        <header className="app-header">
-          <div className="header-left">
-            {/* Mobile Drawer Trigger */}
+      {railOpen && <div className="rail-scrim" onClick={() => setRailOpen(false)} />}
+
+      {/* Main column */}
+      <div className="app-main">
+        <header className="app-topbar">
+          <div className="app-topbar__start">
             <button
-              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-              className="ctrl-btn"
+              onClick={() => setRailOpen(!railOpen)}
+              className="ml-icon-btn"
               style={{ display: 'none' }}
+              id="rail-toggle"
+              aria-label="Open navigation"
             >
               <IconMenu size={18} />
             </button>
 
-            {/* Active Organization Switcher */}
-            <div className="workspace-badge" title={isAr ? 'عزل المؤسسات متعدد المستأجرين (Tenant Isolation)' : 'Multi-Tenant Isolation'}>
-              <span>🏛️</span>
-              <select
-                value={currentOrgId}
-                onChange={(e) => switchOrganization(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'inherit',
-                  fontFamily: 'inherit',
-                  fontWeight: 700,
-                  fontSize: '12px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                {availableWorkspaces.map((w) => (
-                  <option key={w.id} value={w.id} style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)' }}>
-                    {isAr ? w.nameAr : w.nameEn}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Direct Link back to Public Website */}
-            <button
-              onClick={() => onNavigate(ROUTES.PUBLIC.HOME)}
-              className="ctrl-btn"
-              style={{ fontSize: '11px' }}
-              title={isAr ? 'الانتقال إلى الموقع التعريفي العام' : 'Return to Public Website'}
-            >
-              <span>{isAr ? '🌐 الموقع التعريفي' : '🌐 Public Site'}</span>
-            </button>
-
-          </div>
-
-          <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Live Data Freshness & Tenant Connection Badge */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '4px 8px',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--bg-surface-elevated)',
-                border: '1px solid var(--border-subtle)',
-                fontSize: '11px'
-              }}
-            >
-              <span
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'var(--status-optimal)'
-                }}
-              />
-              <span style={{ color: 'var(--text-secondary)' }}>
-                {isAr
-                  ? `قاعدة البيانات: ${tenant?.orgNameAr || tenant?.orgNameEn || 'متصل'}`
-                  : `PostgreSQL: ${tenant?.orgNameEn || 'Connected'}`}
+            <div className="topbar-context">
+              <span className="topbar-context__label">
+                {isAr ? 'مساحة العمل النشطة' : 'Active workspace'}
+              </span>
+              <span className="topbar-context__value">
+                {isAr ? tenant?.orgNameAr || tenant?.orgNameEn : tenant?.orgNameEn || tenant?.orgNameAr}
               </span>
             </div>
+          </div>
 
-            {/* Lang Toggle */}
-            <button onClick={onToggleLocale} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Language">
-              <IconGlobe size={14} />
-              <span>{isAr ? 'EN' : 'عربي'}</span>
+          <div className="app-topbar__end">
+            <button
+              onClick={() => onNavigate(ROUTES.PUBLIC.HOME)}
+              className="ml-btn ml-btn--subtle ml-btn--sm"
+              title={isAr ? 'العودة إلى الموقع العام' : 'Back to public site'}
+            >
+              {isAr ? 'الموقع العام' : 'Public site'}
             </button>
 
-            {/* Theme Toggle */}
-            <button onClick={onToggleTheme} className="ctrl-btn" style={{ padding: '6px 9px' }} title="Toggle Theme">
-              {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
+            <button onClick={onToggleLocale} className="ml-icon-btn" title={isAr ? 'English' : 'العربية'} aria-label="Toggle language">
+              <IconGlobe size={15} />
             </button>
 
-            {/* Platform Owner Control Center Switcher */}
-            {user?.isPlatformAdmin && (
-              <button
-                onClick={() => onNavigate(ROUTES.ADMIN.OVERVIEW)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'linear-gradient(135deg, #dc2626, #991b1b)',
-                  border: '1px solid #ef4444',
-                  boxShadow: '0 0 10px rgba(220, 38, 38, 0.4)',
-                  color: '#fff',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-                title={isAr ? 'الانتقال إلى غرفة تحكم مالك المنظومة وإدارة الباقات والعملاء' : 'Platform Owner Root Control Center'}
-              >
-                <span>🛡️</span>
-                <span>{isAr ? 'غرفة عمليات المنصة' : 'Platform Control Room'}</span>
-              </button>
-            )}
+            <button onClick={onToggleTheme} className="ml-icon-btn" title="Theme" aria-label="Toggle theme">
+              {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
+            </button>
 
-            {/* Authenticated User Menu & Sign Out */}
             {user && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, paddingInlineStart: 6, borderInlineStart: '1px solid var(--border-subtle)' }}>
+                <span
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    padding: '3px 8px',
-                    borderRadius: 'var(--radius-sm)',
+                    justifyContent: 'center',
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
                     background: 'var(--accent-subtle)',
-                    border: '1px solid var(--accent-base)',
+                    border: '1px solid var(--border-glow)',
                     color: 'var(--accent-light)',
-                    fontSize: '11px',
+                    fontSize: 12.5,
                     fontWeight: 700
                   }}
-                  title={`${user.email} (${tenant?.role || 'Member'})`}
+                  title={`${user.email}${tenant?.role ? ` · ${tenant.role}` : ''}`}
                 >
-                  <span>{user.nameEn || user.email}</span>
-                  <span
-                    style={{
-                      fontSize: '9px',
-                      padding: '1px 4px',
-                      borderRadius: '3px',
-                      background: 'var(--accent-base)',
-                      color: '#fff',
-                      textTransform: 'uppercase'
-                    }}
-                  >
-                    {tenant?.role || 'MEMBER'}
-                  </span>
-                </div>
+                  {(user.nameEn || user.email || '?').charAt(0).toUpperCase()}
+                </span>
 
-                <button
-                  onClick={handleSignOut}
-                  className="ctrl-btn"
-                  style={{ fontSize: '11px', padding: '5px 8px', color: 'var(--status-danger)' }}
-                  title={isAr ? 'تسجيل الخروج وإنهاء الجلسة' : 'Sign Out of Session'}
-                >
-                  {isAr ? 'خروج' : 'Sign Out'}
+                <button onClick={handleSignOut} className="ml-btn ml-btn--subtle ml-btn--sm">
+                  {isAr ? 'خروج' : 'Sign out'}
                 </button>
               </div>
             )}
           </div>
         </header>
 
-        {/* Content Body */}
-        {children}
-      </main>
+        <main className="app-content">{children}</main>
+      </div>
     </div>
   );
 };

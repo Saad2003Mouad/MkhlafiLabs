@@ -50,6 +50,7 @@ export const ROUTES = {
     USERS: '/admin/users',
     LEADS: '/admin/leads',
     PACKAGES: '/admin/packages',
+    SERVICES: '/admin/services',
     LICENSES: '/admin/licenses',
     AUDIT: '/admin/audit'
   }
@@ -84,6 +85,7 @@ export function parseRoute(pathname: string): RouteMatch {
   if (normalized === '/admin/leads' || normalized === '/admin/inquiries') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.LEADS };
   if (normalized === '/admin/packages' || normalized === '/admin/plans') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.PACKAGES };
   if (normalized === '/admin/licenses' || normalized === '/admin/license') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.LICENSES };
+  if (normalized === '/admin/services' || normalized === '/admin/engines' || normalized === '/admin/catalog') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.SERVICES };
   if (normalized === '/admin/audit' || normalized === '/admin/logs') return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.AUDIT };
   if (normalized.startsWith('/admin')) {
     return { category: 'admin', path: normalized, matchedRoute: ROUTES.ADMIN.OVERVIEW };

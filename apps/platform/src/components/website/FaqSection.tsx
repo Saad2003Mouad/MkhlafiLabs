@@ -1,6 +1,11 @@
+// MIKHLAFI LABS — Public Website: Executive FAQ
+// Accordion backed by the canonical FAQS export so the answers have a single
+// source of truth across the public site.
+
 import React, { useState } from 'react';
 import { LocaleMode } from '../../types';
-import { FAQS } from '../../data/mockData';
+import { FAQS } from '../../data/marketingContent';
+import { IconChevronDown } from '../Icons';
 
 interface FaqSectionProps {
   locale: LocaleMode;
@@ -15,86 +20,40 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ locale }) => {
   };
 
   return (
-    <section className="site-section" id="faq" style={{ background: 'var(--bg-surface-elevated)' }}>
-      <div className="site-container">
-        {/* Section Header */}
-        <div className="section-header">
-          <div className="section-kicker">
-            {isAr ? 'الأسئلة الشائعة والاستفسارات التقنية' : 'FREQUENTLY ASKED QUESTIONS'}
-          </div>
-          <h2 className="section-title">
+    <section className="site-section" id="faq">
+      <div className="ml-container">
+        <div className="site-section__head">
+          <span className="ml-eyebrow">{isAr ? 'أسئلة تنفيذية' : 'EXECUTIVE QUESTIONS'}</span>
+          <h2 className="ml-heading site-section__title">
             {isAr
-              ? 'إجابات واضحة حول التكامل، الأمان، والذكاء الحتمي'
-              : 'Clear answers on integration, security, and deterministic analysis'}
+              ? 'إجابات مباشرة قبل أن تبدأ'
+              : 'Direct answers before you begin'}
           </h2>
-          <p className="section-lead">
+          <p className="ml-lead site-section__lead">
             {isAr
-              ? 'كل ما يحتاجه الرؤساء التنفيذيون ومديرو التقنية لمعرفة كيفية عمل MIKHLAFI LABS فوق أنظمتهم الحالية.'
-              : 'Essential technical and governance details for CEOs, CFOs, and CIOs evaluating our platform.'}
+              ? 'التكامل، والأمان، وسيادة البيانات، وأساس كل نتيجة — بإيجاز ووضوح.'
+              : 'Integration, security, data residency, and the basis of every finding — briefly and clearly.'}
           </p>
         </div>
 
-        {/* FAQ Accordion List */}
-        <div style={{ maxWidth: '860px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="faq-list home-faq">
           {FAQS.map((faq, idx) => {
             const isOpen = openIndex === idx;
             return (
-              <div
-                key={idx}
-                style={{
-                  background: 'var(--bg-surface)',
-                  border: `1px solid ${isOpen ? 'var(--accent-base)' : 'var(--border-subtle)'}`,
-                  borderRadius: 'var(--radius-sm)',
-                  overflow: 'hidden',
-                  transition: 'border-color 0.2s ease'
-                }}
-              >
+              <div key={idx} className={`faq-row ${isOpen ? 'is-open' : ''}`}>
                 <button
+                  type="button"
+                  className="faq-row__trigger"
                   onClick={() => toggleFaq(idx)}
-                  style={{
-                    width: '100%',
-                    padding: '18px 20px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'inherit',
-                    fontSize: '14px',
-                    fontWeight: 700,
-                    textAlign: 'start',
-                    cursor: 'pointer'
-                  }}
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-answer-${idx}`}
                 >
                   <span>{isAr ? faq.qAr : faq.qEn}</span>
-                  <span
-                    style={{
-                      transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s ease',
-                      color: 'var(--accent-light)',
-                      fontSize: '16px',
-                      fontWeight: 800
-                    }}
-                  >
-                    ❯
-                  </span>
+                  <IconChevronDown size={16} />
                 </button>
-
-                {isOpen && (
-                  <div
-                    style={{
-                      padding: '0 20px 18px 20px',
-                      fontSize: '13px',
-                      lineHeight: 1.7,
-                      color: 'var(--text-secondary)',
-                      borderTop: '1px solid var(--border-subtle)',
-                      paddingTop: '14px'
-                    }}
-                  >
-                    {isAr ? faq.aAr : faq.aEn}
-                  </div>
-                )}
+                <div className="faq-row__answer" id={`faq-answer-${idx}`} role="region">
+                  <p className="faq-row__answer-inner">{isAr ? faq.aAr : faq.aEn}</p>
+                </div>
               </div>
             );
           })}

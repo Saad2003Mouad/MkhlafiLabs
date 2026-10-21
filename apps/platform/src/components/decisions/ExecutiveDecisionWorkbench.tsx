@@ -17,6 +17,7 @@ import {
   IconDownload,
   IconX
 } from '../Icons';
+import { SandboxNotice } from '../common/SandboxNotice';
 
 interface ExecutiveDecisionWorkbenchProps {
   locale: LocaleMode;
@@ -205,33 +206,7 @@ export const ExecutiveDecisionWorkbench: React.FC<ExecutiveDecisionWorkbenchProp
         gap: '0'
       }}
     >
-      {/* Public Page Sandbox Header */}
-      {isEmbeddedInPublicPage && (
-        <div
-          style={{
-            background: 'linear-gradient(90deg, rgba(56, 189, 248, 0.12), rgba(16, 185, 129, 0.08))',
-            padding: '10px 24px',
-            borderBottom: '1px solid var(--border-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '8px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-            <span style={{ fontSize: '14px' }}>⚡</span>
-            <span>
-              {isAr
-                ? 'شبكة قرارات تفاعلية حية — تمكنك من تحريك مخصص الميزانية الرأسمالية ومشاهدة الخوارزمية وهي تعيد ترتيب الأولويات فورياً.'
-                : 'Interactive Decision Mesh — Adjust capital budget slider to watch real-time knapsack optimization rank optimal moves.'}
-            </span>
-          </div>
-          <span style={{ fontSize: '11px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#38BDF8' }}>
-            DECISION_MESH_V2.4
-          </span>
-        </div>
-      )}
+      <SandboxNotice locale={locale} variant={isEmbeddedInPublicPage ? 'public' : 'app'} />
 
       {/* Workbench Header & Scenario Bar */}
       <div

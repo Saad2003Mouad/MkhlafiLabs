@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { LocaleMode } from '../../types';
+import { SandboxNotice } from '../common/SandboxNotice';
 import {
   CustomerAccountRecord,
   PRESET_CUSTOMER_SCENARIOS,
@@ -153,6 +154,8 @@ export const CustomerRiskWorkbench: React.FC<CustomerRiskWorkbenchProps> = ({
         fontFamily: 'inherit'
       }}
     >
+      <SandboxNotice locale={locale} variant={isEmbeddedInPublicPage ? 'public' : 'app'} />
+
       {/* ── Top Cockpit Status Bar ────────────────────────────────────────── */}
       <div
         style={{

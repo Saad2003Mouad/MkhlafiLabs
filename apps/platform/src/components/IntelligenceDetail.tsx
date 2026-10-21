@@ -1,612 +1,695 @@
-// MIKHLAFI LABS — Financial Leakage & Forensic Intelligence View (Service 01)
-// Fully connected to real PostgreSQL backend via api.getFinancialLeaks and api.resolveFinancialLeak
+// MIKHLAFI LABS — Financial Intelligence & Forensic Audit detail view
+// Connected live to the authenticated backend via api.getFinancialLeaks,
+// api.getFinancialAnalytics, api.resolveFinancialLeak and
+// api.getTenantAuditLogs. No simulated or demonstration records are rendered.
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../types';
 import { api } from '../api/client';
-import { IconCheckCircle, IconShield, IconRefreshCw, IconAlertTriangle } from './Icons';
+import { useAuth } from '../context/AuthContext';
+import {
+  IconFinance,
+  IconCheckCircle,
+  IconShield,
+  IconRefresh,
+  IconAlert,
+  IconArrowRight,
+  IconLock,
+  IconFileText
+} from './Icons';
 import { FinancialCharts } from './financial/FinancialCharts';
-import { ForensicAuditWorkbench } from './financial/ForensicAuditWorkbench';
+import { EmptyState } from './common/EmptyState';
+import { PageHeader } from './common/PageHeader';
 
 interface IntelligenceDetailProps {
   locale: LocaleMode;
   onBack: () => void;
 }
 
-interface FinancialAnomaly {
+type LeaksResponse = Awaited<ReturnType<typeof api.getFinancialLeaks>>;
+type LeakAnomaly = LeaksResponse['anomalies'][number];
+type FinancialAnalytics = Awaited<ReturnType<typeof api.getFinancialAnalytics>>;
+
+interface AuditLogEntry {
   id: string;
-  case_number: string;
-  rule_code: string;
-  severity: string;
-  confidence_pct: number;
-  target_vendor: string;
-  flagged_amount: number;
-  currency: string;
-  narrative_en: string;
-  narrative_ar: string;
-  status: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  details: unknown;
+  ip_address: string | null;
   created_at: string;
-  resolved_at?: string;
 }
+
+type NoticeState = { type: 'success' | 'error'; message: string } | null;
 
 export const IntelligenceDetail: React.FC<IntelligenceDetailProps> = ({ locale, onBack }) => {
   const isAr = locale === 'ar';
+  const { isAuthenticated, openAuthModal } = useAuth();
+
+  const [activeTab, setActiveTab] = useState<
+    'anomalies' | 'charts' | 'causes' | 'reconciliation' | 'audit'
+  >('anomalies');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
-  const [activeTab, setActiveTab] = useState<'workbench' | 'charts' | 'causes_solutions' | 'anomalies' | 'reconciliation' | 'audit'>('workbench');
 
-  const [anomalies, setAnomalies] = useState<FinancialAnomaly[]>([]);
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [activeLeakageSAR, setActiveLeakageSAR] = useState<number>(0);
-  const [protectedAmountSAR, setProtectedAmountSAR] = useState<number>(0);
-  const [highSeverityCount, setHighSeverityCount] = useState<number>(0);
+  const [anomalies, setAnomalies] = useState<LeakAnomaly[]>([]);
+  const [leakTotals, setLeakTotals] = useState<Pick<LeaksResponse, 'activeLeakageSAR' | 'protectedAmountSAR' | 'highSeverityCount' | 'totalCases'> | null>(null);
+  const [analytics, setAnalytics] = useState<FinancialAnalytics | null>(null);
 
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [notice, setNotice] = useState<NoticeState>(null);
   const [processingCaseId, setProcessingCaseId] = useState<string | null>(null);
 
-  const fetchAnomaliesAndAnalytics = useCallback(async () => {
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[] | null>(null);
+  const [auditLoading, setAuditLoading] = useState<boolean>(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+
+  const fetchRecords = useCallback(async () => {
+    if (!isAuthenticated) {
+      setAnomalies([]);
+      setLeakTotals(null);
+      setAnalytics(null);
+      setError(null);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
       const [leaksRes, analyticsRes] = await Promise.all([
-        api.getFinancialLeaks({
-          severity: selectedSeverity !== 'all' ? selectedSeverity : undefined
-        }),
+        api.getFinancialLeaks(),
         api.getFinancialAnalytics()
       ]);
-
       setAnomalies(leaksRes.anomalies || []);
-      setActiveLeakageSAR(leaksRes.activeLeakageSAR || 0);
-      setProtectedAmountSAR(leaksRes.protectedAmountSAR || 0);
-      setHighSeverityCount(leaksRes.highSeverityCount || 0);
+      setLeakTotals({
+        activeLeakageSAR: leaksRes.activeLeakageSAR || 0,
+        protectedAmountSAR: leaksRes.protectedAmountSAR || 0,
+        highSeverityCount: leaksRes.highSeverityCount || 0,
+        totalCases: leaksRes.totalCases || 0
+      });
       setAnalytics(analyticsRes);
-    } catch (err: any) {
-      console.error('[FinancialLeaks fetch error]:', err);
-      setError(err.message || (isAr ? 'فشل تحميل بيانات التدقيق المالي.' : 'Failed to fetch financial audit data.'));
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تحميل سجلات التدقيق المالي.' : 'Failed to fetch financial audit records.')
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [selectedSeverity, isAr]);
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
-    fetchAnomaliesAndAnalytics();
-  }, [fetchAnomaliesAndAnalytics]);
+    fetchRecords();
+  }, [fetchRecords]);
+
+  const fetchAuditLogs = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const res = await api.getTenantAuditLogs();
+      setAuditLogs((res.logs || []) as AuditLogEntry[]);
+    } catch (err) {
+      setAuditError(
+        err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تحميل سجل التدقيق.' : 'Failed to fetch the audit trail.')
+      );
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [isAuthenticated, isAr]);
+
+  // Load the audit trail lazily the first time its tab is opened
+  useEffect(() => {
+    if (activeTab === 'audit' && auditLogs === null && !auditLoading && !auditError) {
+      fetchAuditLogs();
+    }
+  }, [activeTab, auditLogs, auditLoading, auditError, fetchAuditLogs]);
+
+  const showNotice = (state: NoticeState) => {
+    setNotice(state);
+    setTimeout(() => setNotice(null), 5000);
+  };
 
   const handleResolve = async (anomalyId: string, action: 'FREEZE' | 'LEGITIMATE') => {
     setProcessingCaseId(anomalyId);
-    setActionSuccess(null);
     try {
       await api.resolveFinancialLeak(anomalyId, action);
-      const actionMsg = action === 'FREEZE'
-        ? (isAr ? 'تم تجميد أمر الصرف وإحالة الفاتورة للتدقيق بنجاح.' : 'Disbursement frozen and invoice locked successfully.')
-        : (isAr ? 'تم اعتماد المطالبة كمشروعة واستبعاد الشبهة.' : 'Case marked as legitimate and dismissed.');
-      setActionSuccess(actionMsg);
-      await fetchAnomaliesAndAnalytics();
-      setTimeout(() => setActionSuccess(null), 4000);
-    } catch (err: any) {
-      alert(err.message || (isAr ? 'تعذر تنفيذ الإجراء.' : 'Failed to execute action.'));
+      showNotice({
+        type: 'success',
+        message: action === 'FREEZE'
+          ? (isAr ? 'تم تجميد أمر الصرف وإحالة الفاتورة إلى التدقيق.' : 'Disbursement frozen and the invoice was locked for audit.')
+          : (isAr ? 'تم اعتماد الحالة كمشروعة واستبعاد الشبهة.' : 'Case verified as legitimate and dismissed.')
+      });
+      await fetchRecords();
+    } catch (err) {
+      showNotice({
+        type: 'error',
+        message: err instanceof Error
+          ? err.message
+          : (isAr ? 'تعذر تنفيذ الإجراء.' : 'Failed to execute the action.')
+      });
     } finally {
       setProcessingCaseId(null);
     }
   };
 
+  const formatAmount = (value: number | string, code?: string) =>
+    `${(Number(value) || 0).toLocaleString()} ${code || 'SAR'}`;
+
+  const formatDate = (value: string) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleString(isAr ? 'ar-SA' : 'en-US');
+    } catch {
+      return '—';
+    }
+  };
+
+  const severityBadgeClass = (severity: string) => {
+    const s = (severity || '').toLowerCase();
+    if (s === 'critical') return 'ml-badge ml-badge--danger';
+    if (s === 'high') return 'ml-badge ml-badge--warning';
+    if (s === 'medium') return 'ml-badge ml-badge--info';
+    return 'ml-badge';
+  };
+
+  const statusBadgeClass = (status: string) => {
+    if (status === 'FROZEN') return 'ml-badge ml-badge--success';
+    if (status === 'LEGITIMATE') return 'ml-badge';
+    return 'ml-badge ml-badge--warning';
+  };
+
+  const filteredAnomalies = anomalies.filter((a) =>
+    selectedSeverity === 'all' ? true : (a.severity || '').toLowerCase() === selectedSeverity
+  );
+
+  const openCases = anomalies.filter((a) => a.status === 'DETECTED');
+  const frozenCases = anomalies.filter((a) => a.status === 'FROZEN');
+  const rootCauses = [...anomalies].sort(
+    (a, b) => (Number(b.flagged_amount) || 0) - (Number(a.flagged_amount) || 0)
+  );
+  const avgConfidence = anomalies.length > 0
+    ? (anomalies.reduce((acc, a) => acc + (Number(a.confidence_pct) || 0), 0) / anomalies.length).toFixed(1)
+    : null;
+
+  const tabs: Array<{ id: typeof activeTab; labelAr: string; labelEn: string }> = [
+    { id: 'anomalies', labelAr: 'الحالات النشطة', labelEn: 'Active Cases' },
+    { id: 'charts', labelAr: 'التحليلات والرسوم البيانية', labelEn: 'Charts & Analytics' },
+    { id: 'causes', labelAr: 'التحليل السببي', labelEn: 'Causal Analysis' },
+    { id: 'reconciliation', labelAr: 'المطابقة الثلاثية', labelEn: '3-Way Reconciliation' },
+    { id: 'audit', labelAr: 'سجل التدقيق', labelEn: 'Audit Trail' }
+  ];
+
   return (
-    <div className="content-scroll">
-      {/* Detail Header & Breadcrumb */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-          <button onClick={onBack} style={{ color: 'var(--accent-light)', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}>
-            {isAr ? '← العودة للمنصة الرئيسية' : '← Back to Overview'}
+    <div className="platform-page-container">
+      <PageHeader
+        locale={locale}
+        icon={<IconFinance size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'محركات الذكاء' : 'Intelligence Engines']}
+        title={isAr ? 'الذكاء المالي والتدقيق الجنائي' : 'Financial Intelligence & Forensic Audit'}
+        subtitle={
+          isAr
+            ? 'فحص تفصيلي للتدفقات المالية التشغيلية، رصد الانحرافات عن النطاقات المرجعية، والتحقق من سلامة المطالبات عبر مطابقة أوامر الشراء وسندات الاستلام والفواتير.'
+            : 'Detailed examination of operational financial flows, detection of variances against reference baselines, and claim verification through purchase order, receipt, and invoice reconciliation.'
+        }
+        action={
+          <button onClick={onBack} className="ml-btn ml-btn--ghost ml-btn--sm">
+            <IconArrowRight size={14} style={{ transform: 'scaleX(-1)' }} />
+            <span>{isAr ? 'العودة إلى النظرة العامة' : 'Back to Overview'}</span>
           </button>
-          <span>/</span>
-          <span>{isAr ? 'محركات الذكاء' : 'Intelligence Modules'}</span>
-          <span>/</span>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>
-            {isAr ? 'الذكاء المالي وكشف التسرب (Service 01)' : 'Financial Intelligence & Forensic Audit'}
-          </span>
-        </div>
+        }
+      />
 
-        <div className="page-intro">
-          <div>
-            <h1 className="page-title">
-              {isAr ? 'الذكاء المالي والتدقيق الجنائي للتدفقات' : 'Financial Intelligence & Forensic Audit'}
-            </h1>
-            <p className="page-desc">
-              {isAr
-                ? 'فحص تفصيلي للتدفقات النقدية، كشف مؤشرات تسرب الأرباح، والتحقق الحسابي من سلامة المطالبات المالية عبر مطابقة ثلاثية (PO + GRN + Invoice) متصلة بقاعدة بيانات PostgreSQL.'
-                : 'Algorithmic auditing of financial flows, early leakage detection, and granular transaction verification via 3-way match triangulation on live PostgreSQL.'}
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={fetchAnomaliesAndAnalytics} className="ctrl-btn" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} title={isAr ? 'تحديث البيانات' : 'Refresh Data'}>
-              <IconRefreshCw size={14} />
-              <span>{isAr ? 'تحديث حي' : 'Live Sync'}</span>
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconLock size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض تقارير التدقيق لمؤسستك' : 'Sign in to view your organization’s audit records'}
+          description={
+            isAr
+              ? 'تُسترجع حالات التدقيق والتحليلات وسجل الأحداث مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Audit cases, analytics, and the governance event trail are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
             </button>
-            <button className="btn-primary" style={{ fontSize: '12px', padding: '7px 14px' }}>
-              <span>{isAr ? 'تصدير تقرير التدقيق الجنائي' : 'Export Forensic Report'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* KPI Stats Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', margin: '16px 0' }}>
-        <div className="decision-card">
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-            {isAr ? 'إجمالي التسربات المالية المرصودة' : 'Active Flagged Leakage'}
-          </span>
-          <div style={{ fontSize: '24px', fontWeight: 800, margin: '8px 0', color: 'var(--status-danger)', fontFamily: 'var(--font-mono)' }}>
-            {activeLeakageSAR.toLocaleString()} SAR
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {isAr ? 'مدفوعات مشتبه بها قيد التدقيق' : 'Pending CFO verification before payout'}
-          </span>
-        </div>
-
-        <div className="decision-card">
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-            {isAr ? 'السيولة المحمية بالتجميد' : 'Protected / Frozen Capital'}
-          </span>
-          <div style={{ fontSize: '24px', fontWeight: 800, margin: '8px 0', color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>
-            {protectedAmountSAR.toLocaleString()} SAR
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {isAr ? 'أوامر صرف تم إيقافها بنجاح' : 'Disbursements successfully frozen'}
-          </span>
-        </div>
-
-        <div className="decision-card">
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>
-            {isAr ? 'الحالات الحرجة والخطرة' : 'High / Critical Severity Cases'}
-          </span>
-          <div style={{ fontSize: '24px', fontWeight: 800, margin: '8px 0', color: 'var(--accent-light)', fontFamily: 'var(--font-mono)' }}>
-            {highSeverityCount} {isAr ? 'حالات' : 'Cases'}
-          </div>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {isAr ? 'تتطلب تدقيقاً جنائياً فورياً' : 'Immediate forensic action required'}
-          </span>
-        </div>
-      </div>
-
-      {actionSuccess && (
-        <div className="alert-feedback-banner success" style={{ marginBottom: '16px' }}>
-          <IconCheckCircle size={16} />
-          <span>{actionSuccess}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="alert-feedback-banner error" style={{ marginBottom: '16px' }}>
-          <IconAlertTriangle size={16} />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Domain Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px', overflowX: 'auto' }}>
-        <button
-          onClick={() => setActiveTab('workbench')}
-          className={`ctrl-btn ${activeTab === 'workbench' ? 'active' : ''}`}
-          style={{
-            fontWeight: activeTab === 'workbench' ? 700 : 500,
-            background: activeTab === 'workbench' ? 'linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(16, 185, 129, 0.2))' : undefined,
-            borderColor: activeTab === 'workbench' ? 'var(--accent-base)' : undefined
-          }}
-        >
-          {isAr ? '🔬 محطة التدقيق الجنائي التفاعلية (Workbench)' : '🔬 Forensic Audit Workbench'}
-        </button>
-        <button
-          onClick={() => setActiveTab('charts')}
-          className={`ctrl-btn ${activeTab === 'charts' ? 'active' : ''}`}
-          style={{ fontWeight: activeTab === 'charts' ? 700 : 500 }}
-        >
-          {isAr ? '📈 التحليلات والرسوم البيانية' : '📈 Financial Charts & Trends'}
-        </button>
-        <button
-          onClick={() => setActiveTab('causes_solutions')}
-          className={`ctrl-btn ${activeTab === 'causes_solutions' ? 'active' : ''}`}
-          style={{ fontWeight: activeTab === 'causes_solutions' ? 700 : 500 }}
-        >
-          {isAr ? '📊 التحليل السببي وتفسير الخسائر والحلول' : '📊 Causal Analysis & Solutions'}
-        </button>
-        <button
-          onClick={() => setActiveTab('anomalies')}
-          className={`ctrl-btn ${activeTab === 'anomalies' ? 'active' : ''}`}
-        >
-          {isAr ? `الانحرافات النشطة (${anomalies.length})` : `Flagged Anomalies (${anomalies.length})`}
-        </button>
-        <button
-          onClick={() => setActiveTab('reconciliation')}
-          className={`ctrl-btn ${activeTab === 'reconciliation' ? 'active' : ''}`}
-        >
-          {isAr ? 'المطابقة الحسابية الثلاثية (3-Way Match)' : '3-Way Match Triangulation'}
-        </button>
-        <button
-          onClick={() => setActiveTab('audit')}
-          className={`ctrl-btn ${activeTab === 'audit' ? 'active' : ''}`}
-        >
-          {isAr ? 'سجل التدقيق والتتبع (Audit Trail)' : 'Immutable Audit Trail'}
-        </button>
-      </div>
-
-      {/* TAB 0: ADVANCED FORENSIC AUDIT WORKBENCH */}
-      {activeTab === 'workbench' && (
-        <div style={{ marginTop: '16px' }}>
-          <ForensicAuditWorkbench
-            locale={locale}
-            initialScenario="contracting"
-            isEmbeddedInPublicPage={false}
-          />
-        </div>
-      )}
-
-      {/* TAB 1: FINANCIAL CHARTS & ANALYTICS */}
-      {activeTab === 'charts' && (
-        <FinancialCharts locale={locale} analytics={analytics} isLoading={isLoading} />
-      )}
-
-      {/* TAB 1: CAUSAL ANALYSIS, EXPLANATIONS & SOLUTIONS */}
-      {activeTab === 'causes_solutions' && (
-        anomalies.length === 0 ? (
-          <div className="content-panel" style={{ textAlign: 'center', padding: '40px 20px', marginTop: '16px' }}>
-            <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>📊</span>
-            <h3 style={{ fontSize: '16px', color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {isAr ? 'لا تتوفر انحرافات مسجلة لتوليد التحليل السببي' : 'No Forensic Variance for Causal Analysis'}
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '580px', margin: '0 auto', lineHeight: '1.6' }}>
-              {isAr
-                ? 'يقوم المحرك السببي بتحليل الفوارق وتحديد الأسباب الدقيقة للتسرب المالي والحلول التنفيذية فور رصد انحرافات في دفتر الأستاذ أو عند استيراد فواتير جديدة.'
-                : 'Causal intelligence diagnoses root causes and prescriptive controls dynamically once transaction variances or ledger anomalies are detected.'}
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '16px' }}>
-            {/* Executive Overview Banner */}
-            <div className="content-panel" style={{ border: '1px solid var(--accent-base)', background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%)' }}>
-              <div className="panel-header">
-                <div>
-                  <span className="severity-tag optimal" style={{ textTransform: 'uppercase', marginBottom: '6px', display: 'inline-block' }}>
-                    {isAr ? 'تقرير تحليلي تنفيذي' : 'EXECUTIVE CAUSAL INTELLIGENCE'}
-                  </span>
-                  <h2 className="panel-title" style={{ fontSize: '18px' }}>
-                    {isAr ? 'تفسير مؤشرات التسرب المالي والأسباب الجذرية المرصودة' : 'Explanation of Financial Leakage & Root-Cause Drivers'}
-                  </h2>
-                </div>
-                <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{isAr ? 'الحالات المرصودة' : 'Active Cases'}</span>
-                  <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--status-danger)', fontFamily: 'var(--font-mono)' }}>
-                    {anomalies.length} {isAr ? 'حالات' : 'Cases'}
-                  </div>
-                </div>
+          }
+        />
+      ) : (
+        <>
+          {/* Live KPI tiles */}
+          {leakTotals && (
+            <div className="stat-grid">
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'إجمالي الحالات المرصودة' : 'Total Flagged Cases'}</div>
+                <div className="stat-tile__value">{leakTotals.totalCases}</div>
+                <div className="stat-tile__hint">{isAr ? 'حالات مطابقة ومراجعة' : 'Cases under reconciliation review'}</div>
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)', margin: '14px 0' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'إجمالي التسرب المرصود' : 'Active Flagged Leakage'}</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--status-danger)' }}>
-                    {activeLeakageSAR.toLocaleString()} SAR
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'السيولة المحمية بالتجميد' : 'Protected Capital'}</div>
-                  <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--status-success)' }}>
-                    {protectedAmountSAR.toLocaleString()} SAR
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الحالات الحرجة' : 'Critical / High Cases'}</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent-light)' }}>
-                    {highSeverityCount}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'دقة الخوارزميات' : 'Forensic Confidence'}</div>
-                  <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                    {anomalies.length > 0 ? (anomalies.reduce((acc, a) => acc + (a.confidence_pct || 90), 0) / anomalies.length).toFixed(1) : '95.0'}%
-                  </div>
-                </div>
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'قيمة الانحرافات النشطة' : 'Active Flagged Amount'}</div>
+                <div className="stat-tile__value">{formatAmount(leakTotals.activeLeakageSAR)}</div>
+                <div className="stat-tile__hint">{isAr ? 'قيد التحقق قبل أي إجراء' : 'Pending verification before action'}</div>
               </div>
-
-              <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.7', color: 'var(--text-secondary)' }}>
-                {isAr
-                  ? 'استناداً إلى فحص دفاتر الأستاذ العام وتطبيق قواعد التدقيق الحسابي والمطابقة الثلاثية: تم تحديد الأسباب الجذرية الدقيقة لكل حالة تسرب مع التوصيات التنفيذية للحد من الأثر المالي وحماية السيولة.'
-                  : 'Based on General Ledger forensic audits and 3-way matching rules: empirical root causes and prescriptive solutions are mapped below for immediate executive action.'}
-              </p>
-            </div>
-
-            {/* Section: Root Causes Breakdown */}
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
-                {isAr ? '🔍 الأسباب الجذرية المرصودة من واقع السجلات (Root Causes)' : '🔍 Identified Root-Cause Drivers'}
-              </h3>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-                {anomalies.slice(0, 3).map((an, idx) => (
-                  <div
-                    key={an.id}
-                    className="content-panel"
-                    style={{
-                      borderLeft: isAr ? 'none' : '4px solid var(--accent-light)',
-                      borderRight: isAr ? '4px solid var(--accent-light)' : 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent-light)' }}>
-                        {isAr ? `السبب 0${idx + 1}: ${an.rule_code}` : `Cause 0${idx + 1}: ${an.rule_code}`}
-                      </span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 700, color: 'var(--status-danger)' }}>
-                        {(Number(an.flagged_amount) || 0).toLocaleString()} {an.currency || 'SAR'}
-                      </span>
-                    </div>
-                    <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 700 }}>
-                      {an.target_vendor}
-                    </h4>
-                    <p style={{ margin: 0, fontSize: '12px', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
-                      {isAr ? an.narrative_ar : an.narrative_en}
-                    </p>
-                  </div>
-                ))}
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'المبالغ المحمية بالتجميد' : 'Protected by Freeze'}</div>
+                <div className="stat-tile__value">{formatAmount(leakTotals.protectedAmountSAR)}</div>
+                <div className="stat-tile__hint">{isAr ? 'مدفوعات أُوقفت بنجاح' : 'Disbursements successfully held'}</div>
+              </div>
+              <div className="stat-tile">
+                <div className="stat-tile__label">{isAr ? 'حالات عالية الخطورة' : 'High Severity Cases'}</div>
+                <div className="stat-tile__value">{leakTotals.highSeverityCount}</div>
+                <div className="stat-tile__hint">{isAr ? 'تتطلب مراجعة عاجلة' : 'Requires prompt review'}</div>
               </div>
             </div>
+          )}
 
-            {/* Section: Prescriptive Solutions Matrix */}
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
-                {isAr ? '🛡️ الحلول والتوصيات التنفيذية للتحكم بالسيولة (Prescriptive Solutions)' : '🛡️ Recommended Executive Solutions & Controls'}
-              </h3>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 300px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span className="severity-tag optimal" style={{ fontSize: '10px' }}>{isAr ? 'حل فوري معتمد' : 'ACTIVE GATE'}</span>
-                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                        {isAr ? '1. بوابة الاعتماد المسبقة (Pre-Payment Matching Gate)' : '1. Mandatory Pre-Disbursement Matching Gate'}
-                      </strong>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                      {isAr
-                        ? 'منع إعداد أو تمرير أي أمر صرف في النظام البنكي إلا بعد تحقق النظام آلياً من وجود سند استلام بضاعة (GRN) معتمد وتطابق رقم أمر الشراء (PO).'
-                        : 'Block issuance of payment vouchers until automated verification confirms matched goods receipt (GRN) and signed PO baseline.'}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'الأثر المالي المباشر' : 'Immediate Value'}</span>
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>
-                      {protectedAmountSAR > 0 ? `${protectedAmountSAR.toLocaleString()} SAR محمي` : (isAr ? 'تجميد فوري للصرف المشبوه' : 'Instant Freeze')}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="content-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 300px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span className="severity-tag optimal" style={{ fontSize: '10px' }}>{isAr ? 'حوكمة المشتريات' : 'PROCUREMENT GOVERNANCE'}</span>
-                      <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                        {isAr ? '2. سقف الصلاحيات وقفل تفتيت أوامر الشراء (Anti-Split Thresholds)' : '2. Anti-Split Purchase Order Locking'}
-                      </strong>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                      {isAr
-                        ? 'حظر تقسيم الفواتير للتهرب من موافقة المدير المالي، مع فحص مجدول لموردي المواد الخام والخدمات اللوجستية.'
-                        : 'Implement heuristic detection against splitting procurement invoices to evade executive delegation limits.'}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: isAr ? 'left' : 'right' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'نوع الرقابة' : 'Control Type'}</span>
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-light)', fontFamily: 'var(--font-mono)' }}>
-                      {isAr ? 'رقابة وقائية آلية' : 'Automated Preventive'}
-                    </div>
-                  </div>
-                </div>
-              </div>
+          {notice && (
+            <div className={`alert-feedback-banner ${notice.type === 'success' ? 'success' : 'error'}`}>
+              {notice.type === 'success' ? <IconCheckCircle size={16} /> : <IconAlert size={16} />}
+              <span>{notice.message}</span>
             </div>
-          </div>
-        )
-      )}
+          )}
 
-      {/* TAB 2: ANOMALIES LIST */}
-      {activeTab === 'anomalies' && (
-        <div style={{ marginTop: '14px' }}>
-          {/* Filter Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--bg-surface)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', marginBottom: '14px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', fontWeight: 700 }}>
-              {isAr ? 'تصفية حسب مستوى الخطورة:' : 'Filter Severity:'}
-            </span>
-            {['all', 'critical', 'high', 'medium', 'low'].map((sev) => (
+          {/* Domain tabs */}
+          <div className="segmented-control" role="tablist">
+            {tabs.map((tab) => (
               <button
-                key={sev}
-                onClick={() => setSelectedSeverity(sev)}
-                className={`ctrl-btn ${selectedSeverity === sev ? 'active' : ''}`}
-                style={{ fontSize: '11px', textTransform: 'uppercase' }}
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`segmented-control__item ${activeTab === tab.id ? 'is-active' : ''}`}
               >
-                {sev === 'all' ? (isAr ? 'الكل' : 'All') : sev}
+                {isAr ? tab.labelAr : tab.labelEn}
               </button>
             ))}
           </div>
 
-          {isLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <IconRefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
-              <p style={{ marginTop: '12px' }}>{isAr ? 'جاري فحص وتدقيق السجلات المحاسبية...' : 'Auditing financial transaction flows...'}</p>
-            </div>
-          ) : anomalies.length === 0 ? (
-            <div style={{ padding: '50px 20px', textAlign: 'center', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
-              <IconCheckCircle size={36} style={{ color: 'var(--status-success)', marginBottom: '12px' }} />
-              <h3 style={{ margin: '0 0 6px 0', fontSize: '16px' }}>{isAr ? 'لا توجد انحرافات مسجلة' : 'No Financial Anomalies Detected'}</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>
-                {isAr ? 'كافة الفواتير والمطابقات الحسابية متوافقة تماماً مع قيود أوامر الشراء وسندات الاستلام.' : 'All audited invoices and transactions strictly conform to baseline purchase orders.'}
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {anomalies.map((item) => (
-                <div key={item.id} className="content-panel" style={{ border: item.status === 'FROZEN' ? '1px solid var(--status-success)' : '1px solid var(--accent-base)' }}>
-                  <div className="panel-header">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span className={`severity-tag ${item.severity.toLowerCase()}`}>
-                        {item.severity} SEVERITY
-                      </span>
-                      <h2 className="panel-title">
-                        {item.case_number}: {item.target_vendor}
-                      </h2>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-light)', fontWeight: 700 }}>
-                        Confidence: {parseFloat(String(item.confidence_pct)).toFixed(1)}%
-                      </span>
-                      <span className={`severity-tag ${item.status === 'FROZEN' ? 'optimal' : item.status === 'LEGITIMATE' ? 'low' : 'high'}`}>
-                        {item.status}
-                      </span>
-                    </div>
-                  </div>
+          {/* Main fetch error with retry */}
+          {error && (
+            <EmptyState
+              icon={<IconAlert size={30} />}
+              title={isAr ? 'تعذر تحميل سجلات التدقيق المالي' : 'Unable to load financial audit records'}
+              description={error}
+              action={
+                <button onClick={fetchRecords} className="ml-btn ml-btn--primary">
+                  {isAr ? 'إعادة المحاولة' : 'Retry'}
+                </button>
+              }
+            />
+          )}
 
-                  {/* Forensic Metadata Strip */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '16px', background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)', margin: '12px 0' }}>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'المورد المستفيد' : 'Target Vendor'}</div>
-                      <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>{item.target_vendor}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'المبلغ المرصود' : 'Flagged Amount'}</div>
-                      <div style={{ fontWeight: 700, fontSize: '14px', fontFamily: 'var(--font-mono)', color: item.status === 'FROZEN' ? 'var(--status-success)' : 'var(--status-danger)' }}>
-                        {parseFloat(String(item.flagged_amount)).toLocaleString()} {item.currency}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'قاعدة الرصد الخوارزمية' : 'Detection Rule'}</div>
-                      <div style={{ fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-mono)', color: 'var(--accent-light)' }}>{item.rule_code}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'تاريخ الرصد' : 'Logged Date'}</div>
-                      <div style={{ fontWeight: 700, fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        {new Date(item.created_at).toLocaleDateString(isAr ? 'ar-SA' : 'en-US')}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Algorithmic Evidence & Narrative */}
-                  <div style={{ fontSize: '13px', lineHeight: '1.7', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-                    <strong style={{ color: 'var(--text-primary)' }}>
-                      {isAr ? 'تقرير خوارزمية الفحص والأدلة المسجلة:' : 'Algorithmic Forensic Narrative:'}
-                    </strong>
-                    <p style={{ marginTop: '6px' }}>
-                      {isAr ? item.narrative_ar : item.narrative_en}
-                    </p>
-                  </div>
-
-                  {/* Action Controls */}
-                  {item.status === 'DETECTED' ? (
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {/* TAB: Active cases */}
+          {activeTab === 'anomalies' && !error && (
+            <div className="va-section-gap">
+              <div className="page-filter-bar">
+                <div className="filter-group">
+                  <span className="filter-label">{isAr ? 'مستوى الخطورة:' : 'Severity:'}</span>
+                  {['all', 'critical', 'high', 'medium', 'low'].map((sev) => {
+                    const count = sev === 'all'
+                      ? anomalies.length
+                      : anomalies.filter((a) => (a.severity || '').toLowerCase() === sev).length;
+                    return (
                       <button
-                        disabled={processingCaseId === item.id}
-                        onClick={() => handleResolve(item.id, 'LEGITIMATE')}
-                        className="btn-primary"
-                        style={{ background: 'var(--bg-surface-elevated)', color: 'var(--text-primary)', borderColor: 'var(--border-subtle)', fontSize: '12px' }}
+                        key={sev}
+                        onClick={() => setSelectedSeverity(sev)}
+                        className={`filter-chip ${selectedSeverity === sev ? 'active' : ''}`}
                       >
-                        <IconCheckCircle size={15} />
-                        <span>{isAr ? 'اعتماد كمطالبة صحيحة وغير مكررة' : 'Mark as Legitimate (Dismiss)'}</span>
+                        {sev === 'all' ? (isAr ? 'الكل' : 'All') : sev.toUpperCase()} ({count})
                       </button>
-
-                      <button
-                        disabled={processingCaseId === item.id}
-                        onClick={() => handleResolve(item.id, 'FREEZE')}
-                        className="btn-primary"
-                        style={{ background: 'var(--status-danger)', borderColor: 'var(--status-danger)', fontSize: '12px' }}
-                      >
-                        <IconShield size={15} />
-                        <span>{isAr ? 'تجميد أمر الصرف وإحالة للتدقيق' : 'Freeze Disbursement & Lock Invoice'}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: item.status === 'FROZEN' ? 'var(--status-success)' : 'var(--accent-light)', fontWeight: 700, fontSize: '13px' }}>
-                      <IconCheckCircle size={18} />
-                      <span>
-                        {item.status === 'FROZEN'
-                          ? (isAr ? 'تم تجميد أمر الصرف رسمياً وحماية رأس المال في دفتر الأستاذ.' : 'Disbursement frozen and recorded in immutable ledger.')
-                          : (isAr ? 'تم اعتماد المعاملة كمشروعة واستبعاد الشبهة الحسابية.' : 'Case verified and resolved as legitimate.')}
-                      </span>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              ))}
+                <button onClick={fetchRecords} className="ml-btn ml-btn--subtle ml-btn--sm">
+                  <IconRefresh size={13} />
+                  <span>{isAr ? 'تحديث' : 'Refresh'}</span>
+                </button>
+              </div>
+
+              {isLoading ? (
+                <div className="skeleton-grid">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="skeleton-card" />
+                  ))}
+                </div>
+              ) : filteredAnomalies.length === 0 ? (
+                <EmptyState
+                  icon={<IconCheckCircle size={30} />}
+                  title={selectedSeverity === 'all'
+                    ? (isAr ? 'لا توجد حالات انحراف مرصودة' : 'No variance cases detected')
+                    : (isAr ? 'لا توجد حالات بهذا المستوى من الخطورة' : 'No cases at this severity level')}
+                  description={
+                    selectedSeverity === 'all'
+                      ? (isAr
+                          ? 'تُفحص الفواتير والقيود المرتبطة بمؤسستك باستمرار؛ تظهر الحالات هنا فور رصد أي انحراف عن أوامر الشراء وسندات الاستلام.'
+                          : 'Your connected invoices and ledger entries are monitored continuously; cases appear here the moment a variance is detected against purchase orders and receipts.')
+                      : (isAr
+                          ? 'لا توجد حالات بهذا المستوى من الخطورة حالياً.'
+                          : 'There are no cases at this severity level right now.')
+                  }
+                />
+              ) : (
+                <div className="record-list">
+                  {filteredAnomalies.map((item) => (
+                    <div key={item.id} className="record-row" style={{ alignItems: 'flex-start' }}>
+                      <div className="record-row__main">
+                        <div className="va-row-head">
+                          <div className="va-tags">
+                            <span className={severityBadgeClass(item.severity)}>
+                              <span className="ml-dot" />
+                              {(item.severity || '').toUpperCase()}
+                            </span>
+                            <span className={statusBadgeClass(item.status)}>{item.status}</span>
+                            <span className="va-mono-id">{item.case_number}</span>
+                          </div>
+                          <span className="va-amount va-amount--danger">
+                            {formatAmount(item.flagged_amount, item.currency)}
+                          </span>
+                        </div>
+
+                        <div className="record-row__title" style={{ marginTop: 6 }}>{item.target_vendor}</div>
+                        <div className="record-row__meta">{isAr ? item.narrative_ar : item.narrative_en}</div>
+
+                        <div className="va-metric-grid">
+                          <div className="va-metric">
+                            <span className="va-metric__k">{isAr ? 'قاعدة الرصد' : 'Detection Rule'}</span>
+                            <span className="va-metric__v va-metric__v--accent">{item.rule_code}</span>
+                          </div>
+                          <div className="va-metric">
+                            <span className="va-metric__k">{isAr ? 'درجة الثقة' : 'Confidence'}</span>
+                            <span className="va-metric__v">{Number(item.confidence_pct || 0).toFixed(1)}%</span>
+                          </div>
+                          <div className="va-metric">
+                            <span className="va-metric__k">{isAr ? 'تاريخ الرصد' : 'Detected At'}</span>
+                            <span className="va-metric__v va-metric__v--muted">{formatDate(item.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="record-row__actions">
+                        {item.status === 'DETECTED' ? (
+                          <>
+                            <button
+                              disabled={processingCaseId === item.id}
+                              onClick={() => handleResolve(item.id, 'LEGITIMATE')}
+                              className="ml-btn ml-btn--subtle ml-btn--sm"
+                            >
+                              <IconCheckCircle size={14} />
+                              <span>{isAr ? 'مشروعة' : 'Legitimate'}</span>
+                            </button>
+                            <button
+                              disabled={processingCaseId === item.id}
+                              onClick={() => handleResolve(item.id, 'FREEZE')}
+                              className="ml-btn ml-btn--primary ml-btn--sm"
+                            >
+                              <IconShield size={14} />
+                              <span>{isAr ? 'تجميد الصرف' : 'Freeze Disbursement'}</span>
+                            </button>
+                          </>
+                        ) : (
+                          <span className="va-resolved-flag">
+                            <IconCheckCircle size={15} />
+                            <span>
+                              {item.status === 'FROZEN'
+                                ? (isAr ? 'مُجمّد ومسجّل' : 'Frozen & Recorded')
+                                : (isAr ? 'مُعتمد كمشروعة' : 'Verified Legitimate')}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* TAB 3: 3-WAY MATCHING RECONCILIATION */}
-      {activeTab === 'reconciliation' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-          <div className="content-panel">
-            <div className="panel-header">
-              <h2 className="panel-title">{isAr ? 'نظام المطابقة الحسابية الثلاثية المباشرة (3-Way Match)' : 'Real-Time 3-Way Match Triangulation'}</h2>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              {isAr
-                ? 'تقوم الخوارزمية بمطابقة كل فاتورة مورد واردة مع أمر الشراء (PO) وسند استلام البضائع المخزني (GRN). أي عدم تطابق في الكمية أو السعر أو تاريخ التوريد بنسبة تزيد عن 2% يتم تعليقه آلياً.'
-                : 'Automated cross-referencing between Purchase Orders, Goods Receipt Notes, and Invoices. Any variance > 2% triggers an instant automated hold.'}
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginTop: '16px' }}>
-              <div style={{ background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'أوامر الشراء المعتمدة' : 'Purchase Orders (PO)'}</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, margin: '6px 0', color: 'var(--accent-light)', fontFamily: 'var(--font-mono)' }}>100% Verified</div>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>{isAr ? 'كافة القيود مدعومة باعتمادات مالية مسجلة' : 'All line items back-referenced to signed budgets.'}</p>
-              </div>
-              <div style={{ background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'سندات استلام البضائع' : 'Goods Receipts (GRN)'}</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, margin: '6px 0', color: 'var(--status-success)', fontFamily: 'var(--font-mono)' }}>98.6% Matching</div>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>{isAr ? 'تأكيد التسليم الفعلي للمستودعات' : 'Confirmed physical delivery to warehouse facilities.'}</p>
-              </div>
-              <div style={{ background: 'var(--bg-surface-elevated)', padding: '16px', borderRadius: 'var(--radius-sm)' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{isAr ? 'فواتير الموردين المطابقة' : 'Vendor Invoices'}</span>
-                <div style={{ fontSize: '20px', fontWeight: 800, margin: '6px 0', color: 'var(--status-danger)', fontFamily: 'var(--font-mono)' }}>1.4% Variances</div>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>{isAr ? 'فواتير تم تجميدها لعدم وجود سند استلام' : 'Flagged disbursements frozen due to missing receipts.'}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          {/* TAB: Charts & analytics */}
+          {activeTab === 'charts' && !error && (
+            <FinancialCharts locale={locale} analytics={analytics} isLoading={isLoading} />
+          )}
 
-      {/* TAB 4: AUDIT TRAIL */}
-      {activeTab === 'audit' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-          <div className="content-panel">
-            <div className="panel-header">
-              <h2 className="panel-title">{isAr ? 'سجل التدقيق الجنائي غير القابل للتعديل (Immutable Audit Trail)' : 'Immutable Forensic Audit Trail'}</h2>
+          {/* TAB: Causal analysis */}
+          {activeTab === 'causes' && !error && (
+            isLoading ? (
+              <div className="skeleton-grid va-section-gap">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton-card" />
+                ))}
+              </div>
+            ) : anomalies.length === 0 ? (
+              <div className="va-section-gap">
+                <EmptyState
+                  icon={<IconFileText size={30} />}
+                  title={isAr ? 'لا تتوفر حالات لتحليل أسبابها' : 'No cases available for causal analysis'}
+                  description={
+                    isAr
+                      ? 'يحلّل المحرك السببي الأسباب الجذرية ويولّد التوصيات فور رصد أول انحراف في سجلات مؤسستك المرتبطة.'
+                      : 'The causal engine diagnoses root causes and generates recommendations as soon as the first variance is detected in your connected records.'
+                  }
+                />
+              </div>
+            ) : (
+              <div className="va-stack va-section-gap">
+                <div className="ml-panel">
+                  <div className="ml-panel__head">
+                    <h2 className="ml-title" style={{ fontSize: 16 }}>
+                      {isAr ? 'ملخص تحليلي تنفيذي' : 'Executive Analytical Summary'}
+                    </h2>
+                    <span className="ml-badge ml-badge--danger">
+                      {anomalies.length} {isAr ? 'حالات' : 'Cases'}
+                    </span>
+                  </div>
+                  <div className="ml-panel__body">
+                    <div className="va-metric-grid">
+                      <div className="va-metric">
+                        <span className="va-metric__k">{isAr ? 'قيمة الانحرافات النشطة' : 'Active Flagged Amount'}</span>
+                        <span className="va-metric__v va-metric__v--danger">{formatAmount(leakTotals?.activeLeakageSAR || 0)}</span>
+                      </div>
+                      <div className="va-metric">
+                        <span className="va-metric__k">{isAr ? 'المبالغ المحمية' : 'Protected Amount'}</span>
+                        <span className="va-metric__v va-metric__v--success">{formatAmount(leakTotals?.protectedAmountSAR || 0)}</span>
+                      </div>
+                      <div className="va-metric">
+                        <span className="va-metric__k">{isAr ? 'حالات عالية الخطورة' : 'High Severity Cases'}</span>
+                        <span className="va-metric__v va-metric__v--warning">{leakTotals?.highSeverityCount || 0}</span>
+                      </div>
+                      <div className="va-metric">
+                        <span className="va-metric__k">{isAr ? 'متوسط درجة الثقة' : 'Average Confidence'}</span>
+                        <span className="va-metric__v">{avgConfidence ? `${avgConfidence}%` : '—'}</span>
+                      </div>
+                    </div>
+                    <p className="ml-body" style={{ marginTop: 'var(--space-4)' }}>
+                      {isAr
+                        ? 'تعرض القائمة أدناه أبرز الأسباب الجذرية مرتبة حسب قيمة الانحراف المسجّلة لكل حالة، وفق واقع سجلات مؤسستك.'
+                        : 'The list below ranks the leading root causes by recorded variance value for each case, based on your organization’s actual records.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="ml-panel">
+                  <div className="ml-panel__head">
+                    <h2 className="ml-title" style={{ fontSize: 16 }}>
+                      {isAr ? 'الأسباب الجذرية الأعلى أثراً' : 'Top Root-Cause Drivers'}
+                    </h2>
+                  </div>
+                  <div className="ml-panel__body">
+                    <div className="record-list">
+                      {rootCauses.slice(0, 5).map((cause, idx) => (
+                        <div key={cause.id} className="record-row">
+                          <div className="record-row__main">
+                            <div className="va-row-head">
+                              <div className="va-tags">
+                                <span className={severityBadgeClass(cause.severity)}>
+                                  <span className="ml-dot" />
+                                  {(cause.severity || '').toUpperCase()}
+                                </span>
+                                <span className="va-mono-id">
+                                  {isAr ? `السبب ${idx + 1}` : `Cause ${idx + 1}`} · {cause.rule_code}
+                                </span>
+                              </div>
+                              <span className="va-amount va-amount--danger">
+                                {formatAmount(cause.flagged_amount, cause.currency)}
+                              </span>
+                            </div>
+                            <div className="record-row__title" style={{ marginTop: 6 }}>{cause.target_vendor}</div>
+                            <div className="record-row__meta">{isAr ? cause.narrative_ar : cause.narrative_en}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="ml-panel">
+                  <div className="ml-panel__head">
+                    <h2 className="ml-title" style={{ fontSize: 16 }}>
+                      {isAr ? 'ضوابط التحكم المتاحة' : 'Available Control Gates'}
+                    </h2>
+                  </div>
+                  <div className="ml-panel__body">
+                    <div className="record-list">
+                      <div className="record-row">
+                        <div className="record-row__main">
+                          <div className="record-row__title">
+                            {isAr ? 'بوابة المطابقة قبل الصرف' : 'Pre-Disbursement Matching Gate'}
+                          </div>
+                          <div className="record-row__meta">
+                            {isAr
+                              ? 'منع تمرير أي أمر صرف إلا بعد تحقق النظام آلياً من وجود سند استلام معتمد وتطابق أمر الشراء المرتبط.'
+                              : 'No payment order passes until the system automatically confirms an approved receipt note and a matching purchase order.'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="record-row">
+                        <div className="record-row__main">
+                          <div className="record-row__title">
+                            {isAr ? 'ضوابط حدود الصلاحيات' : 'Delegation Limit Controls'}
+                          </div>
+                          <div className="record-row__meta">
+                            {isAr
+                              ? 'رصد أنماط تقسيم الفواتير لتجاوز حدود الاعتماد، مع إحالة الحالات المشبوهة إلى المراجعة قبل الصرف.'
+                              : 'Detection of invoice-splitting patterns that bypass approval thresholds, with suspicious cases routed to review before disbursement.'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          )}
+
+          {/* TAB: 3-way reconciliation */}
+          {activeTab === 'reconciliation' && !error && (
+            <div className="va-stack va-section-gap">
+              <div className="ml-panel">
+                <div className="ml-panel__head">
+                  <h2 className="ml-title" style={{ fontSize: 16 }}>
+                    {isAr ? 'المطابقة الثلاثية: أمر الشراء + سند الاستلام + الفاتورة' : '3-Way Match: Purchase Order + Receipt + Invoice'}
+                  </h2>
+                </div>
+                <div className="ml-panel__body">
+                  <p className="ml-body" style={{ margin: 0 }}>
+                    {isAr
+                      ? 'تُطابق المطالبات الواردة آلياً بين أوامر الشراء المعتمدة وسندات استلام البضائع وفواتير الموردين؛ ويُعلَّق أي تباين في الكمية أو السعر أو التوريد تلقائياً إلى أن يُحسم عبر إجراء تدقيقي.'
+                      : 'Incoming claims are automatically cross-referenced between approved purchase orders, goods receipt notes, and vendor invoices; any quantity, price, or delivery variance is held automatically until resolved through an audit action.'}
+                  </p>
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="skeleton-grid">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="skeleton-card" />
+                  ))}
+                </div>
+              ) : anomalies.length === 0 ? (
+                <EmptyState
+                  icon={<IconFileText size={30} />}
+                  title={isAr ? 'لا توجد حالات مطابقة مفتوحة' : 'No reconciliation cases open'}
+                  description={
+                    isAr
+                      ? 'تظهر حالات عدم التطابق هنا فور ربط الفواتير وأوامر الشراء وسندات الاستلام بمساحة عمل مؤسستك.'
+                      : 'Mismatch cases appear here as soon as invoices, purchase orders, and receipt notes are connected to your organization workspace.'
+                  }
+                />
+              ) : (
+                <div className="stat-grid">
+                  <div className="stat-tile">
+                    <div className="stat-tile__label">{isAr ? 'حالات مفتوحة' : 'Open Cases'}</div>
+                    <div className="stat-tile__value">{openCases.length}</div>
+                    <div className="stat-tile__hint">{isAr ? 'بانتظار إجراء تدقيقي' : 'Awaiting an audit action'}</div>
+                  </div>
+                  <div className="stat-tile">
+                    <div className="stat-tile__label">{isAr ? 'حالات مُجمّدة' : 'Frozen Cases'}</div>
+                    <div className="stat-tile__value">{frozenCases.length}</div>
+                    <div className="stat-tile__hint">{isAr ? 'صرف موقوف ومسجّل' : 'Disbursement held and recorded'}</div>
+                  </div>
+                  <div className="stat-tile">
+                    <div className="stat-tile__label">{isAr ? 'المبالغ المحمية' : 'Protected Amount'}</div>
+                    <div className="stat-tile__value">{formatAmount(leakTotals?.protectedAmountSAR || 0)}</div>
+                    <div className="stat-tile__hint">{isAr ? 'وفقاً لسجل التجميد الفعلي' : 'Per the actual freeze record'}</div>
+                  </div>
+                  <div className="stat-tile">
+                    <div className="stat-tile__label">{isAr ? 'إجمالي الحالات' : 'Total Cases'}</div>
+                    <div className="stat-tile__value">{leakTotals?.totalCases || 0}</div>
+                    <div className="stat-tile__hint">{isAr ? 'كل مستويات الخطورة' : 'All severity levels'}</div>
+                  </div>
+                </div>
+              )}
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              {isAr
-                ? 'توثيق كامل لكافة عمليات الرصد، والتجميد، والاعتماد، مع توقيع الختم الزمني وتفاصيل المستخدم لمنع التلاعب.'
-                : 'Cryptographically secured log of all detection, resolution, and freeze actions with immutable timestamps.'}
-            </p>
-            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-surface-elevated)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
-                <div>
-                  <strong style={{ fontSize: '13px', color: 'var(--status-success)' }}>DISBURSEMENT_FROZEN</strong>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>PO-8921 / شركة الأفق للتجارة (48,500 SAR)</div>
-                </div>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>2026-10-13 14:22:01 UTC</span>
+          )}
+
+          {/* TAB: Immutable audit trail (real tenant audit logs) */}
+          {activeTab === 'audit' && !error && (
+            <div className="ml-panel va-section-gap">
+              <div className="ml-panel__head">
+                <h2 className="ml-title" style={{ fontSize: 16 }}>
+                  {isAr ? 'سجل أحداث التدقيق لمساحة العمل' : 'Workspace Audit Event Trail'}
+                </h2>
+                <button onClick={fetchAuditLogs} className="ml-btn ml-btn--subtle ml-btn--sm">
+                  <IconRefresh size={13} />
+                  <span>{isAr ? 'تحديث' : 'Refresh'}</span>
+                </button>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-surface-elevated)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
-                <div>
-                  <strong style={{ fontSize: '13px', color: 'var(--accent-light)' }}>ANOMALY_FLAGGED</strong>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>FLK-001 / شركة التوريدات الهندسية الكبرى (124,000 SAR)</div>
-                </div>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>2026-10-13 09:15:30 UTC</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-surface-elevated)', padding: '12px 16px', borderRadius: 'var(--radius-sm)' }}>
-                <div>
-                  <strong style={{ fontSize: '13px', color: 'var(--status-success)' }}>DISBURSEMENT_FROZEN</strong>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>FLK-002 / مؤسسة العمار للخدمات اللوجستية (88,500 SAR)</div>
-                </div>
-                <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>2026-10-12 18:04:12 UTC</span>
+              <div className="ml-panel__body">
+                {auditLoading ? (
+                  <div className="skeleton-grid">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="skeleton-card" />
+                    ))}
+                  </div>
+                ) : auditError ? (
+                  <EmptyState
+                    compact
+                    icon={<IconAlert size={26} />}
+                    title={isAr ? 'تعذر تحميل سجل التدقيق' : 'Unable to load the audit trail'}
+                    description={auditError}
+                    action={
+                      <button onClick={fetchAuditLogs} className="ml-btn ml-btn--primary">
+                        {isAr ? 'إعادة المحاولة' : 'Retry'}
+                      </button>
+                    }
+                  />
+                ) : auditLogs === null || auditLogs.length === 0 ? (
+                  <EmptyState
+                    compact
+                    icon={<IconFileText size={26} />}
+                    title={isAr ? 'لا توجد أحداث تدقيق مسجلة بعد' : 'No audit events recorded yet'}
+                    description={
+                      isAr
+                        ? 'يُسجَّل كل إجراء تشغيلي (رصد، تجميد، اعتماد، تحيين) في سجل غير قابل للتعديل فور تنفيذه، ويظهر هنا مباشرة.'
+                        : 'Every operational action (detection, freeze, approval, update) is written to an immutable log the moment it executes, and appears here immediately.'
+                    }
+                  />
+                ) : (
+                  <div className="record-list">
+                    {auditLogs.map((log) => (
+                      <div key={log.id} className="record-row">
+                        <div className="record-row__main">
+                          <div className="va-row-head">
+                            <span className="va-mono-id" style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-light)' }}>
+                              {log.action}
+                            </span>
+                            <span className="va-log-time">{formatDate(log.created_at)}</span>
+                          </div>
+                          <div className="record-row__meta">
+                            {log.entity_type}
+                            {log.entity_id ? ` · ${String(log.entity_id).substring(0, 8).toUpperCase()}` : ''}
+                            {log.ip_address ? ` · ${log.ip_address}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

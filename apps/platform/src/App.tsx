@@ -328,6 +328,8 @@ const AppRouterContent: React.FC = () => {
                 navigate(ROUTES.PUBLIC.SOLUTIONS);
               }
             }}
+            onNavigateContact={() => navigate(ROUTES.PUBLIC.CONTACT)}
+            onNavigateIndustries={() => navigate(ROUTES.PUBLIC.INDUSTRIES)}
           />
         );
     }

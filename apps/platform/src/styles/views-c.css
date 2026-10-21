@@ -1,0 +1,226 @@
+/* ==========================================================================
+   MIKHLAFI LABS — Protected Workspace Views (Group C)
+   Integrations · Workflows · Organization · Billing · Settings
+   Composes the shared design system (.ml-*) and workspace (.page-*, .record-*,
+   .stat-*) primitives. All values resolve to design tokens — no raw colors.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Header action cluster
+   -------------------------------------------------------------------------- */
+
+.vc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* --------------------------------------------------------------------------
+   Loading skeletons
+   -------------------------------------------------------------------------- */
+
+.vc-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vc-skeleton-row {
+  height: 72px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-surface-elevated) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: ml-shimmer 1.4s infinite linear;
+}
+
+.vc-skeleton-row--compact {
+  height: 52px;
+}
+
+/* --------------------------------------------------------------------------
+   Record row side values (counts, totals)
+   -------------------------------------------------------------------------- */
+
+/* Wraps gracefully on narrow viewports so badges and actions never overflow. */
+.vc-row {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.vc-side-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: end;
+  flex-shrink: 0;
+}
+
+.vc-side-stat__label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.vc-side-stat__value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   Panel head text group
+   -------------------------------------------------------------------------- */
+
+.vc-title-group { min-width: 0; }
+
+.vc-title-group__title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vc-title-group__meta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
+/* --------------------------------------------------------------------------
+   Key / value grids
+   -------------------------------------------------------------------------- */
+
+.vc-kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px 18px;
+}
+
+.vc-kv__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vc-kv__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+[dir="rtl"] .vc-kv__label { letter-spacing: normal; }
+
+.vc-kv__value {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.vc-kv__value--mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   Usage meter
+   -------------------------------------------------------------------------- */
+
+.vc-meter {
+  height: 9px;
+  width: 100%;
+  border-radius: var(--radius-full);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.vc-meter__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-base), var(--accent-light));
+  transition: width var(--transition-smooth);
+}
+
+/* --------------------------------------------------------------------------
+   Layout helpers
+   -------------------------------------------------------------------------- */
+
+.vc-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.vc-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.vc-stack--tight {
+  gap: 10px;
+}
+
+.vc-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.vc-field-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.vc-note {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-tertiary);
+}
+
+/* --------------------------------------------------------------------------
+   Modal additions
+   -------------------------------------------------------------------------- */
+
+.vc-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.vc-modal-desc {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.vc-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vc-textarea--mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  min-height: 160px;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .vc-skeleton-row { animation: none; }
+  .vc-meter__fill { transition: none; }
+}

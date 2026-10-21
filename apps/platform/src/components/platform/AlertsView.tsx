@@ -1,99 +1,122 @@
-import React, { useState, useEffect } from 'react';
+// MIKHLAFI LABS — Real-Time Alerts Center
+// All alerts are loaded exclusively from the authenticated backend.
+// No simulated or demonstration records are ever rendered.
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { LocaleMode } from '../../types';
-import { IconBell, IconCheck, IconClock, IconRefresh } from '../Icons';
+import { IconBell, IconCheck, IconClock, IconRefresh, IconRisk } from '../Icons';
 import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface AlertsViewProps {
   locale: LocaleMode;
 }
 
+interface AlertRecord {
+  id: string;
+  title_ar: string;
+  title_en: string;
+  severity: string;
+  source_domain: string;
+  acknowledged: boolean;
+  acknowledged_at?: string | null;
+  created_at: string;
+}
+
 export const AlertsView: React.FC<AlertsViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const { isAuthenticated, openAuthModal } = useAuth();
+  const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [filterState, setFilterState] = useState<'all' | 'pending' | 'acknowledged'>('all');
 
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
+    if (!isAuthenticated) {
+      setAlerts([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
       const res = await api.getAlerts();
-      setAlerts(res.alerts || []);
-    } catch {
-      // Fallback
+      setAlerts(Array.isArray(res.alerts) ? res.alerts : []);
+    } catch (err: any) {
+      setAlerts([]);
+      setError(err.message || (isAr ? 'تعذّر تحميل التنبيهات.' : 'Unable to load alerts.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
     fetchAlerts();
-  }, []);
+  }, [fetchAlerts]);
 
-  const toggleAcknowledge = async (id: string) => {
-    setTogglingId(id);
+  const toggleAcknowledge = async (alert: AlertRecord) => {
+    if (togglingId) return;
+    setTogglingId(alert.id);
     try {
-      const res = await api.toggleAlert(id);
-      if (res.success) {
-        setAlerts((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, acknowledged: res.alert.acknowledged, acknowledged_at: res.alert.acknowledged_at } : a))
-        );
-        const msg = res.alert.acknowledged
-          ? (isAr ? 'تم تأكيد استلام التنبيه وتحديث سجل الإشعارات.' : 'Alert acknowledged.')
-          : (isAr ? 'تمت إعادة فتح التنبيه في طابور المتابعة.' : 'Alert reopened.');
-        setFeedback(msg);
-      }
+      const res = await api.toggleAlert(alert.id);
+      const updated = res.alert;
+      await fetchAlerts();
+      setFeedback(
+        updated.acknowledged
+          ? (isAr ? 'تم تأكيد استلام التنبيه.' : 'Alert acknowledged.')
+          : (isAr ? 'أُعيد فتح التنبيه في طابور المتابعة.' : 'Alert reopened.')
+      );
     } catch (err: any) {
-      setFeedback(err.message || 'Action failed.');
+      setFeedback(err.message || (isAr ? 'تعذّر تحديث حالة التنبيه.' : 'Unable to update the alert.'));
     } finally {
       setTogglingId(null);
-      setTimeout(() => setFeedback(null), 3000);
+      setTimeout(() => setFeedback(null), 3500);
     }
   };
 
-  const unackCount = alerts.filter((a) => !a.acknowledged).length;
+  const filteredAlerts = alerts.filter((a) => {
+    if (filterState === 'all') return true;
+    if (filterState === 'pending') return !a.acknowledged;
+    return a.acknowledged;
+  });
+
+  const counts = {
+    all: alerts.length,
+    pending: alerts.filter((a) => !a.acknowledged).length,
+    acknowledged: alerts.filter((a) => a.acknowledged).length
+  };
+
+  const severityClass = (severity: string) => {
+    const s = (severity || '').toLowerCase();
+    if (s === 'critical') return 'vb-sev--critical';
+    if (s === 'warning') return 'vb-sev--warning';
+    return 'vb-sev--info';
+  };
 
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'مركز القيادة' : 'Command'}</span>
-            <span>/</span>
-            <span className="current">{isAr ? 'مركز التنبيهات والإنذارات' : 'Alerts Center'}</span>
-          </div>
-          <h1 className="page-title">
-            <IconBell size={24} />
-            <span>{isAr ? 'مركز التنبيهات الفورية وإشارات الاستشعار' : 'Real-Time Alerts & Notification Center'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'إشعارات حية حول الانحرافات المحاسبية والمخاطر التشغيلية الطارئة لضمان سرعة الاستجابة الإدارية.'
-              : 'Live telemetry and critical notifications regarding accounting anomalies, contract variances, and operational thresholds.'}
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            onClick={fetchAlerts}
-            disabled={loading}
-            className="btn-secondary"
-            style={{ fontSize: '12px', padding: '7px 12px' }}
-          >
-            <IconRefresh size={14} className={loading ? 'spinning' : ''} />
-            <span>{loading ? (isAr ? 'جارِ التحديث...' : 'Updating...') : (isAr ? 'تحديث' : 'Refresh')}</span>
+      <PageHeader
+        locale={locale}
+        icon={<IconBell size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'مركز القيادة' : 'Command']}
+        title={isAr ? 'مركز التنبيهات' : 'Alerts Center'}
+        subtitle={
+          isAr
+            ? 'إشعارات حية حول الانحرافات والمخاطر التشغيلية المرصودة عبر محركات المنصة، لضمان سرعة استجابة القيادة.'
+            : 'Live notifications on deviations and operational risks surfaced by the platform engines, so leadership can respond quickly.'
+        }
+        action={
+          <button onClick={fetchAlerts} disabled={loading || !isAuthenticated} className="ml-btn ml-btn--subtle ml-btn--sm">
+            <IconRefresh size={13} className={loading ? 'vb-spin' : undefined} />
+            <span>{loading ? (isAr ? 'جارِ التحديث...' : 'Refreshing...') : (isAr ? 'تحديث' : 'Refresh')}</span>
           </button>
-          <div className={`kpi-micro-badge ${unackCount > 0 ? 'warning' : 'optimal'}`}>
-            <span className="label">{isAr ? 'التنبيهات غير المؤكدة' : 'Unacknowledged Alerts'}</span>
-            <span className="value">
-              {unackCount} {isAr ? 'تنبيهات' : 'alerts'}
-            </span>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {feedback && (
         <div className="alert-feedback-banner success">
@@ -102,68 +125,146 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ locale }) => {
         </div>
       )}
 
-      {/* Alerts List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
-        {alerts.map((alt) => {
-          const isToggling = togglingId === alt.id;
-          const title = isAr ? alt.title_ar : alt.title_en;
-          const isAck = alt.acknowledged;
-
-          return (
-            <div
-              key={alt.id}
-              className="decision-card"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '16px 20px',
-                opacity: isAck ? 0.65 : 1,
-                borderLeft: !isAr && alt.severity === 'critical' ? '4px solid var(--status-critical)' : undefined,
-                borderRight: isAr && alt.severity === 'critical' ? '4px solid var(--status-critical)' : undefined
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <span
-                  className={`severity-tag ${
-                    alt.severity === 'critical' ? 'critical' : alt.severity === 'warning' ? 'high' : 'optimal'
-                  }`}
-                >
-                  {alt.severity.toUpperCase()}
-                </span>
-
-                <div>
-                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {title}
-                  </h4>
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <IconClock size={12} />
-                      {alt.created_at ? new Date(alt.created_at).toLocaleString() : 'Recent'}
-                    </span>
-                    <span>•</span>
-                    <span>{isAck ? (isAr ? 'مؤكد الاستلام' : 'Acknowledged') : (isAr ? 'بانتظار المراجعة' : 'Pending Review')}</span>
-                  </div>
-                </div>
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconBell size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض تنبيهات مؤسستك' : 'Sign in to view your organization’s alerts'}
+          description={
+            isAr
+              ? 'تُسترجَع التنبيهات مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول. لا تُعرض أي تنبيهات للزوار.'
+              : 'Alerts are loaded directly from your organization workspace after signing in. No alerts are shown to visitors.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
+            </button>
+          }
+        />
+      ) : error ? (
+        <EmptyState
+          icon={<IconRisk size={30} />}
+          title={isAr ? 'تعذّر تحميل التنبيهات' : 'Unable to load alerts'}
+          description={error}
+          action={
+            <button onClick={fetchAlerts} className="ml-btn ml-btn--primary">
+              {isAr ? 'إعادة المحاولة' : 'Retry'}
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <div className="stat-grid">
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'إجمالي التنبيهات' : 'Total Alerts'}</div>
+              <div className="stat-tile__value">{counts.all}</div>
+              <div className="stat-tile__hint">
+                {isAr ? 'من سجلات التنبيهات الفعلية' : 'From your actual alert records'}
               </div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'بانتظار المراجعة' : 'Pending Review'}</div>
+              <div className="stat-tile__value">{counts.pending}</div>
+              <div className="stat-tile__hint">
+                {isAr ? 'تنبيهات غير مؤكدة الاستلام' : 'Alerts not yet acknowledged'}
+              </div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'مؤكدة الاستلام' : 'Acknowledged'}</div>
+              <div className="stat-tile__value">{counts.acknowledged}</div>
+              <div className="stat-tile__hint">
+                {isAr ? 'تنبيهات تمت معالجتها' : 'Alerts already actioned'}
+              </div>
+            </div>
+          </div>
 
-              <button
-                onClick={() => toggleAcknowledge(alt.id)}
-                disabled={isToggling}
-                className={isAck ? 'btn-secondary' : 'btn-primary'}
-                style={{ fontSize: '12px', padding: '7px 14px' }}
-              >
-                <IconCheck size={13} />
-                <span>
-                  {isToggling
-                    ? (isAr ? 'جارِ التحديث...' : 'Updating...')
-                    : (isAck ? (isAr ? 'إعادة فتح التنبيه' : 'Reopen') : (isAr ? 'تأكيد الاستلام' : 'Acknowledge'))}
-                </span>
+          <div className="page-filter-bar">
+            <div className="filter-group">
+              <span className="filter-label">{isAr ? 'الحالة:' : 'State:'}</span>
+              <button onClick={() => setFilterState('all')} className={`filter-chip ${filterState === 'all' ? 'active' : ''}`}>
+                {isAr ? `الكل (${counts.all})` : `All (${counts.all})`}
+              </button>
+              <button onClick={() => setFilterState('pending')} className={`filter-chip ${filterState === 'pending' ? 'active' : ''}`}>
+                <span className="dot critical" />
+                {isAr ? `بانتظار المراجعة (${counts.pending})` : `Pending (${counts.pending})`}
+              </button>
+              <button onClick={() => setFilterState('acknowledged')} className={`filter-chip ${filterState === 'acknowledged' ? 'active' : ''}`}>
+                <span className="dot high" style={{ background: 'var(--status-success)' }} />
+                {isAr ? `مؤكدة (${counts.acknowledged})` : `Acknowledged (${counts.acknowledged})`}
               </button>
             </div>
-          );
-        })}
-      </div>
+          </div>
+
+          {loading ? (
+            <div className="skeleton-grid">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton-card" />
+              ))}
+            </div>
+          ) : filteredAlerts.length === 0 ? (
+            <EmptyState
+              icon={<IconBell size={30} />}
+              title={isAr ? 'لا توجد تنبيهات مطابقة' : 'No matching alerts'}
+              description={
+                isAr
+                  ? 'تظهر التنبيهات هنا تلقائياً عندما ترصد محركات المنصة انحرافاً تشغيلياً أو تجاوزاً لحدٍّ معتمد في بيانات مؤسستك.'
+                  : 'Alerts appear here automatically when the platform engines detect an operational deviation or a threshold breach in your organization’s data.'
+              }
+            />
+          ) : (
+            <div className="record-list">
+              {filteredAlerts.map((alert) => {
+                const isToggling = togglingId === alert.id;
+                const title = isAr ? alert.title_ar : alert.title_en;
+
+                return (
+                  <div key={alert.id} className={`record-row ${alert.acknowledged ? 'is-acknowledged' : ''}`}>
+                    <span className={`vb-sev ${severityClass(alert.severity)}`}>
+                      {(alert.severity || 'info').toUpperCase()}
+                    </span>
+
+                    <div className="record-row__main">
+                      <div className="record-row__title">{title}</div>
+                      <div className="record-row__meta">
+                        <span className="vb-metric">
+                          <IconClock size={12} />
+                          {alert.created_at ? new Date(alert.created_at).toLocaleString() : '—'}
+                        </span>
+                        {alert.source_domain && (
+                          <span className="vb-metric">
+                            {isAr ? 'المصدر:' : 'Domain:'} {alert.source_domain}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="record-row__actions">
+                      <span className={`ml-badge ${alert.acknowledged ? 'ml-badge--success' : 'ml-badge--warning'}`}>
+                        {alert.acknowledged
+                          ? (isAr ? 'مؤكد الاستلام' : 'Acknowledged')
+                          : (isAr ? 'بانتظار المراجعة' : 'Pending')}
+                      </span>
+                      <button
+                        onClick={() => toggleAcknowledge(alert)}
+                        disabled={isToggling}
+                        className={`ml-btn ml-btn--sm ${alert.acknowledged ? 'ml-btn--subtle' : 'ml-btn--primary'}`}
+                      >
+                        <IconCheck size={13} />
+                        <span>
+                          {isToggling
+                            ? (isAr ? 'جارِ التحديث...' : 'Updating...')
+                            : alert.acknowledged
+                              ? (isAr ? 'إعادة فتح' : 'Reopen')
+                              : (isAr ? 'تأكيد الاستلام' : 'Acknowledge')}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };

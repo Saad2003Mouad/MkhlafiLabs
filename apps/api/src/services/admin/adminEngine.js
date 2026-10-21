@@ -638,6 +638,94 @@ export async function updateLeadStatus(leadId, status, notes = '', operatorId, r
   return updateRes.rows[0];
 }
 
+// ── Platform Services Catalog ───────────────────────────────────────────────
+// The eight intelligence engines are operator-owned data. The console edits
+// them here; the public website reads the same rows. Nothing is hard-coded.
+
+export async function listPlatformServices() {
+  const res = await query(
+    `SELECT id, engine_number, slug, badge_ar, badge_en, title_ar, title_en,
+            summary_ar, summary_en, sort_order, is_enabled, updated_at
+     FROM platform_services
+     ORDER BY sort_order ASC, engine_number ASC`
+  );
+  return res.rows;
+}
+
+/** What the public website is allowed to show: enabled engines, in order. */
+export async function listPublishedServices() {
+  const res = await query(
+    `SELECT id, engine_number, slug, badge_ar, badge_en, title_ar, title_en,
+            summary_ar, summary_en, sort_order
+     FROM platform_services
+     WHERE is_enabled = true
+     ORDER BY sort_order ASC, engine_number ASC`
+  );
+  return res.rows;
+}
+
+export async function updatePlatformService(serviceId, {
+  badgeAr,
+  badgeEn,
+  titleAr,
+  titleEn,
+  summaryAr,
+  summaryEn,
+  sortOrder,
+  isEnabled,
+  operatorId,
+  remoteIp
+} = {}) {
+  const existing = await query(`SELECT id FROM platform_services WHERE id = $1`, [serviceId]);
+  if (existing.rows.length === 0) {
+    throw new Error('الخدمة غير موجودة.');
+  }
+
+  const updateRes = await query(
+    `UPDATE platform_services
+     SET badge_ar   = COALESCE($1, badge_ar),
+         badge_en   = COALESCE($2, badge_en),
+         title_ar   = COALESCE($3, title_ar),
+         title_en   = COALESCE($4, title_en),
+         summary_ar = COALESCE($5, summary_ar),
+         summary_en = COALESCE($6, summary_en),
+         sort_order = COALESCE($7, sort_order),
+         is_enabled = COALESCE($8, is_enabled),
+         updated_at = now()
+     WHERE id = $9
+     RETURNING *`,
+    [
+      badgeAr ?? null,
+      badgeEn ?? null,
+      titleAr ?? null,
+      titleEn ?? null,
+      summaryAr ?? null,
+      summaryEn ?? null,
+      typeof sortOrder === 'number' ? sortOrder : null,
+      typeof isEnabled === 'boolean' ? isEnabled : null,
+      serviceId
+    ]
+  );
+
+  await query(
+    `INSERT INTO platform_audit_logs (operator_id, action, target_tenant_id, details, ip_address)
+     VALUES ($1, 'SERVICE_UPDATED', NULL, $2, $3)`,
+    [
+      operatorId,
+      JSON.stringify({
+        serviceId,
+        titleAr,
+        titleEn,
+        isEnabled,
+        sortOrder
+      }),
+      remoteIp
+    ]
+  );
+
+  return { success: true, service: updateRes.rows[0] };
+}
+
 export async function listPlatformAuditLogs(limit = 100) {
   const auditRes = await query(
     `SELECT a.*, u.email AS operator_email, u.name_ar AS operator_name_ar,

@@ -1,13 +1,64 @@
-import React, { useState, useEffect } from 'react';
+﻿// MIKHLAFI LABS — Integrations & Data Sources
+// Every connector record is loaded exclusively from the authenticated backend.
+// No demonstration fixtures, sample rows, or fabricated counters are rendered.
+
+import React, { useCallback, useEffect, useState } from 'react';
 import { LocaleMode } from '../../types';
-import { IconServer, IconCheck, IconRefresh, IconDownload, IconAlertTriangle } from '../Icons';
+import { IconServer, IconRefresh, IconCheck, IconAlertTriangle, IconDownload, IconX } from '../Icons';
+import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface IntegrationsViewProps {
   locale: LocaleMode;
 }
 
-// RFC-4180 Compliant CSV Parser supporting quotes, escaped quotes, and newlines
+interface IntegrationRecord {
+  id: string;
+  code?: string;
+  name_en?: string;
+  name_ar?: string;
+  category?: string;
+  auth_type?: string;
+  records_synced_count?: string | number;
+  last_sync_status?: string;
+  last_sync_at?: string;
+  status?: string;
+}
+
+interface SyncResult {
+  success: boolean;
+  status?: string;
+  error?: string;
+  message?: string;
+  isDemo?: boolean;
+  integration?: IntegrationRecord;
+}
+
+interface IngestResult {
+  success: boolean;
+  batchId: string;
+  totalIngested: number;
+  flaggedCount: number;
+  duplicateCount?: number;
+  rejectedCount?: number;
+}
+
+interface JournalEntry {
+  documentNumber: string;
+  vendorName?: string;
+  amount: number;
+  postingDate?: string;
+  text?: string;
+}
+
+interface Feedback {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+// RFC-4180 compliant CSV parser: quoted fields, escaped quotes, embedded newlines.
 function parseRFC4180(csv: string): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -26,51 +77,42 @@ function parseRFC4180(csv: string): string[][] {
           currentField += '"';
           i += 2;
           continue;
-        } else {
-          inQuotes = false;
-          i++;
-          continue;
         }
-      } else {
-        currentField += char;
+        inQuotes = false;
         i++;
         continue;
       }
-    } else {
-      if (char === '"') {
-        inQuotes = true;
-        i++;
-        continue;
-      } else if (char === ',') {
-        currentRow.push(currentField.trim());
-        currentField = '';
-        i++;
-        continue;
-      } else if (char === '\r') {
-        if (nextChar === '\n') i++;
-        currentRow.push(currentField.trim());
-        currentField = '';
-        if (currentRow.some((f) => f.length > 0)) rows.push(currentRow);
-        currentRow = [];
-        i++;
-        continue;
-      } else if (char === '\n') {
-        currentRow.push(currentField.trim());
-        currentField = '';
-        if (currentRow.some((f) => f.length > 0)) rows.push(currentRow);
-        currentRow = [];
-        i++;
-        continue;
-      } else {
-        currentField += char;
-        i++;
-        continue;
-      }
+      currentField += char;
+      i++;
+      continue;
     }
+
+    if (char === '"') {
+      inQuotes = true;
+      i++;
+      continue;
+    }
+    if (char === ',') {
+      currentRow.push(currentField.trim());
+      currentField = '';
+      i++;
+      continue;
+    }
+    if (char === '\r' || char === '\n') {
+      if (char === '\r' && nextChar === '\n') i++;
+      currentRow.push(currentField.trim());
+      currentField = '';
+      if (currentRow.some((f) => f.length > 0)) rows.push(currentRow);
+      currentRow = [];
+      i++;
+      continue;
+    }
+    currentField += char;
+    i++;
   }
 
   if (inQuotes) {
-    throw new Error('Malformed CSV: Unclosed quotation mark detected in record.');
+    throw new Error('Malformed CSV: unclosed quotation mark detected.');
   }
 
   currentRow.push(currentField.trim());
@@ -80,91 +122,97 @@ function parseRFC4180(csv: string): string[][] {
 
 export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [sources, setSources] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'warning' | 'error' } | null>(null);
-  const [isIngestModalOpen, setIsIngestModalOpen] = useState<boolean>(false);
-  const [csvText, setCsvText] = useState<string>('');
-  const [ingestStatus, setIngestStatus] = useState<string | null>(null);
-  const [ingestError, setIngestError] = useState<string | null>(null);
+  const { isAuthenticated, tenant, openAuthModal } = useAuth();
 
-  const fetchIntegrations = async () => {
+  const [sources, setSources] = useState<IntegrationRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'healthy' | 'attention'>('all');
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  // CSV dataset upload
+  const [isIngestOpen, setIsIngestOpen] = useState<boolean>(false);
+  const [csvText, setCsvText] = useState<string>('');
+  const [ingestBusy, setIngestBusy] = useState<boolean>(false);
+  const [ingestError, setIngestError] = useState<string | null>(null);
+  const [ingestSuccess, setIngestSuccess] = useState<string | null>(null);
+
+  const fetchIntegrations = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSources([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
       const res = await api.getIntegrations();
-      setSources(res.integrations || []);
-    } catch {
-      // Keep existing sources
+      setSources(Array.isArray(res.integrations) ? res.integrations : []);
+    } catch (err) {
+      setSources([]);
+      setError(err instanceof Error ? err.message : (isAr ? 'تعذر جلب مصادر البيانات.' : 'Unable to load data sources.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, isAr]);
 
   useEffect(() => {
     fetchIntegrations();
-  }, []);
+  }, [fetchIntegrations, tenant?.organizationId]);
+
+  const statusBadge = (status?: string): string => {
+    const s = (status || '').toUpperCase();
+    if (s === 'HEALTHY' || s === 'CONNECTED') return 'ml-badge--success';
+    if (s === 'NOT_CONFIGURED') return 'ml-badge--warning';
+    if (s === 'DEMO_SYNCED') return 'ml-badge--info';
+    if (s === 'FAILED' || s === 'ERROR') return 'ml-badge--danger';
+    return '';
+  };
 
   const handleSync = async (id: string, name: string) => {
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
     setSyncingId(id);
     try {
-      const res = (await api.syncIntegration(id)) as any;
-      if (res.success) {
-        setSources((prev) =>
-          prev.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  records_synced_count: res.integration?.records_synced_count ?? s.records_synced_count,
-                  last_sync_at: res.integration?.last_sync_at ?? s.last_sync_at,
-                  last_sync_status: res.integration?.last_sync_status ?? res.status,
-                  status: res.integration?.status ?? s.status
-                }
-              : s
-          )
-        );
+      const res = (await api.syncIntegration(id)) as SyncResult;
+      const synced = res.integration;
+      await fetchIntegrations();
 
-        if (res.isDemo || res.status === 'DEMO_SYNCED') {
-          setFeedback({
-            type: 'warning',
-            message: isAr
-              ? `تم تحديث بيانات العرض التوضيحي (${name}). الربط مع بيئة الإنتاج الخارجية يتطلب إعداد الشهادات الرقمية (mTLS / API Keys).`
-              : `Demonstration fixture telemetry refreshed for (${name}). Production live sync requires verified mTLS / API credentials.`
-          });
-        } else {
-          setFeedback({
-            type: 'success',
-            message: isAr
-              ? `اكتملت المزامنة الحية وتأكيد سلامة قناة الاتصال (${name}) بنجاح.`
-              : `Live telemetry synchronization verified for (${name}).`
-          });
-        }
-      } else {
-        // Not configured or failure state
-        if (res.integration) {
-          setSources((prev) =>
-            prev.map((s) =>
-              s.id === id
-                ? {
-                    ...s,
-                    last_sync_status: res.integration.last_sync_status,
-                    status: res.integration.status
-                  }
-                : s
-            )
-          );
-        }
+      const status = (synced?.last_sync_status || res.status || '').toUpperCase();
+      if (res.success && status === 'HEALTHY') {
         setFeedback({
-          type: 'warning',
+          type: 'success',
           message: isAr
-            ? `قناة الاتصال (${name}) غير مهيأة بعد (NOT_CONFIGURED). يلزم إدخال شهادات الاعتماد ونقاط الاتصال قبل المزامنة الفعلية.`
-            : `Connector (${name}) is not configured. Live credentials or mTLS endpoints must be provided before sync can execute.`
+            ? `اكتملت المزامنة وتحقق الاتصال لـ (${name}).`
+            : `Synchronization completed and connection verified for (${name}).`
+        });
+      } else if (res.success && status === 'DEMO_SYNCED') {
+        setFeedback({
+          type: 'info',
+          message: isAr
+            ? `اكتملت مزامنة (${name}) بالحالة المسجَّلة في الخادم: DEMO_SYNCED — تتطلب المزامنة الحية بيانات اعتماد فعلية.`
+            : `Synchronization for (${name}) completed with the status recorded by the server: DEMO_SYNCED. Live production sync requires real credentials.`
+        });
+      } else {
+        setFeedback({
+          type: 'error',
+          message:
+            (isAr
+              ? `تعذرت مزامنة (${name}) — الربط غير مهيأ.`
+              : `Synchronization did not complete for (${name}) — the connector is not configured.`) +
+            (res.error ? ` ${res.error}` : '')
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       setFeedback({
         type: 'error',
-        message: err.message || (isAr ? 'فشلت المزامنة.' : 'Synchronization failed.')
+        message: err instanceof Error && err.message
+          ? err.message
+          : (isAr ? 'فشلت المزامنة.' : 'Synchronization failed.')
       });
     } finally {
       setSyncingId(null);
@@ -173,385 +221,418 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ locale }) =>
   };
 
   const handleDownloadTemplate = () => {
-    const templateContent = 'DocNumber,VendorName,Amount,Currency,PostingDate,Narrative\nINV-2026-001,"Al-Buraq Industrial Supplies",45000.00,SAR,2026-09-15,"Q3 Mechanical Spare Parts Batch #1"\nINV-2026-002,"Saudi Red Sea Logistics",118500.00,SAR,2026-09-18,"Cold-chain Freight Transit - Jeddah to Riyadh"\nINV-2026-003,"Rawabi Consulting Group",25000.00,SAR,2026-09-22,"Bi-weekly IT Infrastructure Audit"';
-    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+    const headerOnly = 'documentNumber,name,amount,postingDate,description\n';
+    const blob = new Blob([headerOnly], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', 'mikhlafi_general_ledger_template.csv');
+    link.setAttribute('download', 'mikhlafi_import_template.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  const handleLoadSample = () => {
-    setCsvText('DocNumber,VendorName,Amount,Currency,PostingDate,Narrative\nINV-2026-001,"Al-Buraq Industrial Supplies",45000.00,SAR,2026-09-15,"Q3 Mechanical Spare Parts Batch #1"\nINV-2026-002,"Saudi Red Sea Logistics",118500.00,SAR,2026-09-18,"Cold-chain Freight Transit - Jeddah to Riyadh"\nINV-2026-003,"Rawabi Consulting Group",25000.00,SAR,2026-09-22,"Bi-weekly IT Infrastructure Audit"');
+  const closeIngest = () => {
+    setIsIngestOpen(false);
+    setIngestError(null);
+    setIngestSuccess(null);
+    setCsvText('');
   };
 
   const handleIngestSubmit = async () => {
     setIngestError(null);
+    setIngestSuccess(null);
+
     if (!csvText.trim()) {
-      setIngestError(isAr ? 'يرجى لصق بيانات CSV صالحة تتضمن ترويسة الأعمدة والقيود.' : 'Please paste valid CSV records including headers.');
+      setIngestError(isAr ? 'الصق بيانات CSV صالحة تتضمن ترويسة الأعمدة والصفوف.' : 'Paste valid CSV data including a header row and data rows.');
       return;
     }
 
+    setIngestBusy(true);
     try {
-      setIngestStatus(isAr ? 'جارِ فحص وتدقيق القيود المحاسبية وفق معيار RFC-4180...' : 'Validating ledger rows against RFC-4180 standards...');
-
       const rawRows = parseRFC4180(csvText.trim());
       if (rawRows.length === 0) {
-        throw new Error(isAr ? 'ملف CSV فارغ.' : 'CSV file is empty.');
+        throw new Error(isAr ? 'النص الملصق فارغ.' : 'The pasted text is empty.');
       }
       if (rawRows.length === 1) {
-        throw new Error(isAr ? 'الملف يحتوي على ترويسة الأعمدة فقط؛ لا توجد أي قيود مالية للمعالجة.' : 'CSV contains headers only; no financial transaction rows found.');
-      }
-
-      // Map headers
-      const headers = rawRows[0].map((h) => h.toLowerCase().replace(/[\s_-]/g, ''));
-      const docIdx = headers.findIndex((h) => h.includes('doc') || h.includes('invoice') || h.includes('number'));
-      const vendorIdx = headers.findIndex((h) => h.includes('vendor') || h.includes('supplier'));
-      const amountIdx = headers.findIndex((h) => h.includes('amount') || h.includes('total') || h.includes('value'));
-      const textIdx = headers.findIndex((h) => h.includes('text') || h.includes('narrative') || h.includes('description') || h.includes('memo'));
-      const dateIdx = headers.findIndex((h) => h.includes('date'));
-
-      if (docIdx === -1 || amountIdx === -1) {
         throw new Error(
           isAr
-            ? 'ترويسة CSV تفتقر إلى الأعمدة الإلزامية: يجب تضمين رقم السند (DocNumber) والمبلغ (Amount).'
-            : 'CSV headers missing required fields: must include Document Number and Amount columns.'
+            ? 'النص يحتوي على ترويسة أعمدة فقط؛ أضف صفاً واحداً من البيانات على الأقل.'
+            : 'Only a header row was found — add at least one data row.'
         );
       }
 
-      const entries: any[] = [];
+      const headers = rawRows[0].map((h) => h.toLowerCase().replace(/[\s_-]/g, ''));
+      const refIdx = headers.findIndex((h) =>
+        h.includes('doc') || h.includes('invoice') || h.includes('number') || h.includes('reference') || h.includes('ref')
+      );
+      const partyIdx = headers.findIndex((h) =>
+        h.includes('vendor') || h.includes('supplier') || h.includes('partner') || h.includes('party') || h.includes('name')
+      );
+      const amountIdx = headers.findIndex((h) => h.includes('amount') || h.includes('total') || h.includes('value'));
+      const dateIdx = headers.findIndex((h) => h.includes('date'));
+      const textIdx = headers.findIndex((h) =>
+        h.includes('description') || h.includes('narrative') || h.includes('text') || h.includes('memo') || h.includes('detail')
+      );
+
+      if (refIdx === -1 || amountIdx === -1) {
+        throw new Error(
+          isAr
+            ? 'ترويسة CSV ناقصة: يجب تضمين عمود المرجع (documentNumber) وعمود القيمة (amount).'
+            : 'CSV headers are incomplete: include a reference column (documentNumber) and a value column (amount).'
+        );
+      }
+
+      const entries: JournalEntry[] = [];
       const rowErrors: string[] = [];
 
       for (let i = 1; i < rawRows.length; i++) {
         const row = rawRows[i];
-        const docNum = row[docIdx]?.trim();
+        const ref = row[refIdx]?.trim();
         const rawAmt = row[amountIdx]?.trim();
 
-        if (!docNum) {
-          rowErrors.push(isAr ? `السطر ${i + 1}: رقم السند مفقود.` : `Row ${i + 1}: Missing document number.`);
+        if (!ref) {
+          rowErrors.push(isAr ? `السطر ${i + 1}: المرجع مفقود.` : `Row ${i + 1}: missing reference.`);
           continue;
         }
 
-        const cleanAmtStr = rawAmt ? rawAmt.replace(/[,\s]/g, '') : '';
-        const amt = Number(cleanAmtStr);
+        const amt = Number((rawAmt || '').replace(/[,\s]/g, ''));
         if (isNaN(amt) || !isFinite(amt) || amt <= 0) {
-          rowErrors.push(isAr ? `السطر ${i + 1}: قيمة المبلغ غير صالحة ("${rawAmt}").` : `Row ${i + 1}: Malformed financial amount ("${rawAmt}").`);
+          rowErrors.push(isAr ? `السطر ${i + 1}: قيمة غير صالحة ("${rawAmt}").` : `Row ${i + 1}: invalid value ("${rawAmt}").`);
           continue;
         }
 
         entries.push({
-          documentNumber: docNum,
-          vendorName: vendorIdx !== -1 && row[vendorIdx]?.trim() ? row[vendorIdx].trim() : 'General Supplier',
+          documentNumber: ref,
+          vendorName: partyIdx !== -1 && row[partyIdx]?.trim() ? row[partyIdx].trim() : undefined,
           amount: amt,
           postingDate: dateIdx !== -1 && row[dateIdx]?.trim() ? row[dateIdx].trim() : undefined,
-          text: textIdx !== -1 && row[textIdx]?.trim() ? row[textIdx].trim() : 'Manual Ledger CSV Import'
+          text: textIdx !== -1 && row[textIdx]?.trim() ? row[textIdx].trim() : undefined
         });
       }
 
       if (entries.length === 0) {
         throw new Error(
           isAr
-            ? `لم يتم العثور على أي قيود صالحة للاستيراد. الأخطاء:\n${rowErrors.join('\n')}`
-            : `Zero valid records found for ingestion. Errors:\n${rowErrors.join('\n')}`
+            ? `لا توجد صفوف صالحة للاستيراد. الأخطاء:\n${rowErrors.join('\n')}`
+            : `No valid rows found for import. Issues:\n${rowErrors.join('\n')}`
         );
       }
 
-      const res = (await api.ingestJournalEntries(entries)) as any;
-      setIngestStatus(
+      const res = (await api.ingestJournalEntries(entries)) as IngestResult;
+      const duplicateCount = res.duplicateCount || 0;
+      const flaggedCount = res.flaggedCount || 0;
+      setIngestSuccess(
         isAr
-          ? `تم استيراد ${res.totalIngested} قيد محاسبي بنجاح، وتجاهل ${res.duplicateCount || 0} قيود مكررة، ورصد ${res.flaggedCount || 0} حالة تدقيق جنائي.`
-          : `Ingested ${res.totalIngested} records (${res.duplicateCount || 0} duplicates skipped, ${res.flaggedCount || 0} forensic anomalies flagged).`
+          ? `تم استيراد ${res.totalIngested} صفاً (تم تجاهل ${duplicateCount} مكرر، ورُصد ${flaggedCount} للتحقق).`
+          : `Imported ${res.totalIngested} rows (${duplicateCount} duplicates skipped, ${flaggedCount} flagged for review).`
       );
-
-      setTimeout(() => {
-        setIsIngestModalOpen(false);
-        setIngestStatus(null);
-        setIngestError(null);
-        setCsvText('');
-        fetchIntegrations();
-      }, 3500);
-    } catch (err: any) {
-      setIngestStatus(null);
-      setIngestError(err.message || 'Validation error');
+      setCsvText('');
+      await fetchIntegrations();
+    } catch (err) {
+      setIngestError(err instanceof Error && err.message ? err.message : (isAr ? 'خطأ في التحقق من البيانات.' : 'Data validation error.'));
+    } finally {
+      setIngestBusy(false);
     }
   };
 
-  const totalSynced = sources.reduce((sum, s) => sum + parseInt(s.records_synced_count || '0', 10), 0);
+  const healthyCount = sources.filter((s) => (s.last_sync_status || '').toUpperCase() === 'HEALTHY').length;
+  const attentionCount = sources.length - healthyCount;
+  const totalSynced = sources.reduce((sum, s) => sum + (Number(s.records_synced_count) || 0), 0);
+
+  const filtered = sources.filter((s) => {
+    if (filter === 'healthy') return (s.last_sync_status || '').toUpperCase() === 'HEALTHY';
+    if (filter === 'attention') return (s.last_sync_status || '').toUpperCase() !== 'HEALTHY';
+    return true;
+  });
 
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'الإدارة والسيادة' : 'Administration'}</span>
-            <span>/</span>
-            <span className="current">{isAr ? 'مصادر البيانات وتكامل ERP' : 'Data Sources & ERP'}</span>
+      <PageHeader
+        locale={locale}
+        icon={<IconServer size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'الإدارة والسيادة' : 'Administration']}
+        title={isAr ? 'مصادر البيانات والتكاملات' : 'Data Sources & Integrations'}
+        subtitle={
+          isAr
+            ? 'اتصال آمن للقراءة فقط مع أنظمة مؤسستك الحالية وملفات البيانات المرفوعة — دون استبدال أو تعديل أي نظام قائم.'
+            : 'Secure, read-only connections to your organization’s existing systems and uploaded datasets — without replacing or modifying them.'
+        }
+        action={
+          <div className="vc-header-actions">
+            <button
+              onClick={() => fetchIntegrations()}
+              disabled={loading}
+              className="ml-btn ml-btn--subtle ml-btn--sm"
+            >
+              <IconRefresh size={14} className={loading ? 'spin' : undefined} />
+              <span>{loading ? (isAr ? 'جارِ التحديث…' : 'Updating…') : (isAr ? 'تحديث' : 'Refresh')}</span>
+            </button>
+            <button
+              onClick={() => {
+                if (!isAuthenticated) {
+                  openAuthModal();
+                  return;
+                }
+                setIngestError(null);
+                setIngestSuccess(null);
+                setIsIngestOpen(true);
+              }}
+              className="ml-btn ml-btn--primary ml-btn--sm"
+            >
+              <IconDownload size={14} />
+              <span>{isAr ? 'رفع ملف CSV' : 'Upload CSV'}</span>
+            </button>
           </div>
-          <h1 className="page-title">
-            <IconServer size={24} />
-            <span>{isAr ? 'قنوات الربط المؤسسي وتكامل أنظمة ERP' : 'Enterprise ERP Integrations & Data Ingestion'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'اتصال آمن ومستمر عبر قنوات القراءة فقط (Read-Only) مع أنظمة المؤسسة الحالية (SAP, Oracle, ZATCA) دون أي تعديل أو استبدال للبرمجيات القائمة.'
-              : 'Non-invasive read-only telemetry pipelines connecting SAP, Oracle, ZATCA and databases without software disruption.'}
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button
-            onClick={fetchIntegrations}
-            disabled={loading}
-            className="btn-secondary"
-            style={{ fontSize: '13px', padding: '8px 12px' }}
-          >
-            <IconRefresh size={14} className={loading ? 'spinning' : ''} />
-            <span>{loading ? (isAr ? 'جارِ التحديث...' : 'Updating...') : (isAr ? 'تحديث' : 'Refresh')}</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setIsIngestModalOpen(true);
-              setIngestStatus(null);
-              setIngestError(null);
-            }}
-            className="btn-primary"
-            style={{ fontSize: '13px', padding: '9px 16px' }}
-          >
-            <IconDownload size={14} />
-            <span>{isAr ? 'استيراد قيود دفتر الأستاذ (CSV)' : 'Ingest General Ledger (CSV)'}</span>
-          </button>
-
-          <div className="kpi-micro-badge">
-            <span className="label">{isAr ? 'إجمالي السجلات المزامنة' : 'Total Ingested Records'}</span>
-            <span className="value" style={{ fontFamily: 'var(--font-mono)' }}>
-              {totalSynced === 0
-                ? (isAr ? '0 سجلات (بانتظار استيراد فواتير CSV أو ربط ERP)' : '0 Rows (Awaiting Ingestion)')
-                : `${(totalSynced / 1e6).toFixed(2)}M Rows`}
-            </span>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {feedback && (
-        <div className={`alert-feedback-banner ${feedback.type === 'error' ? 'error' : feedback.type === 'warning' ? 'warning' : 'success'}`}>
-          {feedback.type === 'error' || feedback.type === 'warning' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
+        <div className={`alert-feedback-banner ${feedback.type === 'error' ? 'error' : feedback.type === 'info' ? 'info' : 'success'}`}>
+          {feedback.type === 'success' ? <IconCheck size={16} /> : <IconAlertTriangle size={16} />}
           <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* Integration Readiness Status — Transparent capability disclosure */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '12px',
-        marginBottom: '20px'
-      }}>
-        <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'rgba(16,185,129,0.08)', border: '1px solid var(--status-success)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-          <span style={{ fontSize: '18px' }}>✅</span>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-success)', marginBottom: '2px' }}>
-              {isAr ? 'متاح الآن — CSV Import' : 'Available Now — CSV Import'}
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconServer size={30} />}
+          title={isAr ? 'سجّل الدخول لعرض قنوات الربط' : 'Sign in to view your connected data sources'}
+          description={
+            isAr
+              ? 'تُسترجع قنوات الربط وسجلات المزامنة مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Connector channels and synchronization records are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
+            </button>
+          }
+        />
+      ) : loading ? (
+        <>
+          <div className="skeleton-grid">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skeleton-card" />
+            ))}
+          </div>
+          <div className="vc-skeleton-list">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="vc-skeleton-row" />
+            ))}
+          </div>
+        </>
+      ) : error ? (
+        <EmptyState
+          icon={<IconAlertTriangle size={30} />}
+          title={isAr ? 'تعذر جلب مصادر البيانات' : 'Unable to load data sources'}
+          description={error}
+          action={
+            <button onClick={() => fetchIntegrations()} className="ml-btn ml-btn--primary">
+              <IconRefresh size={14} />
+              <span>{isAr ? 'إعادة المحاولة' : 'Retry'}</span>
+            </button>
+          }
+        />
+      ) : sources.length === 0 ? (
+        <EmptyState
+          icon={<IconServer size={30} />}
+          title={isAr ? 'لا توجد مصادر بيانات متصلة بعد' : 'No data sources connected yet'}
+          description={
+            isAr
+              ? 'تظهر قنوات الربط وملفات البيانات المرفوعة هنا بمجرد أن ينشئ مسؤول المؤسسة قناة اتصال لمؤسستك، ثم تُحدَّث بعدد السجلات المزامَنة فعلياً.'
+              : 'Connectors and uploaded datasets appear here once an administrator provisions a channel for your organization, and their record counts only reflect what has actually been synchronized.'
+          }
+          action={
+            <button onClick={() => fetchIntegrations()} className="ml-btn ml-btn--ghost">
+              <IconRefresh size={14} />
+              <span>{isAr ? 'تحديث' : 'Refresh'}</span>
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <div className="stat-grid">
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'مصادر البيانات' : 'Data Sources'}</div>
+              <div className="stat-tile__value">{sources.length.toLocaleString()}</div>
+              <div className="stat-tile__hint">{isAr ? 'قنوات مسجلة لمؤسستك' : 'Channels registered for your organization'}</div>
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              {isAr ? 'رفع الفواتير والقيود يدوياً بصيغة CSV للتدقيق الفوري.' : 'Upload invoices and ledger entries via CSV for instant forensic audit.'}
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'قنوات سليمة' : 'Healthy Channels'}</div>
+              <div className="stat-tile__value">{healthyCount.toLocaleString()}</div>
+              <div className="stat-tile__hint">{isAr ? 'آخر مزامنة ناجحة' : 'Last synchronization succeeded'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'تحتاج متابعة' : 'Needs Attention'}</div>
+              <div className="stat-tile__value">{attentionCount.toLocaleString()}</div>
+              <div className="stat-tile__hint">{isAr ? 'غير مهيأة أو مزامنتها ناقصة' : 'Not configured or sync incomplete'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'سجلات مزامَنة' : 'Synced Records'}</div>
+              <div className="stat-tile__value">{totalSynced.toLocaleString()}</div>
+              <div className="stat-tile__hint">{isAr ? 'إجمالي مُرجَع من القنوات' : 'Total reported by your connectors'}</div>
             </div>
           </div>
-        </div>
-        <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'rgba(245,158,11,0.08)', border: '1px solid var(--status-warning)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-          <span style={{ fontSize: '18px' }}>⚠️</span>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-warning)', marginBottom: '2px' }}>
-              {isAr ? 'يتطلب إعداد — ERP Connectors' : 'Requires Setup — ERP Connectors'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              {isAr ? 'يتطلب إدخال شهادات API أو mTLS لضمان الاتصال الحي مع SAP/Oracle.' : 'Requires API credentials or mTLS certificates for live SAP/Oracle connection.'}
-            </div>
-          </div>
-        </div>
-        <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-sm)', background: 'rgba(56,189,248,0.06)', border: '1px solid var(--status-info)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-          <span style={{ fontSize: '18px' }}>🚧</span>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--status-info)', marginBottom: '2px' }}>
-              {isAr ? 'قادم قريباً — ZATCA و BI-Directional ERP' : 'Coming Soon — ZATCA & Bi-Directional ERP'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-              {isAr ? 'ربط ZATCA للفواتير الإلكترونية ومزامنة ERP ثنائية الاتجاه في الخارطة لعام 2027.' : 'ZATCA e-invoicing and full bi-directional ERP sync on 2027 roadmap.'}
+
+          <div className="page-filter-bar">
+            <div className="filter-group">
+              <span className="filter-label">{isAr ? 'الحالة:' : 'Status:'}</span>
+              <button onClick={() => setFilter('all')} className={`filter-chip ${filter === 'all' ? 'active' : ''}`}>
+                {isAr ? `الكل (${sources.length})` : `All (${sources.length})`}
+              </button>
+              <button onClick={() => setFilter('healthy')} className={`filter-chip ${filter === 'healthy' ? 'active' : ''}`}>
+                <span className="ml-dot" style={{ color: 'var(--status-success)' }} />
+                {isAr ? `سليمة (${healthyCount})` : `Healthy (${healthyCount})`}
+              </button>
+              <button onClick={() => setFilter('attention')} className={`filter-chip ${filter === 'attention' ? 'active' : ''}`}>
+                <span className="ml-dot" style={{ color: 'var(--status-warning)' }} />
+                {isAr ? `تحتاج متابعة (${attentionCount})` : `Needs attention (${attentionCount})`}
+              </button>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Integration Sources Grid */}
-      <div className="decisions-grid">
-        {sources.map((src) => {
-          const isSyncingThis = syncingId === src.id;
-          const name = isAr ? src.name_ar : src.name_en;
-          const syncStatus = src.last_sync_status || 'NOT_CONFIGURED';
-          const isHealthy = syncStatus === 'HEALTHY';
-          const isDemo = syncStatus === 'DEMO_SYNCED';
-
-          return (
-            <div key={src.id} className="decision-card">
-              <div className="decision-card-header">
-                <div className="badge-row">
-                  <span className={`severity-tag ${isHealthy ? 'optimal' : isDemo ? 'warning' : 'critical'}`}>
-                    {syncStatus.toUpperCase()}
-                  </span>
-                  <span className="category-pill">{src.category}</span>
-                </div>
-                <div className="decision-financial">
-                  <span className="label">{isAr ? 'السجلات المزامنة' : 'Synced Records'}</span>
-                  <span className="amount">{parseInt(src.records_synced_count || 0).toLocaleString()}</span>
-                </div>
-              </div>
-
-              <h3 className="decision-title">{name}</h3>
-
-              <div className="risk-metric-strip">
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'حالة القناة' : 'Channel Health'}</span>
-                  <span className="v" style={{ color: isHealthy ? 'var(--status-success)' : isDemo ? 'var(--accent-base)' : 'var(--status-warning)' }}>
-                    {syncStatus}
-                  </span>
-                </div>
-                <div className="risk-metric-box">
-                  <span className="k">{isAr ? 'بروتوكول الأمان' : 'Auth Protocol'}</span>
-                  <span className="v">{src.auth_type}</span>
-                </div>
-              </div>
-
-              <div className="decision-actions-row">
-                <button
-                  onClick={() => handleSync(src.id, name)}
-                  disabled={isSyncingThis}
-                  className="btn-primary"
-                  style={{ fontSize: '12px', padding: '8px 14px' }}
-                >
-                  <IconRefresh size={13} className={isSyncingThis ? 'spin' : ''} />
-                  <span>
-                    {isSyncingThis
-                      ? (isAr ? 'جارِ فحص الاتصال...' : 'Syncing...')
-                      : (isAr ? 'مزامنة وفحص الاتصال' : 'Sync & Check Health')}
-                  </span>
+          {filtered.length === 0 ? (
+            <EmptyState
+              compact
+              icon={<IconServer size={30} />}
+              title={isAr ? 'لا توجد قنوات بهذه الحالة' : 'No channels match this status'}
+              description={
+                isAr
+                  ? 'اختر حالة أخرى لعرض بقية القنوات المسجلة لمؤسستك.'
+                  : 'Select another status to view the remaining channels registered for your organization.'
+              }
+              action={
+                <button onClick={() => setFilter('all')} className="ml-btn ml-btn--subtle ml-btn--sm">
+                  {isAr ? 'عرض الكل' : 'Show all'}
                 </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* CSV Ingestion Modal */}
-      {isIngestModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-lg)',
-            width: '100%',
-            maxWidth: '650px',
-            padding: '24px'
-          }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' }}>
-              {isAr ? 'استيراد قيود دفتر الأستاذ العام (ERP General Ledger)' : 'Ingest ERP Journal Entries'}
-            </h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              {isAr
-                ? 'الصق بيانات الفواتير والقيود بصيغة CSV المتوافقة مع RFC-4180 (رقم السند، اسم المورد، المبلغ، الوصف) لتنفيذ التدقيق الجنائي الفوري.'
-                : 'Paste RFC-4180 CSV rows (DocNumber, VendorName, Amount, Narrative) to execute instant forensic anomaly detection.'}
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                {isAr ? 'بيانات CSV (RFC-4180)' : 'CSV Data Payload (RFC-4180)'}
-              </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={handleDownloadTemplate}
-                  className="btn-secondary"
-                  style={{ fontSize: '11px', padding: '4px 10px' }}
-                >
-                  <IconDownload size={12} />
-                  <span>{isAr ? 'تحميل نموذج CSV' : 'Download Template'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLoadSample}
-                  className="btn-secondary"
-                  style={{ fontSize: '11px', padding: '4px 10px' }}
-                >
-                  <span>{isAr ? 'إدراج عينة تجريبية' : 'Load Sample'}</span>
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
-              placeholder="DocNumber,VendorName,Amount,Narrative&#10;INV-9041,&quot;Aram Logistics Co., Ltd.&quot;,540000,Q3 Insulated Materials Delivery&#10;INV-9042,Saudi Cement Co.,125000,Concrete Supply Order #42"
-              rows={7}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--bg-surface-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text-primary)',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                resize: 'vertical',
-                outline: 'none',
-                marginBottom: '14px'
-              }}
+              }
             />
+          ) : (
+            <div className="record-list">
+              {filtered.map((src) => {
+                const name = isAr ? src.name_ar || src.name_en || src.id : src.name_en || src.name_ar || src.id;
+                const status = (src.last_sync_status || 'NOT_CONFIGURED').toUpperCase();
+                const isSyncing = syncingId === src.id;
 
-            {ingestError && (
-              <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--status-critical)', fontSize: '12px', color: 'var(--status-critical)', marginBottom: '14px', whiteSpace: 'pre-wrap' }}>
-                {ingestError}
+                return (
+                  <article key={src.id} className="record-row vc-row">
+                    <div className="record-row__main">
+                      <div className="record-row__title">{name}</div>
+                      <div className="record-row__meta">
+                        {[
+                          src.category,
+                          src.auth_type ? `${isAr ? 'المصادقة' : 'Auth'}: ${src.auth_type}` : undefined,
+                          src.last_sync_at
+                            ? `${isAr ? 'آخر مزامنة' : 'Last sync'}: ${new Date(src.last_sync_at).toLocaleString(locale)}`
+                            : isAr
+                              ? 'لم تُنفَّذ مزامنة بعد'
+                              : 'No synchronization yet'
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                    </div>
+
+                    <div className="vc-side-stat">
+                      <span className="vc-side-stat__label">{isAr ? 'سجلات مزامَنة' : 'Synced records'}</span>
+                      <span className="vc-side-stat__value">{(Number(src.records_synced_count) || 0).toLocaleString()}</span>
+                    </div>
+
+                    <div className="record-row__actions">
+                      <span className={`ml-badge ${statusBadge(status)}`}>
+                        <span className="ml-dot" />
+                        {status}
+                      </span>
+                      <button
+                        onClick={() => handleSync(src.id, name)}
+                        disabled={isSyncing}
+                        className="ml-btn ml-btn--primary ml-btn--sm"
+                        aria-label={isAr ? `مزامنة ${name}` : `Sync ${name}`}
+                      >
+                        <IconRefresh size={13} className={isSyncing ? 'spin' : undefined} />
+                        <span>{isSyncing ? (isAr ? 'جارِ المزامنة…' : 'Syncing…') : (isAr ? 'مزامنة' : 'Sync')}</span>
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {isIngestOpen && (
+        <div
+          className="ml-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={isAr ? 'رفع بيانات CSV' : 'Upload CSV data'}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeIngest();
+          }}
+        >
+          <div className="ml-modal">
+            <div className="ml-modal__head">
+              <h2 className="vc-modal-title">{isAr ? 'رفع مجموعة بيانات (CSV)' : 'Upload a dataset (CSV)'}</h2>
+              <p className="vc-modal-desc">
+                {isAr
+                  ? 'الصق صفوف بصيغة CSV متوافقة مع RFC-4180. الأعمدة المطلوبة: مرجع المستند (documentNumber) وقيمة رقمية (amount).'
+                  : 'Paste RFC-4180 compliant rows. Required columns: a reference (documentNumber) and a numeric value (amount).'}
+              </p>
+            </div>
+
+            <div className="ml-modal__body">
+              <div className="ml-field">
+                <label className="ml-label" htmlFor="vc-csv-input">
+                  {isAr ? 'بيانات CSV' : 'CSV data'}
+                </label>
+                <textarea
+                  id="vc-csv-input"
+                  className="ml-textarea vc-textarea--mono"
+                  value={csvText}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  placeholder={'documentNumber,name,amount,postingDate,description'}
+                  rows={7}
+                  spellCheck={false}
+                />
+                <span className="ml-hint">
+                  {isAr
+                    ? 'ترويسة إلزامية ثم صفاً واحداً على الأقل. يتم التحقق من كل صف قبل الإرسال.'
+                    : 'A header row plus at least one data row. Every row is validated before submission.'}
+                </span>
               </div>
-            )}
 
-            {ingestStatus && (
-              <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-surface-elevated)', fontSize: '12px', color: 'var(--accent-base)', marginBottom: '14px' }}>
-                {ingestStatus}
-              </div>
-            )}
+              {ingestError && <div className="ml-error" style={{ whiteSpace: 'pre-wrap' }}>{ingestError}</div>}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                onClick={() => {
-                  setIsIngestModalOpen(false);
-                  setIngestError(null);
-                  setIngestStatus(null);
-                }}
-                className="btn-secondary"
-                style={{ fontSize: '13px', padding: '8px 16px' }}
-              >
-                {isAr ? 'إلغاء' : 'Cancel'}
+              {ingestSuccess && (
+                <div className="alert-feedback-banner success">
+                  <IconCheck size={16} />
+                  <span>{ingestSuccess}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="ml-modal__foot vc-modal-foot">
+              <button type="button" onClick={handleDownloadTemplate} className="ml-btn ml-btn--ghost ml-btn--sm">
+                <IconDownload size={13} />
+                <span>{isAr ? 'تنزيل نموذج' : 'Download template'}</span>
+              </button>
+              <span className="ml-grow" />
+              <button type="button" onClick={closeIngest} className="ml-btn ml-btn--subtle">
+                <IconX size={14} />
+                <span>{isAr ? 'إغلاق' : 'Close'}</span>
               </button>
               <button
+                type="button"
                 onClick={handleIngestSubmit}
-                className="btn-primary"
-                style={{ fontSize: '13px', padding: '8px 18px' }}
+                disabled={ingestBusy}
+                className="ml-btn ml-btn--primary"
               >
-                {isAr ? 'بدء الفحص والتدقيق الجنائي' : 'Start Forensic Anomaly Audit'}
+                {ingestBusy
+                  ? (isAr ? 'جارِ التحقق…' : 'Validating…')
+                  : (isAr ? 'استيراد الصفوف' : 'Import rows')}
               </button>
             </div>
           </div>

@@ -1,7 +1,9 @@
 // MIKHLAFI LABS — Public Website Header
-// Owns brand wordmark, public navigation links, services dropdown, language/theme toggles, and authentication entry points
+// Sticky glass navigation. The engines menu is a quiet index rather than a card
+// wall: each engine is stated once, by name, with its ordinal. No taglines, no
+// icon tiles, no second competing colour — the titles carry the hierarchy.
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LocaleMode, ThemeMode } from '../../types';
 import {
   IconGlobe,
@@ -10,26 +12,19 @@ import {
   IconMenu,
   IconX,
   IconArrowRight,
-  IconChevronDown,
-  IconFileText,
-  IconCheckCircle,
-  IconAlertTriangle,
-  IconTrendingUp,
-  IconTruck,
-  IconUsers,
-  IconBot,
-  IconDatabase
+  IconChevronDown
 } from '../Icons';
 import { ROUTES } from '../../router/routes';
-import { SERVICES_CATALOG } from '../../data/servicesData';
+import { usePublishedEngines } from '../../hooks/publishedEngines';
+import { BrandMark, BrandWordmark } from './BrandMark';
 
 interface WebsiteHeaderProps {
   locale: LocaleMode;
   theme: ThemeMode;
   onToggleLocale: () => void;
   onToggleTheme: () => void;
-  onLaunchPlatform: () => void; // Navigates to /login
-  onRequestDemo: () => void;
+  onLaunchPlatform: () => void;
+  onRequestDemo?: () => void;
   onNavigate?: (path: string) => void;
 }
 
@@ -44,337 +39,232 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const isAr = locale === 'ar';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [servicesOpen, setServicesOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [enginesOpen, setEnginesOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<number | null>(null);
 
-  const handleLinkClick = (e: React.MouseEvent, path: string) => {
-    e.preventDefault();
-    if (onNavigate) {
-      onNavigate(path);
-    } else {
-      window.history.pushState({}, '', path);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }
-    setMobileMenuOpen(false);
-    setServicesOpen(false);
-  };
-
-  // Close dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setServicesOpen(false);
+  const handleLinkClick = useCallback(
+    (e: React.MouseEvent, path: string) => {
+      e.preventDefault();
+      if (onNavigate) onNavigate(path);
+      else {
+        window.history.pushState({}, '', path);
+        window.dispatchEvent(new PopStateEvent('popstate'));
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+      setMobileMenuOpen(false);
+      setEnginesOpen(false);
+    },
+    [onNavigate]
+  );
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 16);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const getServiceIcon = (iconName: string, size = 18) => {
-    switch (iconName) {
-      case 'file-text': return <IconFileText size={size} />;
-      case 'check-circle': return <IconCheckCircle size={size} />;
-      case 'alert-triangle': return <IconAlertTriangle size={size} />;
-      case 'trending-up': return <IconTrendingUp size={size} />;
-      case 'truck': return <IconTruck size={size} />;
-      case 'users': return <IconUsers size={size} />;
-      case 'bot': return <IconBot size={size} />;
-      case 'database': return <IconDatabase size={size} />;
-      default: return <IconFileText size={size} />;
-    }
+  // Close on outside click and on Escape.
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setEnginesOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setEnginesOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // A short close delay keeps the panel from flickering when the pointer travels
+  // between the trigger and the panel.
+  const openEngines = () => {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    setEnginesOpen(true);
+  };
+  const scheduleCloseEngines = () => {
+    if (closeTimer.current) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => setEnginesOpen(false), 120);
   };
 
+  useEffect(() => () => { if (closeTimer.current) window.clearTimeout(closeTimer.current); }, []);
+
+  const navLinkClass = (path: string) => {
+    const current = typeof window === 'undefined' ? '' : window.location.pathname;
+    return `site-nav__link ${current === path || (path !== '/' && current.startsWith(path)) ? 'is-active' : ''}`;
+  };
+
+  const engines = usePublishedEngines();
+
   return (
-    <header className="site-navbar" style={{ position: 'sticky', top: 0, zIndex: 100, backdropFilter: 'blur(20px)', background: 'var(--bg-surface-glass)', borderBottom: '1px solid var(--border-subtle)' }}>
-      <div className="site-container navbar-inner">
-        {/* Brand Wordmark & Emblem */}
+    <header className={`site-header ${scrolled ? 'site-header--scrolled' : ''}`}>
+      <div className="ml-container site-header__inner">
+        {/* Brand */}
         <a
           href={ROUTES.PUBLIC.HOME}
           onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.HOME)}
-          className="brand-emblem"
+          className="site-header__brand"
+          aria-label="MIKHLAFI LABS"
         >
-          <div className="brand-symbol">M</div>
-          <div className="brand-meta">
-            <span className="brand-name">MIKHLAFI LABS</span>
-            <span className="brand-sub">
-              {isAr ? 'أنظمة · ذكاء · ابتكار' : 'INTELLIGENCE · SYSTEMS · INNOVATION'}
-            </span>
-          </div>
+          <BrandMark size={40} glow />
+          <BrandWordmark locale={isAr ? 'ar' : 'en'} size={17} />
         </a>
 
-        {/* Desktop Navigation Links */}
-        <nav className="nav-links" style={{ display: mobileMenuOpen ? 'none' : undefined, alignItems: 'center' }}>
-          {/* Services & Engines Dropdown Menu */}
+        {/* Desktop nav */}
+        <nav className="site-nav" aria-label={isAr ? 'التنقل الرئيسي' : 'Primary'}>
           <div
-            ref={dropdownRef}
-            style={{ position: 'relative' }}
-            onMouseEnter={() => setServicesOpen(true)}
-            onMouseLeave={() => setServicesOpen(false)}
+            ref={menuRef}
+            className="site-nav__menu"
+            onMouseEnter={openEngines}
+            onMouseLeave={scheduleCloseEngines}
           >
             <button
-              onClick={() => setServicesOpen(!servicesOpen)}
-              className="nav-anchor"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: '14px',
-                color: servicesOpen ? 'var(--accent-light)' : 'var(--text-secondary)'
-              }}
+              type="button"
+              onClick={() => setEnginesOpen((open) => !open)}
+              className={`site-nav__link site-nav__trigger ${enginesOpen ? 'is-active' : ''}`}
+              aria-expanded={enginesOpen}
+              aria-haspopup="true"
             >
-              <span>{isAr ? 'الخدمات والمحركات' : 'Services & Engines'}</span>
-              <span style={{ transform: servicesOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', display: 'flex' }}>
-                <IconChevronDown size={14} />
-              </span>
+              <span>{isAr ? 'المحركات' : 'Engines'}</span>
+              <IconChevronDown size={12} />
             </button>
 
-            {/* Mega Dropdown Panel */}
-            {servicesOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  insetInlineStart: '-140px',
-                  width: '640px',
-                  padding: '20px',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 'var(--radius-lg)',
-                  boxShadow: '0 20px 50px rgba(0,0,0,0.6), var(--shadow-glow)',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px',
-                  zIndex: 200,
-                  backdropFilter: 'blur(24px)'
-                }}
-              >
-                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '10px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                    {isAr ? 'محركات الذكاء المؤسسي الحتمية' : 'DETERMINISTIC INTELLIGENCE ENGINES'}
-                  </span>
-                  <a
-                    href={ROUTES.PUBLIC.SOLUTIONS}
-                    onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)}
-                    style={{ fontSize: '12px', color: 'var(--text-tertiary)', textDecoration: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    <span>{isAr ? 'عرض الفهرس الكامل' : 'All Solutions'}</span>
-                    <IconArrowRight size={12} />
-                  </a>
+            <div className={`site-index-anchor ${enginesOpen ? 'is-open' : ''}`}>
+              <div className="site-index" role="menu">
+                <div className="site-index__head">
+                  <span>{isAr ? 'محركات الذكاء التشغيلية' : 'Operational intelligence engines'}</span>
+                  <span className="ml-mono site-index__count">{String(engines.length).padStart(2, '0')}</span>
                 </div>
 
-                {SERVICES_CATALOG.map((svc) => (
-                  <a
-                    key={svc.id}
-                    href={`/services/${svc.id}`}
-                    onClick={(e) => handleLinkClick(e, `/services/${svc.id}`)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px',
-                      padding: '10px 12px',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--bg-surface)',
-                      border: '1px solid var(--border-subtle)',
-                      textDecoration: 'none',
-                      transition: 'all 0.15s ease'
-                    }}
-                    className="dropdown-service-item"
-                  >
-                    <div
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '6px',
-                        background: `${svc.accentColor}18`,
-                        color: svc.accentColor,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}
+                <div className="site-index__grid">
+                  {engines.map((engine, index) => (
+                    <a
+                      key={engine.id}
+                      role="menuitem"
+                      href={`/services/${engine.id}`}
+                      onClick={(e) => handleLinkClick(e, `/services/${engine.id}`)}
+                      className="site-index__item"
+                      style={{ '--i': index } as React.CSSProperties}
                     >
-                      {getServiceIcon(svc.iconName, 16)}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {isAr ? svc.titleAr : svc.titleEn}
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', lineHeight: 1.3 }}>
-                        {isAr ? svc.taglineAr : svc.taglineEn}
+                      <span className="ml-mono site-index__ordinal">
+                        {String(index + 1).padStart(2, '0')}
                       </span>
-                    </div>
-                  </a>
-                ))}
+                      <span className="site-index__title">{isAr ? engine.titleAr : engine.titleEn}</span>
+                      <span className="site-index__chevron" aria-hidden="true">
+                        <IconArrowRight size={12} />
+                      </span>
+                    </a>
+                  ))}
+                </div>
+
+                <a
+                  href={ROUTES.PUBLIC.SOLUTIONS}
+                  onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)}
+                  className="site-index__foot"
+                >
+                  <span>{isAr ? 'كل المحركات والحلول' : 'All engines and solutions'}</span>
+                  <IconArrowRight size={12} />
+                </a>
               </div>
-            )}
+            </div>
           </div>
 
-          <a
-            href={ROUTES.PUBLIC.PLATFORM}
-            onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PLATFORM)}
-            className="nav-anchor"
-          >
-            {isAr ? 'المنظومة' : 'Platform'}
+          <a href={ROUTES.PUBLIC.PLATFORM} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PLATFORM)} className={navLinkClass(ROUTES.PUBLIC.PLATFORM)}>
+            {isAr ? 'المنصة' : 'Platform'}
           </a>
-          <a
-            href={ROUTES.PUBLIC.SOLUTIONS}
-            onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)}
-            className="nav-anchor"
-          >
-            {isAr ? 'الحلول' : 'Solutions'}
+          <a href={ROUTES.PUBLIC.ABOUT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.ABOUT)} className={navLinkClass(ROUTES.PUBLIC.ABOUT)}>
+            {isAr ? 'عنّا' : 'About'}
           </a>
-          <a
-            href={ROUTES.PUBLIC.INDUSTRIES}
-            onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.INDUSTRIES)}
-            className="nav-anchor"
-          >
+          <a href={ROUTES.PUBLIC.INDUSTRIES} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.INDUSTRIES)} className={navLinkClass(ROUTES.PUBLIC.INDUSTRIES)}>
             {isAr ? 'القطاعات' : 'Industries'}
           </a>
-          <a
-            href={ROUTES.PUBLIC.PRICING}
-            onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PRICING)}
-            className="nav-anchor"
-          >
+          <a href={ROUTES.PUBLIC.PRICING} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PRICING)} className={navLinkClass(ROUTES.PUBLIC.PRICING)}>
             {isAr ? 'الباقات' : 'Pricing'}
-          </a>
-          <a
-            href={ROUTES.PUBLIC.ABOUT}
-            onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.ABOUT)}
-            className="nav-anchor"
-          >
-            {isAr ? 'عن الشركة' : 'About'}
-          </a>
-          <a
-            href={ROUTES.PUBLIC.CONTACT}
-            onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.CONTACT)}
-            className="nav-anchor"
-          >
-            {isAr ? 'تواصل معنا' : 'Contact'}
           </a>
         </nav>
 
-        {/* Action Controls */}
-        <div className="nav-actions">
-          {/* Language Selector */}
-          <button
-            onClick={onToggleLocale}
-            className="ctrl-btn"
-            title={isAr ? 'تبديل إلى الإنجليزية' : 'Switch to Arabic'}
-          >
-            <IconGlobe size={14} />
-            <span>{isAr ? 'EN' : 'عربي'}</span>
+        {/* Actions */}
+        <div className="site-header__actions">
+          <button onClick={onToggleLocale} className="ml-icon-btn" title={isAr ? 'English' : 'العربية'} aria-label="Toggle language">
+            <IconGlobe size={15} />
           </button>
 
-          {/* Theme Toggle */}
-          <button
-            onClick={onToggleTheme}
-            className="ctrl-btn"
-            title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-          >
-            {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
+          <button onClick={onToggleTheme} className="ml-icon-btn" title="Theme" aria-label="Toggle theme">
+            {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
           </button>
 
-          {/* Platform Owner / Admin Link */}
           <button
-            onClick={(e) => handleLinkClick(e, ROUTES.ADMIN.OVERVIEW)}
-            className="ctrl-btn"
-            style={{
-              fontSize: '11px',
-              padding: '6px 10px',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              background: 'rgba(239, 68, 68, 0.1)',
-              color: '#f87171',
-              fontWeight: 700
-            }}
-            title={isAr ? 'غرفة عمليات إدارة المنصة (مالك المشروع)' : 'Platform Owner Control Room'}
+            onClick={onRequestDemo || onLaunchPlatform}
+            className="ml-btn ml-btn--ghost ml-btn--sm site-header__desktop-only"
           >
-            <span>🛡️</span>
-            <span>{isAr ? 'إدارة المنصة' : 'Admin'}</span>
+            {isAr ? 'اطلب عرضاً' : 'Request demo'}
           </button>
 
-          {/* Sign In CTA */}
-          <button
-            onClick={onLaunchPlatform}
-            className="btn-secondary"
-            style={{ fontSize: '12px', padding: '7px 14px' }}
-          >
-            <span>{isAr ? 'دخول العملاء' : 'Sign In'}</span>
-          </button>
-
-          {/* Request Demo CTA */}
-          <button
-            onClick={onRequestDemo}
-            className="btn-primary"
-            style={{ fontSize: '12px', padding: '7px 14px' }}
-          >
-            <span>{isAr ? 'طلب عرض مخصص' : 'Request Demo'}</span>
+          <button onClick={onLaunchPlatform} className="ml-btn ml-btn--primary ml-btn--sm site-header__desktop-only">
+            <span>{isAr ? 'دخول المنصة' : 'Sign in'}</span>
             <IconArrowRight size={13} />
           </button>
 
-          {/* Mobile Hamburger Toggle */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="ctrl-btn mobile-menu-toggle"
-            style={{ display: 'none' }}
+            className="ml-icon-btn site-nav-toggle"
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
           >
             {mobileMenuOpen ? <IconX size={18} /> : <IconMenu size={18} />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Drawer Navigation */}
+      {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div
-          style={{
-            background: 'var(--bg-surface-elevated)',
-            borderBottom: '1px solid var(--border-default)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}
-        >
-          <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--accent-light)', textTransform: 'uppercase' }}>
-            {isAr ? 'الخدمات والمحركات (8)' : 'SERVICES & ENGINES (8)'}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
-            {SERVICES_CATALOG.map((svc) => (
+        <div className="site-mobile-menu">
+          <a href={ROUTES.PUBLIC.PLATFORM} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PLATFORM)} className="site-mobile-menu__link">
+            {isAr ? 'المنصة' : 'Platform'}
+          </a>
+          <a href={ROUTES.PUBLIC.SOLUTIONS} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)} className="site-mobile-menu__link">
+            {isAr ? 'المحركات والحلول' : 'Engines & Solutions'}
+          </a>
+          <a href={ROUTES.PUBLIC.ABOUT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.ABOUT)} className="site-mobile-menu__link">
+            {isAr ? 'عنّا' : 'About'}
+          </a>
+          <a href={ROUTES.PUBLIC.INDUSTRIES} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.INDUSTRIES)} className="site-mobile-menu__link">
+            {isAr ? 'القطاعات' : 'Industries'}
+          </a>
+          <a href={ROUTES.PUBLIC.PRICING} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PRICING)} className="site-mobile-menu__link">
+            {isAr ? 'الباقات' : 'Pricing'}
+          </a>
+          <a href={ROUTES.PUBLIC.CONTACT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.CONTACT)} className="site-mobile-menu__link">
+            {isAr ? 'تواصل معنا' : 'Contact'}
+          </a>
+
+          <div className="site-mobile-menu__engines">
+            {engines.map((engine, index) => (
               <a
-                key={svc.id}
-                href={`/services/${svc.id}`}
-                onClick={(e) => handleLinkClick(e, `/services/${svc.id}`)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 10px',
-                  background: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-xs)',
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: 'var(--text-primary)',
-                  textDecoration: 'none'
-                }}
+                key={engine.id}
+                href={`/services/${engine.id}`}
+                onClick={(e) => handleLinkClick(e, `/services/${engine.id}`)}
+                className="site-index__item"
               >
-                <span style={{ color: svc.accentColor }}>●</span>
-                <span>{isAr ? svc.titleAr : svc.titleEn}</span>
+                <span className="ml-mono site-index__ordinal">{String(index + 1).padStart(2, '0')}</span>
+                <span className="site-index__title">{isAr ? engine.titleAr : engine.titleEn}</span>
               </a>
             ))}
           </div>
 
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <a href={ROUTES.PUBLIC.PLATFORM} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PLATFORM)} style={{ fontSize: '14px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>{isAr ? 'المنظومة' : 'Platform'}</a>
-            <a href={ROUTES.PUBLIC.SOLUTIONS} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)} style={{ fontSize: '14px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>{isAr ? 'الحلول' : 'Solutions'}</a>
-            <a href={ROUTES.PUBLIC.INDUSTRIES} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.INDUSTRIES)} style={{ fontSize: '14px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>{isAr ? 'القطاعات' : 'Industries'}</a>
-            <a href={ROUTES.PUBLIC.PRICING} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PRICING)} style={{ fontSize: '14px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>{isAr ? 'الباقات' : 'Pricing'}</a>
-            <a href={ROUTES.PUBLIC.ABOUT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.ABOUT)} style={{ fontSize: '14px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>{isAr ? 'عن الشركة' : 'About'}</a>
-            <a href={ROUTES.PUBLIC.CONTACT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.CONTACT)} style={{ fontSize: '14px', color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 600 }}>{isAr ? 'تواصل معنا' : 'Contact'}</a>
+          <div className="site-mobile-menu__cta">
+            <button onClick={onLaunchPlatform} className="ml-btn ml-btn--primary ml-btn--block">
+              {isAr ? 'دخول المنصة' : 'Sign in'}
+            </button>
+            <button onClick={() => { setMobileMenuOpen(false); onRequestDemo?.(); }} className="ml-btn ml-btn--ghost ml-btn--block">
+              {isAr ? 'اطلب عرضاً' : 'Request demo'}
+            </button>
           </div>
         </div>
       )}

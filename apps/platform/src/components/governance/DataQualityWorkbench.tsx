@@ -4,6 +4,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { LocaleMode } from '../../types';
+import { SandboxNotice } from '../common/SandboxNotice';
 import {
   PRESET_DATA_QUALITY_SCENARIOS,
   DataQualityAnomaly,
@@ -167,6 +168,8 @@ export const DataQualityWorkbench: React.FC<DataQualityWorkbenchProps> = ({
         fontFamily: 'inherit'
       }}
     >
+      <SandboxNotice locale={locale} variant={isEmbeddedInPublicPage ? 'public' : 'app'} />
+
       {/* ── Top Bar: Header & Actions ─────────────────────────────────────────── */}
       <div
         style={{

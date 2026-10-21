@@ -63,7 +63,7 @@ test.before(async () => {
     method: 'POST',
     body: {
       email: 'saad@mikhlafi-labs.com',
-      password: 'MikhlafiSecure2026!'
+      password: 'Mikhlafi@2026'
     }
   });
   assert.equal(adminLogin.status, 200);

@@ -115,8 +115,21 @@ export async function getDb() {
     }
     console.log('[Database] Connected to external PostgreSQL at', databaseUrl.replace(/:[^:@]+@/, ':****@'));
   } else {
-    // In-process PostgreSQL 16 engine via PGlite
-    const dataDir = process.env.PGLITE_DATA_DIR;
+    // In-process PostgreSQL 16 engine via PGlite.
+    // A configured data directory makes the database persist across restarts, which is
+    // what the local demo environment wants. A test run must never read or mutate that
+    // persistent database, so the disposable engine is always used under `node --test`
+    // regardless of what the environment file says.
+    const runningUnderTestRunner =
+      process.env.NODE_ENV === 'test' ||
+      (process.env.NODE_TEST_CONTEXT !== undefined && process.env.NODE_TEST_CONTEXT !== '');
+    const dataDir = runningUnderTestRunner ? undefined : process.env.PGLITE_DATA_DIR;
+
+    if (dataDir) {
+      // PGlite creates the leaf directory itself but not its parents, and the parent
+      // does not exist yet on a fresh checkout because data directories are ignored.
+      fs.mkdirSync(path.dirname(path.resolve(dataDir)), { recursive: true });
+    }
     pgliteInstance = dataDir ? new PGlite(dataDir) : new PGlite();
     await pgliteInstance.waitReady;
     console.log('[Database] Initialized in-process PostgreSQL 16 engine (PGlite)');

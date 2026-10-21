@@ -1,77 +1,153 @@
-import React, { useState, useEffect } from 'react';
+﻿// MIKHLAFI LABS — Organization, Branches & Access
+// Members, branches and role data are loaded exclusively from the authenticated
+// backend. No placeholder members or branches are ever rendered.
+
+import React, { useCallback, useEffect, useState } from 'react';
 import { LocaleMode } from '../../types';
-import { IconOrganization, IconCheck, IconPlus } from '../Icons';
+import { IconOrganization, IconUsers, IconPlus, IconCheck, IconAlertTriangle, IconShield, IconRefresh } from '../Icons';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import { EmptyState } from '../common/EmptyState';
+import { PageHeader } from '../common/PageHeader';
 
 interface OrganizationViewProps {
   locale: LocaleMode;
+}
+
+interface OrgProfile {
+  id: string;
+  slug?: string;
+  name_en?: string;
+  name_ar?: string;
+  industry_type?: string;
+  default_currency?: string;
+  timezone?: string;
+  status?: string;
+}
+
+interface OrgSnapshot {
+  organization: OrgProfile | null;
+  userRole: string;
+  permissions: string[];
+  branchCount: number;
+  memberCount: number;
+}
+
+interface MemberRecord {
+  membership_id: string;
+  user_id: string;
+  email: string;
+  name_en?: string;
+  name_ar?: string;
+  role: string;
+  status: string;
+  branch_name?: string | null;
+}
+
+interface BranchRecord {
+  id: string;
+  code?: string;
+  name_en?: string;
+  name_ar?: string;
+  city?: string;
+  is_main_hq?: boolean;
+  status?: string;
+}
+
+interface Feedback {
+  message: string;
+  type: 'success' | 'error';
 }
 
 export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) => {
   const isAr = locale === 'ar';
   const { isAuthenticated, tenant, openAuthModal } = useAuth();
 
-  const fallbackMembers = [
-    {
-      id: 'm-demo-1',
-      user_id: 'u-1',
-      name: 'سعد المخلافي',
-      email: 'saad@mikhlafi-labs.com',
-      role: 'org_owner',
-      branch_name: 'الرياض — المقر الرئيسي',
-      status: 'active'
-    },
-    {
-      id: 'm-demo-2',
-      user_id: 'u-2',
-      name: 'فهد السبيعي',
-      email: 'f.subaie@holding.sa',
-      role: 'org_admin',
-      branch_name: 'الرياض — المقر الرئيسي',
-      status: 'active'
-    }
-  ];
+  const [snapshot, setSnapshot] = useState<OrgSnapshot | null>(null);
+  const [members, setMembers] = useState<MemberRecord[]>([]);
+  const [branches, setBranches] = useState<BranchRecord[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const fallbackBranches = [
-    { id: 'b-demo-1', name: 'المقر الرئيسي — الرياض', code: 'RUH-HQ', status: 'active' },
-    { id: 'b-demo-2', name: 'مركز العمليات اللوجستية — جدة', code: 'JED-LOG', status: 'active' }
-  ];
-
-  const [members, setMembers] = useState<any[]>(fallbackMembers);
-  const [branches, setBranches] = useState<any[]>(fallbackBranches);
-  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
-
-  // Invite Modal State
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('viewer');
-  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  // Invite member modal
+  const [isInviteOpen, setIsInviteOpen] = useState<boolean>(false);
+  const [inviteEmail, setInviteEmail] = useState<string>('');
+  const [inviteRole, setInviteRole] = useState<string>('viewer');
+  const [inviteBusy, setInviteBusy] = useState<boolean>(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    if (isAuthenticated) {
-      Promise.all([api.getBranches(), api.getMembers()])
-        .then(([bRes, mRes]) => {
-          if (isMounted) {
-            setBranches(bRes.branches || []);
-            setMembers(mRes.members || []);
-          }
-        })
-        .catch(() => {
-          // Fall back gracefully if error
-        });
-    } else {
-      setBranches(fallbackBranches);
-      setMembers(fallbackMembers);
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [isAuthenticated, tenant?.organizationId]);
+  // Create branch modal
+  const [isBranchOpen, setIsBranchOpen] = useState<boolean>(false);
+  const [branchNameEn, setBranchNameEn] = useState<string>('');
+  const [branchNameAr, setBranchNameAr] = useState<string>('');
+  const [branchCode, setBranchCode] = useState<string>('');
+  const [branchCity, setBranchCity] = useState<string>('');
+  const [branchBusy, setBranchBusy] = useState<boolean>(false);
+  const [branchError, setBranchError] = useState<string | null>(null);
 
-  const openInviteModal = () => {
+  const loadAll = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSnapshot(null);
+      setMembers([]);
+      setBranches([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const [orgRes, memberRes, branchRes] = await Promise.all([
+        api.getCurrentOrganization(),
+        api.getMembers(),
+        api.getBranches()
+      ]);
+      setSnapshot({
+        organization: (orgRes.organization as OrgProfile) || null,
+        userRole: orgRes.userRole,
+        permissions: Array.isArray(orgRes.permissions) ? orgRes.permissions : [],
+        branchCount: orgRes.branchCount,
+        memberCount: orgRes.memberCount
+      });
+      setMembers(Array.isArray(memberRes.members) ? memberRes.members : []);
+      setBranches(Array.isArray(branchRes.branches) ? branchRes.branches : []);
+    } catch (err) {
+      setSnapshot(null);
+      setMembers([]);
+      setBranches([]);
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : (isAr ? 'تعذر جلب بيانات المؤسسة.' : 'Unable to load organization data.')
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated, isAr]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll, tenant?.organizationId]);
+
+  const roleLabel = (role: string): string => {
+    switch (role) {
+      case 'org_owner':
+        return isAr ? 'مالك المؤسسة' : 'Organization Owner';
+      case 'org_admin':
+        return isAr ? 'مسؤول المؤسسة' : 'Administrator';
+      case 'manager':
+        return isAr ? 'مدير' : 'Manager';
+      case 'analyst':
+        return isAr ? 'محلل' : 'Analyst';
+      case 'viewer':
+        return isAr ? 'مستطلع' : 'Viewer';
+      default:
+        return role || '—';
+    }
+  };
+
+  const openInvite = () => {
     if (!isAuthenticated) {
       openAuthModal();
       return;
@@ -79,191 +155,410 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
     setInviteEmail('');
     setInviteRole('viewer');
     setInviteError(null);
-    setIsInviteModalOpen(true);
+    setIsInviteOpen(true);
   };
 
-  const handleSendInvite = async (e: React.FormEvent) => {
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
       setInviteError(isAr ? 'يرجى إدخال البريد الإلكتروني.' : 'Email is required.');
       return;
     }
 
-    setInviteSubmitting(true);
+    setInviteBusy(true);
     setInviteError(null);
-
     try {
-      await api.inviteMember(inviteEmail.trim().toLowerCase(), inviteRole);
-      const mRes = await api.getMembers();
-      setMembers(mRes.members || []);
-      setIsInviteModalOpen(false);
-      setInviteFeedback(
-        isAr
-          ? `تم اعتماد دعوة ${inviteEmail} بصلاحية ${inviteRole.toUpperCase()} بنجاح.`
-          : `Successfully invited ${inviteEmail} with ${inviteRole.toUpperCase()} role.`
+      await api.inviteMember(email, inviteRole);
+      const memberRes = await api.getMembers();
+      setMembers(Array.isArray(memberRes.members) ? memberRes.members : []);
+      setIsInviteOpen(false);
+      setFeedback({
+        type: 'success',
+        message: isAr
+          ? `تمت دعوة ${email} بصلاحية "${roleLabel(inviteRole)}".`
+          : `Invited ${email} with the "${roleLabel(inviteRole)}" role.`
+      });
+      setTimeout(() => setFeedback(null), 5000);
+    } catch (err) {
+      setInviteError(
+        err instanceof Error && err.message
+          ? err.message
+          : (isAr ? 'تعذر إرسال الدعوة.' : 'The invitation could not be sent.')
       );
-      setTimeout(() => setInviteFeedback(null), 5000);
-    } catch (err: any) {
-      setInviteError(err.message || (isAr ? 'فشل إرسال الدعوة. تأكد من الصلاحيات.' : 'Failed to send invitation.'));
     } finally {
-      setInviteSubmitting(false);
+      setInviteBusy(false);
     }
   };
 
+  const openBranchModal = () => {
+    if (!isAuthenticated) {
+      openAuthModal();
+      return;
+    }
+    setBranchNameEn('');
+    setBranchNameAr('');
+    setBranchCode('');
+    setBranchCity('');
+    setBranchError(null);
+    setIsBranchOpen(true);
+  };
+
+  const handleCreateBranch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!branchNameEn.trim()) {
+      setBranchError(isAr ? 'اسم الفرع (بالإنجليزية) مطلوب.' : 'Branch name (English) is required.');
+      return;
+    }
+
+    setBranchBusy(true);
+    setBranchError(null);
+    try {
+      const res = await api.createBranch({
+        nameEn: branchNameEn.trim(),
+        nameAr: branchNameAr.trim() || undefined,
+        code: branchCode.trim() || undefined,
+        city: branchCity.trim() || undefined
+      });
+      if (res.success && res.branch) {
+        const branchRes = await api.getBranches();
+        setBranches(Array.isArray(branchRes.branches) ? branchRes.branches : []);
+        setIsBranchOpen(false);
+        setFeedback({
+          type: 'success',
+          message: isAr
+            ? `تم إنشاء الفرع (${branchNameEn.trim()}) وتسجيله ضمن مؤسستك.`
+            : `Branch (${branchNameEn.trim()}) created and registered for your organization.`
+        });
+        setTimeout(() => setFeedback(null), 5000);
+      } else {
+        setBranchError(
+          isAr ? 'تعذر إنشاء الفرع.' : 'The branch could not be created.'
+        );
+      }
+    } catch (err) {
+      setBranchError(
+        err instanceof Error && err.message
+          ? err.message
+          : (isAr ? 'تعذر إنشاء الفرع.' : 'The branch could not be created.')
+      );
+    } finally {
+      setBranchBusy(false);
+    }
+  };
+
+  const orgName = snapshot?.organization
+    ? (isAr
+        ? snapshot.organization.name_ar || snapshot.organization.name_en
+        : snapshot.organization.name_en || snapshot.organization.name_ar)
+    : tenant
+      ? (isAr ? tenant.orgNameAr || tenant.orgNameEn : tenant.orgNameEn || tenant.orgNameAr)
+      : '';
+
   return (
     <div className="platform-page-container">
-      {/* Page Header */}
-      <div className="page-header-row">
-        <div>
-          <div className="page-breadcrumb">
-            <span>{isAr ? 'المنصة' : 'Platform'}</span>
-            <span>/</span>
-            <span>{isAr ? 'الإدارة والسيادة' : 'Administration'}</span>
-            <span>/</span>
-            <span className="current">{isAr ? 'المؤسسة والفروع والمستخدمين' : 'Organization & RBAC'}</span>
-          </div>
-          <h1 className="page-title">
-            <IconOrganization size={24} />
-            <span>{isAr ? 'إدارة المؤسسة وهيكل الفروع والصلاحيات (RBAC)' : 'Multi-Branch Hierarchy & Role-Based Permissions'}</span>
-          </h1>
-          <p className="page-subtitle">
-            {isAr
-              ? 'إدارة الحسابات القيادية، عزل فروع المؤسسة بصلاحيات وصول صارمة، وحماية خصوصية السجلات المالية.'
-              : 'Enterprise multi-branch segmentation, role-based access control, and tenant governance.'}
-          </p>
-        </div>
+      <PageHeader
+        locale={locale}
+        icon={<IconOrganization size={22} />}
+        breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'الإدارة والسيادة' : 'Administration']}
+        title={isAr ? 'المؤسسة والفروع والصلاحيات' : 'Organization, Branches & Access'}
+        subtitle={
+          isAr
+            ? 'إدارة بنية مؤسستك وهرمية فروعها، ومن يملك الصلاحية لعرض السجلات أو تعديلها.'
+            : 'Manage your organization’s structure, its branch hierarchy, and who is authorized to view or change its records.'
+        }
+        action={
+          <button onClick={openInvite} className="ml-btn ml-btn--primary ml-btn--sm">
+            <IconPlus size={14} />
+            <span>{isAr ? 'دعوة عضو' : 'Invite member'}</span>
+          </button>
+        }
+      />
 
-        <button onClick={openInviteModal} className="btn-primary" style={{ fontSize: '12px', padding: '9px 14px' }}>
-          <IconPlus size={14} />
-          <span>{isAr ? 'دعوة قيادي جديد' : 'Invite Executive Member'}</span>
-        </button>
-      </div>
-
-      {inviteFeedback && (
-        <div className="alert-feedback-banner success">
-          <IconCheck size={16} />
-          <span>{inviteFeedback}</span>
+      {feedback && (
+        <div className={`alert-feedback-banner ${feedback.type === 'error' ? 'error' : 'success'}`}>
+          {feedback.type === 'error' ? <IconAlertTriangle size={16} /> : <IconCheck size={16} />}
+          <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* Invite Member Modal */}
-      {isInviteModalOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-lg)',
-            width: '100%',
-            maxWidth: '520px',
-            padding: '24px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
-          }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px', color: 'var(--text-primary)' }}>
-              {isAr ? 'دعوة عضو قيادي أو مدقق جديد' : 'Invite Executive Team Member'}
-            </h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
+      {!isAuthenticated ? (
+        <EmptyState
+          icon={<IconOrganization size={30} />}
+          title={isAr ? 'سجّل الدخول لإدارة مؤسستك' : 'Sign in to manage your organization'}
+          description={
+            isAr
+              ? 'تُسترجع الفروع والأعضاء والصلاحيات مباشرة من مساحة عمل مؤسستك بعد تسجيل الدخول.'
+              : 'Branches, members and permissions are loaded directly from your organization workspace after signing in.'
+          }
+          action={
+            <button onClick={openAuthModal} className="ml-btn ml-btn--primary">
+              {isAr ? 'تسجيل الدخول' : 'Sign In'}
+            </button>
+          }
+        />
+      ) : loading ? (
+        <>
+          <div className="skeleton-grid">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skeleton-card" />
+            ))}
+          </div>
+          <div className="vc-skeleton-list">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="vc-skeleton-row" />
+            ))}
+          </div>
+        </>
+      ) : error ? (
+        <EmptyState
+          icon={<IconAlertTriangle size={30} />}
+          title={isAr ? 'تعذر جلب بيانات المؤسسة' : 'Unable to load organization data'}
+          description={error}
+          action={
+            <button onClick={() => loadAll()} className="ml-btn ml-btn--primary">
+              <IconRefresh size={14} />
+              <span>{isAr ? 'إعادة المحاولة' : 'Retry'}</span>
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <div className="alert-feedback-banner info">
+            <IconShield size={16} />
+            <span>
               {isAr
-                ? 'سيتم منح العضو حق الوصول المشروط إلى سجلات هذه المؤسسة فقط وفق نموذج عزل المستأجرين الصارم.'
-                : 'The invited member will receive scoped access exclusively to this tenant organization environment.'}
-            </p>
+                ? `كل السجلات أدناه محصورة في مؤسسة (${orgName}) فقط، ولا تشمل أي مؤسسة أخرى.`
+                : `All records below are scoped to (${orgName}) only and never include any other organization.`}
+            </span>
+          </div>
 
-            <form onSubmit={handleSendInvite}>
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                  {isAr ? 'البريد الإلكتروني المهني' : 'Corporate Email Address'}
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="executive@enterprise.com"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: 'var(--bg-surface-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    outline: 'none'
-                  }}
+          <div className="stat-grid">
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'دورك' : 'Your Role'}</div>
+              <div className="stat-tile__value">{(snapshot?.userRole || '—').toUpperCase()}</div>
+              <div className="stat-tile__hint">{isAr ? 'في هذه المؤسسة' : 'In this organization'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'الأعضاء' : 'Members'}</div>
+              <div className="stat-tile__value">
+                {(snapshot?.memberCount ?? members.length).toLocaleString()}
+              </div>
+              <div className="stat-tile__hint">{isAr ? 'عضوية نشطة' : 'Active memberships'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'الفروع' : 'Branches'}</div>
+              <div className="stat-tile__value">
+                {(snapshot?.branchCount ?? branches.length).toLocaleString()}
+              </div>
+              <div className="stat-tile__hint">{isAr ? 'ضمن هذه المؤسسة' : 'Within this organization'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="stat-tile__label">{isAr ? 'الصلاحيات' : 'Permissions'}</div>
+              <div className="stat-tile__value">{(snapshot?.permissions.length ?? 0).toLocaleString()}</div>
+              <div className="stat-tile__hint">{isAr ? 'مسندة لحسابك' : 'Granted to your account'}</div>
+            </div>
+          </div>
+
+          {/* Branches */}
+          <section className="ml-panel">
+            <div className="ml-panel__head">
+              <div className="vc-title-group">
+                <div className="vc-title-group__title">{isAr ? 'الفروع' : 'Branches'}</div>
+                <div className="vc-title-group__meta">
+                  {isAr ? `${branches.length} فرع مسجل` : `${branches.length} registered`}
+                </div>
+              </div>
+              <button onClick={openBranchModal} className="ml-btn ml-btn--subtle ml-btn--sm">
+                <IconPlus size={13} />
+                <span>{isAr ? 'إضافة فرع' : 'Add branch'}</span>
+              </button>
+            </div>
+            <div className="ml-panel__body">
+              {branches.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<IconOrganization size={30} />}
+                  title={isAr ? 'لا توجد فروع مسجلة' : 'No branches registered'}
+                  description={
+                    isAr
+                      ? 'تظهر الفروع هنا فور إنشائها، وتُستخدم لعزل السجلات والصلاحيات لكل موقع تشغيلي.'
+                      : 'Branches appear here as soon as they are created, and are used to separate records and permissions per operating location.'
+                  }
+                  action={
+                    <button onClick={openBranchModal} className="ml-btn ml-btn--primary ml-btn--sm">
+                      <IconPlus size={13} />
+                      <span>{isAr ? 'إضافة فرع' : 'Add branch'}</span>
+                    </button>
+                  }
                 />
-              </div>
-
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                  {isAr ? 'الدور ونطاق الصلاحيات (RBAC)' : 'Role & Permission Scope'}
-                </label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: 'var(--bg-surface-elevated)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-sm)',
-                    color: 'var(--text-primary)',
-                    fontSize: '13px',
-                    outline: 'none'
-                  }}
-                >
-                  <option value="viewer">
-                    {isAr ? 'مستطلع / مدقق خارجي (Viewer — استعراض فقط)' : 'Viewer (Read-only auditor)'}
-                  </option>
-                  <option value="analyst">
-                    {isAr ? 'محلل مالي وتشغيلي (Analyst — تدقيق ورصد مؤشرات)' : 'Analyst (Audit & financial forensics)'}
-                  </option>
-                  <option value="manager">
-                    {isAr ? 'مدير تنفيذي (Manager — اعتماد قرارات وتوجيه)' : 'Manager (Decisions & operations)'}
-                  </option>
-                  <option value="org_admin">
-                    {isAr ? 'مسؤول مؤسسي (Admin — إدارة الأعضاء والإعدادات)' : 'Administrator (Full organization control)'}
-                  </option>
-                </select>
-              </div>
-
-              {inviteError && (
-                <div style={{
-                  padding: '10px 12px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid var(--status-critical)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--status-critical)',
-                  fontSize: '12px',
-                  marginBottom: '14px'
-                }}>
-                  {inviteError}
+              ) : (
+                <div className="record-list">
+                  {branches.map((b) => (
+                    <article key={b.id} className="record-row vc-row">
+                      <div className="record-row__main">
+                        <div className="record-row__title">
+                          {isAr ? b.name_ar || b.name_en || b.id : b.name_en || b.name_ar || b.id}
+                        </div>
+                        <div className="record-row__meta">
+                          {[
+                            b.city,
+                            b.is_main_hq ? (isAr ? 'المقر الرئيسي' : 'Headquarters') : undefined
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                      </div>
+                      <div className="record-row__actions">
+                        {b.code && <span className="ml-badge">{b.code}</span>}
+                        <span className={`ml-badge ${(b.status || 'active') === 'active' ? 'ml-badge--success' : ''}`}>
+                          <span className="ml-dot" />
+                          {(b.status || 'active').toUpperCase()}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
                 </div>
               )}
+            </div>
+          </section>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
+          {/* Members */}
+          <section className="ml-panel">
+            <div className="ml-panel__head">
+              <div className="vc-title-group">
+                <div className="vc-title-group__title">{isAr ? 'الأعضاء والصلاحيات' : 'Members & access'}</div>
+                <div className="vc-title-group__meta">
+                  {isAr ? `${members.length} عضو` : `${members.length} member${members.length === 1 ? '' : 's'}`}
+                </div>
+              </div>
+              <button onClick={openInvite} className="ml-btn ml-btn--primary ml-btn--sm">
+                <IconUsers size={13} />
+                <span>{isAr ? 'دعوة عضو' : 'Invite member'}</span>
+              </button>
+            </div>
+            <div className="ml-panel__body">
+              {members.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={<IconUsers size={30} />}
+                  title={isAr ? 'لا يوجد أعضاء بعد' : 'No members yet'}
+                  description={
+                    isAr
+                      ? 'يظهر العضو هنا بعد قبول دعوته، مع دوره ونطاق صلاحياته داخل هذه المؤسسة.'
+                      : 'A member appears here once their invitation is accepted, together with their role and scope inside this organization.'
+                  }
+                  action={
+                    <button onClick={openInvite} className="ml-btn ml-btn--primary ml-btn--sm">
+                      <IconPlus size={13} />
+                      <span>{isAr ? 'دعوة عضو' : 'Invite member'}</span>
+                    </button>
+                  }
+                />
+              ) : (
+                <div className="record-list">
+                  {members.map((m) => (
+                    <article key={m.membership_id || m.user_id} className="record-row vc-row">
+                      <div className="record-row__main">
+                        <div className="record-row__title">
+                          {isAr ? m.name_ar || m.name_en || m.email : m.name_en || m.name_ar || m.email}
+                        </div>
+                        <div className="record-row__meta">
+                          {[m.email, m.branch_name || undefined].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                      <div className="record-row__actions">
+                        <span className="ml-badge ml-badge--accent">{roleLabel(m.role)}</span>
+                        <span className={`ml-badge ${(m.status || 'active') === 'active' ? 'ml-badge--success' : ''}`}>
+                          <span className="ml-dot" />
+                          {(m.status || 'active').toUpperCase()}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
+      {/* Invite member modal */}
+      {isInviteOpen && (
+        <div
+          className="ml-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={isAr ? 'دعوة عضو' : 'Invite a member'}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !inviteBusy) setIsInviteOpen(false);
+          }}
+        >
+          <div className="ml-modal">
+            <div className="ml-modal__head">
+              <h2 className="vc-modal-title">{isAr ? 'دعوة عضو إلى المؤسسة' : 'Invite a member to the organization'}</h2>
+              <p className="vc-modal-desc">
+                {isAr
+                  ? 'يحصل العضو على وصول مقيّد بسجلات هذه المؤسسة فقط وفق الدور المحدد أدناه.'
+                  : 'The member receives access limited to this organization’s records only, according to the role selected below.'}
+              </p>
+            </div>
+
+            <form onSubmit={handleInvite}>
+              <div className="ml-modal__body">
+                <div className="ml-field">
+                  <label className="ml-label" htmlFor="vc-invite-email">
+                    {isAr ? 'البريد الإلكتروني' : 'Email address'}
+                  </label>
+                  <input
+                    id="vc-invite-email"
+                    type="email"
+                    required
+                    className="ml-input"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="name@organization.com"
+                    autoComplete="email"
+                  />
+                </div>
+
+                <div className="ml-field">
+                  <label className="ml-label" htmlFor="vc-invite-role">
+                    {isAr ? 'الدور ونطاق الصلاحيات' : 'Role & permission scope'}
+                  </label>
+                  <select
+                    id="vc-invite-role"
+                    className="ml-select"
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                  >
+                    <option value="viewer">{isAr ? 'مستطلع (عرض فقط)' : 'Viewer (read-only)'}</option>
+                    <option value="analyst">{isAr ? 'محلل (تدقيق ورصد)' : 'Analyst (review & monitoring)'}</option>
+                    <option value="manager">{isAr ? 'مدير (اعتماد الإجراءات)' : 'Manager (approvals & actions)'}</option>
+                    <option value="org_admin">{isAr ? 'مسؤول المؤسسة (إدارة كاملة)' : 'Administrator (full control)'}</option>
+                  </select>
+                  <span className="ml-hint">
+                    {isAr
+                      ? 'لا يمكن لغير مالك المؤسسة منح دور "مالك المؤسسة".'
+                      : 'Only the organization owner can grant the "Organization Owner" role.'}
+                  </span>
+                </div>
+
+                {inviteError && <div className="ml-error">{inviteError}</div>}
+              </div>
+
+              <div className="ml-modal__foot vc-modal-foot">
                 <button
                   type="button"
-                  onClick={() => setIsInviteModalOpen(false)}
-                  disabled={inviteSubmitting}
-                  className="btn-secondary"
-                  style={{ fontSize: '12px', padding: '8px 16px' }}
+                  onClick={() => setIsInviteOpen(false)}
+                  disabled={inviteBusy}
+                  className="ml-btn ml-btn--subtle"
                 >
-                  <span>{isAr ? 'إلغاء' : 'Cancel'}</span>
+                  {isAr ? 'إلغاء' : 'Cancel'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={inviteSubmitting}
-                  className="btn-primary"
-                  style={{ fontSize: '12px', padding: '8px 18px' }}
-                >
-                  <span>{inviteSubmitting ? (isAr ? 'جارِ الإرسال...' : 'Sending...') : (isAr ? 'إرسال وتفعيل' : 'Send Invitation')}</span>
+                <button type="submit" disabled={inviteBusy} className="ml-btn ml-btn--primary">
+                  <IconCheck size={14} />
+                  <span>{inviteBusy ? (isAr ? 'جارِ الإرسال…' : 'Sending…') : (isAr ? 'إرسال الدعوة' : 'Send invitation')}</span>
                 </button>
               </div>
             </form>
@@ -271,98 +566,114 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
         </div>
       )}
 
-      {/* Tenant Isolation Banner */}
-      {isAuthenticated ? (
-        <div className="honest-alert" style={{ borderColor: 'var(--status-success)', background: 'rgba(16, 185, 129, 0.08)' }}>
-          <span style={{ fontSize: '20px' }}>🏛️</span>
-          <div style={{ flex: 1 }}>
-            <strong style={{ color: 'var(--status-success)' }}>
-              {isAr ? 'عزل المؤسسة مفعل (Strict Tenant Isolation):' : 'Tenant Isolation Enforced:'}
-            </strong>{' '}
-            {isAr
-              ? `جميع الفروع والمستخدمين المعروضين أدناه مسترجعون حصرياً من سجلات المؤسسة النشطة (${tenant?.orgNameAr || tenant?.orgNameEn}) ولا يمكن لأي مؤسسة أخرى استعراضها.`
-              : `All branches and memberships displayed below are strictly isolated to the active organization (${tenant?.orgNameEn}). Cross-tenant access is denied at DB level.`}
+      {/* Create branch modal */}
+      {isBranchOpen && (
+        <div
+          className="ml-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={isAr ? 'إضافة فرع' : 'Add a branch'}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !branchBusy) setIsBranchOpen(false);
+          }}
+        >
+          <div className="ml-modal">
+            <div className="ml-modal__head">
+              <h2 className="vc-modal-title">{isAr ? 'إضافة فرع جديد' : 'Add a new branch'}</h2>
+              <p className="vc-modal-desc">
+                {isAr
+                  ? 'يُسجَّل الفرع ضمن هذه المؤسسة ويُستخدم لتنظيم السجلات وحصر الصلاحيات لكل موقع.'
+                  : 'The branch is registered under this organization and is used to organize records and scope access per location.'}
+              </p>
+            </div>
+
+            <form onSubmit={handleCreateBranch}>
+              <div className="ml-modal__body">
+                <div className="ml-field">
+                  <label className="ml-label" htmlFor="vc-branch-name-en">
+                    {isAr ? 'اسم الفرع (إنجليزي)' : 'Branch name (English)'}
+                  </label>
+                  <input
+                    id="vc-branch-name-en"
+                    type="text"
+                    required
+                    className="ml-input"
+                    value={branchNameEn}
+                    onChange={(e) => setBranchNameEn(e.target.value)}
+                    placeholder="Riyadh Operations"
+                  />
+                </div>
+
+                <div className="ml-field">
+                  <label className="ml-label" htmlFor="vc-branch-name-ar">
+                    {isAr ? 'اسم الفرع (عربي)' : 'Branch name (Arabic)'}
+                  </label>
+                  <input
+                    id="vc-branch-name-ar"
+                    type="text"
+                    className="ml-input"
+                    value={branchNameAr}
+                    onChange={(e) => setBranchNameAr(e.target.value)}
+                    placeholder="عمليات الرياض"
+                  />
+                </div>
+
+                <div className="vc-field-pair">
+                  <div className="ml-field">
+                    <label className="ml-label" htmlFor="vc-branch-code">
+                      {isAr ? 'رمز الفرع' : 'Branch code'}
+                    </label>
+                    <input
+                      id="vc-branch-code"
+                      type="text"
+                      className="ml-input"
+                      value={branchCode}
+                      onChange={(e) => setBranchCode(e.target.value)}
+                      placeholder="RUH-01"
+                    />
+                  </div>
+                  <div className="ml-field">
+                    <label className="ml-label" htmlFor="vc-branch-city">
+                      {isAr ? 'المدينة' : 'City'}
+                    </label>
+                    <input
+                      id="vc-branch-city"
+                      type="text"
+                      className="ml-input"
+                      value={branchCity}
+                      onChange={(e) => setBranchCity(e.target.value)}
+                      placeholder={isAr ? 'الرياض' : 'Riyadh'}
+                    />
+                  </div>
+                </div>
+
+                <span className="ml-hint">
+                  {isAr
+                    ? 'رمز الفرع والمدينة اختياريان، ويُولَّد رمز افتراضي تلقائياً عند تركه فارغاً.'
+                    : 'Code and city are optional; a default code is generated when left empty.'}
+                </span>
+
+                {branchError && <div className="ml-error">{branchError}</div>}
+              </div>
+
+              <div className="ml-modal__foot vc-modal-foot">
+                <button
+                  type="button"
+                  onClick={() => setIsBranchOpen(false)}
+                  disabled={branchBusy}
+                  className="ml-btn ml-btn--subtle"
+                >
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button type="submit" disabled={branchBusy} className="ml-btn ml-btn--primary">
+                  <IconPlus size={14} />
+                  <span>{branchBusy ? (isAr ? 'جارِ الإنشاء…' : 'Creating…') : (isAr ? 'إنشاء الفرع' : 'Create branch')}</span>
+                </button>
+              </div>
+            </form>
           </div>
-          <span style={{ fontSize: '11px', color: 'var(--status-success)', fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-            ROLE: {tenant?.role?.toUpperCase()}
-          </span>
-        </div>
-      ) : (
-        <div className="honest-alert">
-          <span style={{ fontSize: '20px' }}>ℹ️</span>
-          <div style={{ flex: 1 }}>
-            <strong style={{ color: 'var(--text-primary)' }}>
-              {isAr ? 'بيانات توضيحية استرشادية:' : 'Preview Demonstration Mode:'}
-            </strong>{' '}
-            {isAr
-              ? 'سجل الدخول لاستعراض فروع مؤسستك الحقيقية من PostgreSQL وإدارة صلاحيات الأعضاء.'
-              : 'Sign in to access your organization-specific branches and manage membership roles.'}
-          </div>
-          <button
-            onClick={openAuthModal}
-            className="btn-primary"
-            style={{ fontSize: '11px', padding: '5px 12px' }}
-          >
-            <span>{isAr ? 'تسجيل الدخول' : 'Sign In'}</span>
-          </button>
         </div>
       )}
-
-      {/* Branches Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', margin: '16px 0' }}>
-        {branches.map((b) => (
-          <div key={b.id} className="decision-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 700, fontSize: '13px' }}>{b.name}</span>
-              <span className="severity-tag optimal">{b.code || 'ACTIVE'}</span>
-            </div>
-            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '8px 0 0' }}>
-              {isAr ? 'فرع تشغيلي موثق ومعزول ضمن حدود المؤسسة' : 'Operational branch isolated to tenant scope'}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Members Table */}
-      <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: '13px' }}>
-            {isAr ? 'فريق القيادة والوصول المصرح' : 'Active Authorized Leadership Team'}
-          </span>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {isAr ? `إجمالي الأعضاء: ${members.length}` : `Total Members: ${members.length}`}
-          </span>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-surface-elevated)', borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
-                <th style={{ padding: '10px 14px', textAlign: 'start' }}>{isAr ? 'الاسم' : 'Name'}</th>
-                <th style={{ padding: '10px 14px', textAlign: 'start' }}>{isAr ? 'البريد الإلكتروني' : 'Email'}</th>
-                <th style={{ padding: '10px 14px', textAlign: 'start' }}>{isAr ? 'الدور والصلاحيات' : 'Role & Scope'}</th>
-                <th style={{ padding: '10px 14px', textAlign: 'start' }}>{isAr ? 'الفرع' : 'Branch'}</th>
-                <th style={{ padding: '10px 14px', textAlign: 'start' }}>{isAr ? 'الحالة' : 'Status'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((m) => (
-                <tr key={m.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 600 }}>{m.name || m.user_id}</td>
-                  <td style={{ padding: '12px 14px', color: 'var(--text-secondary)' }}>{m.email}</td>
-                  <td style={{ padding: '12px 14px', color: 'var(--accent-light)', fontWeight: 600 }}>
-                    <span style={{ textTransform: 'uppercase' }}>{m.role}</span>
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>{m.branch_name || (isAr ? 'المقر العام' : 'Headquarters')}</td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span className="severity-tag optimal">{(m.status || 'ACTIVE').toUpperCase()}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };

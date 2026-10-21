@@ -62,6 +62,10 @@ import {
 } from './services/billing/billingEngine.js';
 import {
   getTenantIntegrations,
+  createTenantIntegration,
+  updateTenantIntegration,
+  deleteTenantIntegration,
+  testTenantIntegration,
   syncTenantIntegration,
   getTenantWorkflows,
   toggleTenantWorkflow,
@@ -91,6 +95,9 @@ import {
   deletePlatformUser,
   listLeadInquiries,
   updateLeadStatus,
+  listPlatformServices,
+  updatePlatformService,
+  listPublishedServices,
   listPlatformAuditLogs
 } from './services/admin/adminEngine.js';
 
@@ -481,6 +488,15 @@ export async function handleApiRequest(req, res) {
       return jsonResponse(res, 200, { packages });
     }
 
+    // ── PUBLIC SERVICES (ENGINES) CATALOG ───────────────────────────────────
+    // The public website renders the engine index from the operator-owned
+    // catalog rather than a hard-coded list, so disabling or renaming an engine
+    // in the admin console is visible on the site immediately.
+    if (method === 'GET' && pathname === '/api/v1/services') {
+      const services = await listPublishedServices();
+      return jsonResponse(res, 200, { services });
+    }
+
     // ── AUTHENTICATION: CURRENT USER & TENANT CONTEXT ───────────────────────
     if (method === 'GET' && pathname === '/api/v1/auth/me') {
       const auth = await authenticateRequest(req);
@@ -660,7 +676,33 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      // 5. Global Users (List, Create, Update, Delete)
+      // 5. Platform Services Catalog (List, Update)
+      // The eight engines are operator-owned data: rename, re-order, re-write
+      // the summary, or disable an engine. Every change is audit-logged and is
+      // what the public website then serves.
+      if (method === 'GET' && pathname === '/api/v1/admin/services') {
+        const services = await listPlatformServices();
+        return jsonResponse(res, 200, { services });
+      }
+
+      if (method === 'PUT' && pathname.startsWith('/api/v1/admin/services/')) {
+        const serviceId = decodeURIComponent(
+          pathname.slice('/api/v1/admin/services/'.length)
+        );
+        const body = await readJsonBody(req);
+        try {
+          const result = await updatePlatformService(serviceId, {
+            ...body,
+            operatorId: auth.user.id,
+            remoteIp: req.socket.remoteAddress
+          });
+          return jsonResponse(res, 200, result);
+        } catch (err) {
+          return jsonResponse(res, 400, { error: err.message });
+        }
+      }
+
+      // 6. Global Users (List, Create, Update, Delete)
       if (method === 'GET' && pathname === '/api/v1/admin/users') {
         const users = await listPlatformUsers();
         return jsonResponse(res, 200, { users });
@@ -1245,12 +1287,55 @@ export async function handleApiRequest(req, res) {
       return jsonResponse(res, 200, { organizationId: orgId, integrations });
     }
 
-    if (method === 'POST' && pathname.startsWith('/api/v1/integrations/') && pathname.endsWith('/sync')) {
+    if (method === 'POST' && pathname === '/api/v1/integrations') {
+      const body = await readJsonBody(req);
+      try {
+        const integration = await createTenantIntegration(orgId, body || {});
+        return jsonResponse(res, 201, { success: true, integration });
+      } catch (err) {
+        return jsonResponse(res, err.status || 400, { error: err.message });
+      }
+    }
+
+    if (pathname.startsWith('/api/v1/integrations/')) {
       const parts = pathname.split('/');
-      const integrationId = parts[parts.indexOf('integrations') + 1];
-      const result = await syncTenantIntegration(orgId, integrationId);
-      if (!result) return jsonResponse(res, 404, { error: 'Integration source not found.' });
-      return jsonResponse(res, 200, result);
+      const targetIntegrationId = parts[4];
+      const action = parts[5] || null;
+
+      // POST /:id/sync — execute a real outbound connector read and ingest what returns
+      if (method === 'POST' && action === 'sync') {
+        const result = await syncTenantIntegration(orgId, targetIntegrationId);
+        if (!result) return jsonResponse(res, 404, { error: 'Data source not found.' });
+        return jsonResponse(res, 200, result);
+      }
+
+      // POST /:id/test — verify reachability and payload shape without ingesting
+      if (method === 'POST' && action === 'test') {
+        const body = await readJsonBody(req);
+        const overrideConfig = body && body.config && typeof body.config === 'object' ? body.config : null;
+        const probe = await testTenantIntegration(orgId, targetIntegrationId, overrideConfig);
+        if (probe === null) return jsonResponse(res, 404, { error: 'Data source not found.' });
+        return jsonResponse(res, 200, probe);
+      }
+
+      if (!action && method === 'PUT') {
+        const body = await readJsonBody(req);
+        try {
+          const integration = await updateTenantIntegration(orgId, targetIntegrationId, body || {});
+          if (!integration) return jsonResponse(res, 404, { error: 'Data source not found.' });
+          return jsonResponse(res, 200, { success: true, integration });
+        } catch (err) {
+          return jsonResponse(res, err.status || 400, { error: err.message });
+        }
+      }
+
+      if (!action && method === 'DELETE') {
+        const removed = await deleteTenantIntegration(orgId, targetIntegrationId);
+        if (!removed) return jsonResponse(res, 404, { error: 'Data source not found.' });
+        return jsonResponse(res, 200, { success: true });
+      }
+
+      return jsonResponse(res, 404, { error: 'Integration action not found' });
     }
 
     // ── AUTOMATED WORKFLOWS (/api/v1/workflows) ─────────────────────────────
@@ -1325,6 +1410,27 @@ export async function handleApiRequest(req, res) {
       }
       try {
         const result = await ingestJournalEntries(orgId, entries, batchId);
+        return jsonResponse(res, 201, result);
+      } catch (err) {
+        return jsonResponse(res, 400, { error: err.message });
+      }
+    }
+
+    // ── CSV EXPORT INGESTION (/api/v1/ingest/journal-csv) ───────────────────
+    // Lets a tenant connect any system by uploading a spreadsheet/CSV export.
+    // RFC-4180 parsing and row-level validation run server-side; rejected rows are
+    // reported with their line number rather than being silently coerced.
+    if (method === 'POST' && pathname === '/api/v1/ingest/journal-csv') {
+      const body = await readJsonBody(req);
+      const { csv, batchId } = body;
+      if (!csv || typeof csv !== 'string' || !csv.trim()) {
+        return jsonResponse(res, 400, { error: 'csv must be a non-empty string of RFC-4180 encoded data.' });
+      }
+      if (csv.length > 10 * 1024 * 1024) {
+        return jsonResponse(res, 413, { error: 'CSV exceeds the 10 MB ingestion limit.' });
+      }
+      try {
+        const result = await ingestJournalEntries(orgId, csv, batchId);
         return jsonResponse(res, 201, result);
       } catch (err) {
         return jsonResponse(res, 400, { error: err.message });

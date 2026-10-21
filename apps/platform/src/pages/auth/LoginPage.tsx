@@ -1,7 +1,9 @@
 // MIKHLAFI LABS — Dedicated Login Page (/login)
-// Full-page authentication with secure session establishment, returnUrl restoration, and tenant context resolution
+// Split-screen enterprise sign-in: brand & trust panel beside a calm, focused
+// credential form. Authentication is performed exclusively against the real
+// API — loading, error, and success states are all driven by its response.
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LocaleMode, ThemeMode } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
@@ -9,8 +11,14 @@ import {
   IconArrowRight,
   IconSun,
   IconMoon,
-  IconGlobe
+  IconGlobe,
+  IconLock,
+  IconShield,
+  IconCheckCircle,
+  IconFileText,
+  IconAlert
 } from '../../components/Icons';
+import { BrandLogo } from '../../components/common/BrandLogo';
 
 interface LoginPageProps {
   locale: LocaleMode;
@@ -37,8 +45,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const emailRef = useRef<HTMLInputElement>(null);
+  const successTimerRef = useRef<number | null>(null);
+  const navigatedRef = useRef(false);
 
   // Parse and sanitize returnUrl from query params
   const getReturnUrl = (): string => {
@@ -53,375 +65,308 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
   const returnUrl = getReturnUrl();
 
-  // If already authenticated, redirect strictly according to role
+  const resolveErrorMessage = (err: unknown): string => {
+    const msg = err instanceof Error ? err.message.trim() : '';
+    if (!msg || msg === 'Failed to fetch' || msg.startsWith('NetworkError')) {
+      return isAr
+        ? 'تعذّر الوصول إلى الخادم. تحقّق من اتصالك بالشبكة وحاول مرة أخرى.'
+        : 'Could not reach the server. Check your connection and try again.';
+    }
+    return msg;
+  };
+
+  const navigateAfterSuccess = (destination: string) => {
+    setStatus('success');
+    successTimerRef.current = window.setTimeout(() => {
+      navigatedRef.current = true;
+      onLoginSuccess(destination);
+    }, 850);
+  };
+
+  // If already authenticated, redirect strictly according to role.
+  // Skipped while this page drives the flow itself (submitting / success), so
+  // the confirmation state is always visible before the redirect.
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && status === 'idle') {
       if (user.isPlatformAdmin) {
         onLoginSuccess('/admin');
       } else {
         onLoginSuccess(returnUrl.startsWith('/app') ? returnUrl : '/app');
       }
     }
-  }, [isAuthenticated, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user, status]);
+
+  // Only cancel a pending redirect if the page unmounts for another reason.
+  useEffect(() => {
+    return () => {
+      if (!navigatedRef.current && successTimerRef.current !== null) {
+        window.clearTimeout(successTimerRef.current);
+      }
+    };
+  }, []);
+
+  const busy = status !== 'idle';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (busy) return;
+    setStatus('submitting');
     setErrorMessage(null);
 
     try {
       await login(email, password);
       const me = await api.getMe().catch(() => null);
-      if (me?.user?.isPlatformAdmin) {
-        onLoginSuccess('/admin');
-      } else {
-        onLoginSuccess(returnUrl.startsWith('/app') ? returnUrl : '/app');
-      }
-    } catch (err: any) {
-      // Avoid revealing user existence; present a clear professional message
-      setErrorMessage(
-        isAr
-          ? 'تعذر التحقق من البيانات. يُرجى التأكد من البريد الإلكتروني وكلمة المرور.'
-          : 'Authentication failed. Please verify your credentials.'
-      );
-    } finally {
-      setLoading(false);
+      const destination = me?.user?.isPlatformAdmin
+        ? '/admin'
+        : returnUrl.startsWith('/app')
+          ? returnUrl
+          : '/app';
+      navigateAfterSuccess(destination);
+    } catch (err) {
+      setErrorMessage(resolveErrorMessage(err));
+      setStatus('idle');
+      emailRef.current?.focus();
     }
   };
 
-  const handleOwnerFill = () => {
-    setEmail('saad@mikhlafi-labs.com');
-    setPassword('MikhlafiSecure2026!');
-  };
+  const trustMarks = [
+    { icon: <IconShield size={14} />, textAr: 'استضافة سيادية داخل المملكة', textEn: 'Sovereign hosting in the Kingdom' },
+    { icon: <IconCheckCircle size={14} />, textAr: 'متوافق مع PDPL وأطر الأمن الوطني', textEn: 'Aligned with PDPL and national security frameworks' },
+    { icon: <IconFileText size={14} />, textAr: 'جاهزية الفوترة الإلكترونية ZATCA المرحلة الثانية', textEn: 'ZATCA Phase 2 e-invoicing ready' },
+    { icon: <IconLock size={14} />, textAr: 'معمارية أمن معلومات مؤسسية ISO 27001', textEn: 'ISO 27001 information security architecture' }
+  ];
 
-  const handleClientFill = () => {
-    setEmail('client@mikhlafi-holding.com');
-    setPassword('MikhlafiSecure2026!');
-  };
+  const architectureSpecs = [
+    { label: isAr ? 'التشفير' : 'ENCRYPTION', value: 'AES-256-GCM' },
+    { label: isAr ? 'النقل' : 'TRANSPORT', value: 'TLS 1.3' },
+    { label: isAr ? 'العزل' : 'ISOLATION', value: isAr ? 'عزل المستأجرين' : 'TENANT RLS' }
+  ];
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--bg-base)',
-        color: 'var(--text-primary)'
-      }}
-    >
-      {/* Top Header */}
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '1.25rem 2rem',
-          borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-surface)'
-        }}
-      >
-        <button
-          onClick={onNavigateHome}
-          className="brand-emblem"
-          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
-        >
-          <div className="brand-symbol">M</div>
-          <div className="brand-meta" style={{ textAlign: isAr ? 'right' : 'left' }}>
-            <span className="brand-name">MIKHLAFI LABS</span>
-            <span className="brand-sub">
-              {isAr ? 'أنظمة · ذكاء · ابتكار' : 'INTELLIGENCE · SYSTEMS · INNOVATION'}
-            </span>
-          </div>
-        </button>
+    <div className="auth-shell">
+      {/* Brand & trust panel */}
+      <aside className="auth-aside" aria-label={isAr ? 'عن منصة MIKHLAFI LABS' : 'About MIKHLAFI LABS'}>
+        <div className="auth-aside__inner">
+          <button
+            type="button"
+            onClick={onNavigateHome}
+            className="auth-brand"
+            title="MIKHLAFI LABS"
+            aria-label={isAr ? 'العودة إلى الصفحة الرئيسية' : 'Back to home'}
+          >
+            <BrandLogo size="md" locale={locale} glow={false} />
+          </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button onClick={onToggleLocale} className="ctrl-btn" title="Toggle Language">
-            <IconGlobe size={14} />
-            <span>{isAr ? 'EN' : 'عربي'}</span>
-          </button>
-          <button onClick={onToggleTheme} className="ctrl-btn" title="Toggle Theme">
-            {theme === 'dark' ? <IconSun size={14} /> : <IconMoon size={14} />}
-          </button>
-          <button onClick={onNavigateHome} className="ctrl-btn" style={{ fontSize: '12px' }}>
-            <span>{isAr ? 'الموقع العام' : 'Public Website'}</span>
-          </button>
+          <span className="auth-aside__kicker">
+            {isAr
+              ? 'MIKHLAFI LABS · منصة ذكاء تشغيلي مؤسسية'
+              : 'MIKHLAFI LABS · Enterprise operational intelligence'}
+          </span>
+
+          <h2 className="auth-aside__title">
+            {isAr
+              ? 'قرارات مُصرَّح بها، مبنية على أدلة مصدرها أنظمتكم.'
+              : 'Authorized decisions, built on evidence from your own systems.'}
+          </h2>
+
+          <p className="auth-aside__lead">
+            {isAr
+              ? 'طبقة ذكاء محايدة على مستوى القطاعات تعمل فوق أنظمة المؤسسات القائمة: ترصد الانحرافات، توثّق الأدلة، وتُحوّلها إلى قرارات قيادية — دون استبدال أي نظام.'
+              : 'An industry-neutral intelligence layer that sits above your existing enterprise systems: it detects variance, evidences every finding, and turns it into executive decisions — without replacing anything.'}
+          </p>
+
+          <ul className="auth-trust">
+            {trustMarks.map((item, i) => (
+              <li key={i} className="auth-trust__item">
+                <span className="auth-trust__icon" aria-hidden="true">{item.icon}</span>
+                <span>{isAr ? item.textAr : item.textEn}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="auth-aside__specs" aria-hidden="true">
+            {architectureSpecs.map((spec) => (
+              <div key={spec.label} className="auth-aside__spec">
+                <span className="auth-aside__spec-label">{spec.label}</span>
+                <span className="auth-aside__spec-value">{spec.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </header>
+      </aside>
 
-      {/* Main Authentication Card */}
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '2rem 1rem',
-          background: 'radial-gradient(ellipse at 50% 20%, var(--accent-subtle) 0%, transparent 70%)'
-        }}
-      >
-        <div
-          className="kpi-card"
-          style={{
-            width: '100%',
-            maxWidth: '440px',
-            padding: '2.5rem',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)'
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-            <div
-              style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, var(--accent-base), #3b82f6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontWeight: 900,
-                fontSize: '22px',
-                margin: '0 auto 1rem'
-              }}
-            >
-              M
-            </div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '0.4rem' }}>
-              {isAr ? 'دخول منصة العملاء' : 'Customer Workspace Sign-In'}
-            </h1>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              {isAr
-                ? 'أدخل بيانات الحساب للوصول إلى لوحة استخبارات الأعمال الخاصة بمؤسستك'
-                : 'Enter your credentials to access your private business operations workspace.'}
-            </p>
-          </div>
+      {/* Form panel */}
+      <section className="auth-panel">
+        <header className="auth-topbar">
+          <button
+            type="button"
+            onClick={onToggleLocale}
+            className="ml-icon-btn"
+            title={isAr ? 'English' : 'العربية'}
+            aria-label={isAr ? 'Switch to English' : 'التبديل إلى العربية'}
+          >
+            <IconGlobe size={15} />
+          </button>
 
-          {/* Destination Notification Banner */}
-          {returnUrl !== '/app' && (
-            <div
-              style={{
-                padding: '0.75rem 1rem',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--accent-subtle)',
-                border: '1px solid var(--accent-base)',
-                fontSize: '0.82rem',
-                color: 'var(--accent-light)',
-                marginBottom: '1.25rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-            >
-              <span>🔒</span>
-              <span>
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="ml-icon-btn"
+            title={isAr ? 'تبديل المظهر' : 'Toggle theme'}
+            aria-label={isAr ? 'تبديل المظهر' : 'Toggle theme'}
+          >
+            {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
+          </button>
+
+          <button type="button" onClick={onNavigateHome} className="ml-btn ml-btn--subtle ml-btn--sm">
+            {isAr ? 'الموقع العام' : 'Public website'}
+          </button>
+        </header>
+
+        <main className="auth-panel__main">
+          <div className="auth-card">
+            <div className="auth-card__head">
+              <h1 className="auth-card__title">
+                {isAr ? 'تسجيل الدخول إلى مساحة العمل' : 'Sign in to your workspace'}
+              </h1>
+              <p className="auth-card__sub">
                 {isAr
-                  ? `ستتم إعادة توجيهك إلى الوجهة المحمية: ${returnUrl}`
-                  : `You will be redirected to requested destination: ${returnUrl}`}
-              </span>
-            </div>
-          )}
-
-          {/* Error Alert */}
-          {errorMessage && (
-            <div
-              style={{
-                padding: '0.75rem 1rem',
-                borderRadius: 'var(--radius-sm)',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid var(--status-danger)',
-                fontSize: '0.85rem',
-                color: 'var(--status-danger)',
-                marginBottom: '1.25rem'
-              }}
-            >
-              {errorMessage}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-secondary)' }}>
-                {isAr ? 'البريد الإلكتروني المؤسسي' : 'Work Email Address'}
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="saad@mikhlafi-labs.com"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-primary)',
-                  fontFamily: 'inherit',
-                  fontSize: '0.95rem'
-                }}
-              />
+                  ? 'أدخل بيانات حسابك المؤسسي للوصول إلى مساحة العمليات المعزولة لمؤسستك.'
+                  : 'Enter your organization credentials to reach your isolated operations workspace.'}
+              </p>
             </div>
 
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            {/* Protected destination notice */}
+            {returnUrl !== '/app' && (
+              <div className="auth-alert auth-alert--accent">
+                <span className="auth-alert__icon" aria-hidden="true"><IconLock size={15} /></span>
+                <span className="auth-alert__text">
+                  {isAr ? 'ستتم إعادة توجيهك إلى الوجهة المحمية: ' : 'You will be redirected to the requested destination: '}
+                  <span className="auth-dest-path">{returnUrl}</span>
+                </span>
+              </div>
+            )}
+
+            {/* Errors & success confirmation (announced to assistive tech) */}
+            {errorMessage && (
+              <div className="auth-alert auth-alert--danger" role="alert">
+                <span className="auth-alert__icon" aria-hidden="true"><IconAlert size={15} /></span>
+                <span className="auth-alert__text">{errorMessage}</span>
+              </div>
+            )}
+
+            {status === 'success' && (
+              <div className="auth-alert auth-alert--success" role="status">
+                <span className="auth-alert__icon" aria-hidden="true"><IconCheckCircle size={15} /></span>
+                <span className="auth-alert__text">
+                  {isAr ? 'تم التحقق من الجلسة بنجاح… جارٍ تحويلك.' : 'Session verified. Redirecting you now…'}
+                </span>
+              </div>
+            )}
+
+            <form className="auth-form" onSubmit={handleSubmit}>
+              <div className="ml-field">
+                <label className="ml-label" htmlFor="auth-login-email">
+                  {isAr ? 'البريد الإلكتروني المؤسسي' : 'Work email address'}
+                </label>
+                <input
+                  ref={emailRef}
+                  id="auth-login-email"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  inputMode="email"
+                  spellCheck={false}
+                  dir="ltr"
+                  className="ml-input"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  disabled={busy}
+                />
+              </div>
+
+              <div className="ml-field">
+                <label className="ml-label" htmlFor="auth-login-password">
                   {isAr ? 'كلمة المرور' : 'Password'}
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--accent-light)',
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                    padding: 0
-                  }}
-                >
-                  {showPassword ? (isAr ? 'إخفاء' : 'Hide') : (isAr ? 'إظهار' : 'Show')}
-                </button>
+                <div className="auth-input-wrap">
+                  <input
+                    id="auth-login-password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoComplete="current-password"
+                    className="ml-input"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
+                    dir="ltr"
+                    disabled={busy}
+                  />
+                  <button
+                    type="button"
+                    className="auth-input-wrap__toggle"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-pressed={showPassword}
+                    disabled={busy}
+                  >
+                    {showPassword ? (isAr ? 'إخفاء' : 'Hide') : (isAr ? 'إظهار' : 'Show')}
+                  </button>
+                </div>
               </div>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-primary)',
-                  fontFamily: 'inherit',
-                  fontSize: '0.95rem'
-                }}
-              />
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="ml-btn ml-btn--primary ml-btn--lg ml-btn--block auth-submit"
+              >
+                {status === 'submitting' && (
+                  <>
+                    <span className="auth-spinner" aria-hidden="true" />
+                    <span>{isAr ? 'جارٍ التحقق…' : 'Verifying…'}</span>
+                  </>
+                )}
+                {status === 'success' && (
+                  <>
+                    <IconCheckCircle size={16} />
+                    <span>{isAr ? 'تم التحقق' : 'Verified'}</span>
+                  </>
+                )}
+                {status === 'idle' && (
+                  <>
+                    <span>{isAr ? 'تسجيل الدخول' : 'Sign in'}</span>
+                    <IconArrowRight size={15} className="auth-arrow" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="auth-swap">
+              <span>{isAr ? 'ليس لديك مساحة عمل؟ ' : "Don't have a workspace yet? "}</span>
+              <button
+                type="button"
+                className="auth-linkbtn"
+                onClick={() => onNavigateRegister(returnUrl)}
+              >
+                {isAr ? 'إنشاء مساحة عمل للمؤسسة' : 'Create an organization workspace'}
+              </button>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary"
-              style={{
-                width: '100%',
-                padding: '0.85rem',
-                justifyContent: 'center',
-                fontSize: '1rem',
-                marginTop: '0.5rem'
-              }}
-            >
-              <span>{loading ? (isAr ? 'جاري التحقق...' : 'Verifying Session...') : (isAr ? 'تسجيل الدخول' : 'Sign In to Workspace')}</span>
-              <IconArrowRight size={16} />
-            </button>
-          </form>
-
-          {/* Quick Credentials Autofill */}
-          <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={handleOwnerFill}
-              style={{
-                background: 'rgba(239, 68, 68, 0.09)',
-                border: '1px solid rgba(239, 68, 68, 0.45)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.75rem 0.9rem',
-                color: '#f87171',
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                width: '100%',
-                fontWeight: 700,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: '2px',
-                textAlign: 'start'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🛡️</span>
-                <span>{isAr ? 'حساب مالك ومزود المنصة (Platform Owner)' : 'Platform Owner / Vendor Account'}</span>
-              </div>
-              <span style={{ fontSize: '10px', color: '#fca5a5', fontWeight: 400 }}>
-                {isAr ? 'البريد: saad@mikhlafi-labs.com · يفتح غرفة العمليات (/admin) حصرياً دون بيانات العملاء' : 'Email: saad@mikhlafi-labs.com · Opens /admin exclusively without client data'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleClientFill}
-              style={{
-                background: 'rgba(56, 189, 248, 0.08)',
-                border: '1px solid rgba(56, 189, 248, 0.35)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '0.75rem 0.9rem',
-                color: '#38bdf8',
-                fontSize: '0.82rem',
-                cursor: 'pointer',
-                width: '100%',
-                fontWeight: 700,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: '2px',
-                textAlign: 'start'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>🏛️</span>
-                <span>{isAr ? 'حساب عميل المنصة (مجموعة المخلافي القابضة)' : 'Client Account (Mikhlafi Holding Group)'}</span>
-              </div>
-              <span style={{ fontSize: '10px', color: '#7dd3fc', fontWeight: 400 }}>
-                {isAr ? 'البريد: client@mikhlafi-holding.com · يفتح مساحة عمل المنشأة الخاصة (/app)' : 'Email: client@mikhlafi-holding.com · Opens client workspace (/app)'}
-              </span>
-            </button>
           </div>
+        </main>
 
-          {/* Registration Link */}
-          <div
-            style={{
-              marginTop: '1.75rem',
-              paddingTop: '1.25rem',
-              borderTop: '1px solid var(--border-subtle)',
-              textAlign: 'center',
-              fontSize: '0.85rem',
-              color: 'var(--text-secondary)'
-            }}
-          >
-            <span>{isAr ? 'ليس لديك مساحة عمل مسجلة؟ ' : "Don't have a workspace yet? "}</span>
-            <button
-              onClick={() => onNavigateRegister(returnUrl)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--accent-light)',
-                fontWeight: 700,
-                cursor: 'pointer',
-                padding: 0
-              }}
-            >
-              {isAr ? 'إنشاء حساب جديد للمؤسسة ←' : 'Create Organization Workspace →'}
-            </button>
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer
-        style={{
-          padding: '1rem 2rem',
-          textAlign: 'center',
-          fontSize: '0.8rem',
-          color: 'var(--text-tertiary)',
-          borderTop: '1px solid var(--border-subtle)'
-        }}
-      >
-        © {new Date().getFullYear()} MIKHLAFI LABS. {isAr ? 'نظام معزول متعدد المستأجرين محمي بالتشفير.' : 'Isolated Multi-Tenant Architecture.'}
-      </footer>
+        <footer className="auth-foot">
+          <span>© {new Date().getFullYear()} MIKHLAFI LABS</span>
+          <span className="auth-foot__sep" aria-hidden="true">·</span>
+          <span>
+            {isAr
+              ? 'جلسات مشفرة وعزل متعدد المستأجرين'
+              : 'Encrypted sessions · multi-tenant isolation'}
+          </span>
+        </footer>
+      </section>
     </div>
   );
 };
