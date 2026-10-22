@@ -25,15 +25,14 @@ const STAGGER_CONTAINERS = [
   '.pp-split',
   '.pp-case',
   '.pp-contact',
-  '.home-compare',
-  '.faq-list'
+  '.home-compare'
 ];
 
 /** Section bodies laid out as a single container per section. */
 const SECTION_BODIES = ['.pp-section > .site-container'];
 
 /** Standalone blocks that animate as a single unit. */
-const BLOCK_SELECTORS = ['.site-cta', '.pp-cta', '.pp-assure', '.pp-strip'];
+const BLOCK_SELECTORS = ['.site-cta', '.pp-cta', '.pp-assure', '.pp-strip', '.faq-list'];
 
 const MAX_STAGGER_MS = 420;
 const STAGGER_STEP_MS = 70;
@@ -58,6 +57,10 @@ function revealAll() {
  * revealed straight away so above-the-fold content never waits for a scroll.
  */
 function primeElement(element: HTMLElement, index: number, observer: IntersectionObserver | null) {
+  // Never attach data-reveal to interactive FAQ rows or inner accordion controls
+  if (element.classList.contains('faq-row') || element.closest('.faq-row') || element.classList.contains('faq-card')) {
+    return;
+  }
   if (element.hasAttribute('data-reveal')) return;
 
   element.setAttribute('data-reveal', 'up');

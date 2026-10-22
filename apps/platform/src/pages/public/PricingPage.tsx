@@ -322,7 +322,10 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                     type="button"
                     className="faq-row__trigger"
                     aria-expanded={isOpen}
-                    onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setOpenFaqIndex((prev) => (prev === idx ? null : idx));
+                    }}
                   >
                     <span>{isAr ? faq.qAr : faq.qEn}</span>
                     <IconChevronDown size={18} />

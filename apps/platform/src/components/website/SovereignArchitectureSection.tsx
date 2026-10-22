@@ -43,8 +43,8 @@ export const SovereignArchitectureSection: React.FC<SovereignArchitectureSection
       badgeTone: 'info' as const,
       titleAr: 'خيارات نشر تحترم حدود بياناتكم',
       titleEn: 'Deployment options that respect your data boundaries',
-      descAr: 'استضافة سيادية داخل المملكة، أو نشر كامل داخل مراكز بياناتكم عبر خوادم مخصّصة أو Kubernetes خاص.',
-      descEn: 'Sovereign hosting inside the Kingdom, or full deployment inside your own data centers on bare-metal or private Kubernetes.'
+      descAr: 'استضافة سيادية داخل اليمن، أو نشر كامل داخل مراكز بياناتكم عبر خوادم مخصّصة أو Kubernetes خاص.',
+      descEn: 'Sovereign hosting inside Yemen, or full deployment inside your own data centers on bare-metal or private Kubernetes.'
     },
     {
       icon: <IconLock size={20} />,
@@ -96,13 +96,13 @@ export const SovereignArchitectureSection: React.FC<SovereignArchitectureSection
           }
           body={
             isAr
-              ? 'استضافة سيادية داخل المملكة، أو نشر كامل داخل مراكز بياناتكم. لا تُنقل أي بيانات خارج النطاق الذي تحدّدونه، وكل مسار قراءة يخضع للتشفير وللتسجيل الكامل.'
-              : 'Sovereign hosting inside the Kingdom, or a full deployment inside your own data centres. Nothing leaves the boundary you define, and every read path is encrypted and fully logged.'
+              ? 'استضافة سيادية محلية داخل اليمن، أو نشر كامل داخل مراكز بياناتكم. لا تُنقل أي بيانات خارج النطاق الذي تحدّدونه، وكل مسار قراءة يخضع للتشفير وللتسجيل الكامل.'
+              : 'Sovereign local hosting inside Yemen, or a full deployment inside your own data centres. Nothing leaves the boundary you define, and every read path is encrypted and fully logged.'
           }
         >
-          <span className="ml-badge">PDPL</span>
           <span className="ml-badge">ISO 27001</span>
-          <span className="ml-badge">ZATCA P2</span>
+          <span className="ml-badge">{isAr ? 'سيادة بيانات محلية' : 'Data Sovereignty'}</span>
+          <span className="ml-badge">{isAr ? 'نشر مغلق Air-Gapped' : 'Air-Gapped Ready'}</span>
         </SectionMediaBand>
 
         <div className="site-grid site-grid--2">

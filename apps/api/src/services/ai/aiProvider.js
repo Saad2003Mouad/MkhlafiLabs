@@ -104,11 +104,55 @@ export class GroqApiProvider extends BaseAIProvider {
     super(config);
     this.name = 'groq';
     this.apiKey = config.apiKey || process.env.GROQ_API_KEY || '';
-    this.modelArabic = config.modelArabic || process.env.GROQ_MODEL_AR || 'allam-2-7b';
-    this.modelEnglish = config.modelEnglish || process.env.GROQ_MODEL_EN || 'qwen/qwen3.8-27b';
+    this.modelArabic = config.modelArabic || process.env.GROQ_MODEL_AR || 'openai/gpt-oss-120b';
+    this.modelEnglish = config.modelEnglish || process.env.GROQ_MODEL_EN || 'openai/gpt-oss-120b';
     this.defaultModel = config.model || process.env.GROQ_MODEL || null;
     this.endpoint = config.endpoint || 'https://api.groq.com/openai/v1/chat/completions';
-    this.timeoutMs = parseInt(config.timeoutMs || process.env.AI_TIMEOUT_MS || '25000', 10);
+    this.timeoutMs = parseInt(config.timeoutMs || process.env.AI_TIMEOUT_MS || '45000', 10);
+  }
+
+  async _callGroq(modelName, messages, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages,
+          temperature: 0.25,
+          max_completion_tokens: 1200
+        }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq HTTP ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+      const generatedText = data?.choices?.[0]?.message?.content;
+
+      if (!generatedText) {
+        throw new Error('Groq API returned an empty completion.');
+      }
+
+      return {
+        provider: 'groq',
+        model: modelName,
+        isLocal: false,
+        text: generatedText.trim(),
+        usage: data.usage
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async generate({ prompt, systemPrompt = '', locale = 'ar' }) {
@@ -122,66 +166,31 @@ export class GroqApiProvider extends BaseAIProvider {
       };
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
     const isArabic = locale === 'ar' || /[\u0600-\u06FF]/.test(prompt);
     const selectedModel = this.defaultModel || (isArabic ? this.modelArabic : this.modelEnglish);
 
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
     try {
-      const messages = [];
-      if (systemPrompt) {
-        messages.push({ role: 'system', content: systemPrompt });
-      }
-      messages.push({ role: 'user', content: prompt });
-
-      const response = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages,
-          temperature: 0.3,
-          presence_penalty: 0.2,
-          max_completion_tokens: 800,
-          top_p: 0.95
-        }),
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Groq API HTTP ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      const generatedText = data?.choices?.[0]?.message?.content;
-
-      if (!generatedText) {
-        throw new Error('Groq API returned an empty completion.');
-      }
-
-      return {
-        provider: 'groq',
-        model: selectedModel,
-        isLocal: false,
-        text: generatedText.trim(),
-        usage: data.usage
-      };
+      return await this._callGroq(selectedModel, messages, this.timeoutMs);
     } catch (err) {
-      console.warn(`[Groq AI Provider Warning]: ${err.message}. Falling back to deterministic engine.`);
-      return {
-        provider: 'fallback-deterministic',
-        model: 'mikhlafi-causal-v1-offline',
-        isLocal: true,
-        text: null,
-        fallbackReason: err.message
-      };
-    } finally {
-      clearTimeout(timeout);
+      console.warn(`[Groq Primary Model (${selectedModel}) Error]: ${err.message}. Retrying with fast secondary model...`);
+      try {
+        return await this._callGroq('openai/gpt-oss-20b', messages, 25000);
+      } catch (err2) {
+        console.warn(`[Groq AI Provider Warning]: ${err2.message}. Falling back to deterministic engine.`);
+        return {
+          provider: 'fallback-deterministic',
+          model: 'mikhlafi-causal-v1-offline',
+          isLocal: true,
+          text: null,
+          fallbackReason: err2.message
+        };
+      }
     }
   }
 }

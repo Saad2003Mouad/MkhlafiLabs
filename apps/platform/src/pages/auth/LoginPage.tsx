@@ -9,8 +9,6 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
 import {
   IconArrowRight,
-  IconSun,
-  IconMoon,
   IconGlobe,
   IconLock,
   IconShield,
@@ -22,9 +20,9 @@ import { BrandLogo } from '../../components/common/BrandLogo';
 
 interface LoginPageProps {
   locale: LocaleMode;
-  theme: ThemeMode;
+  theme?: ThemeMode;
   onToggleLocale: () => void;
-  onToggleTheme: () => void;
+  onToggleTheme?: () => void;
   onNavigateHome: () => void;
   onNavigateRegister: (returnUrl?: string) => void;
   onLoginSuccess: (destination: string) => void;
@@ -32,9 +30,7 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   locale,
-  theme,
   onToggleLocale,
-  onToggleTheme,
   onNavigateHome,
   onNavigateRegister,
   onLoginSuccess
@@ -131,9 +127,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   const trustMarks = [
-    { icon: <IconShield size={14} />, textAr: 'استضافة سيادية داخل المملكة', textEn: 'Sovereign hosting in the Kingdom' },
-    { icon: <IconCheckCircle size={14} />, textAr: 'متوافق مع PDPL وأطر الأمن الوطني', textEn: 'Aligned with PDPL and national security frameworks' },
-    { icon: <IconFileText size={14} />, textAr: 'جاهزية الفوترة الإلكترونية ZATCA المرحلة الثانية', textEn: 'ZATCA Phase 2 e-invoicing ready' },
+    { icon: <IconShield size={14} />, textAr: 'استضافة وسيادة بيانات محلية داخل اليمن', textEn: 'Sovereign local hosting in Yemen' },
+    { icon: <IconCheckCircle size={14} />, textAr: 'عزل مشدد للبيانات وحماية كاملة للخصوصية', textEn: 'Strict data protection & enterprise isolation' },
+    { icon: <IconFileText size={14} />, textAr: 'حوكمة مالية متوافقة مع الأنظمة التجارية والمعايير الدولية', textEn: 'Governance aligned with commercial laws & IFRS' },
     { icon: <IconLock size={14} />, textAr: 'معمارية أمن معلومات مؤسسية ISO 27001', textEn: 'ISO 27001 information security architecture' }
   ];
 
@@ -207,16 +203,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             aria-label={isAr ? 'Switch to English' : 'التبديل إلى العربية'}
           >
             <IconGlobe size={15} />
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleTheme}
-            className="ml-icon-btn"
-            title={isAr ? 'تبديل المظهر' : 'Toggle theme'}
-            aria-label={isAr ? 'تبديل المظهر' : 'Toggle theme'}
-          >
-            {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
           </button>
 
           <button type="button" onClick={onNavigateHome} className="ml-btn ml-btn--subtle ml-btn--sm">

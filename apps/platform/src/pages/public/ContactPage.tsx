@@ -128,10 +128,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({ locale }) => {
                     </span>
                   </span>
                   <span className="pp-contact__v">
-                    {isAr ? 'الرياض، المملكة العربية السعودية' : 'Riyadh, Kingdom of Saudi Arabia'}
+                    {isAr ? 'صنعاء، الجمهورية اليمنية' : "Sana'a, Republic of Yemen"}
                   </span>
                   <span className="pp-contact__v">
-                    {isAr ? 'منطقة الأعمال والتقنية، طريق الملك فهد' : 'King Fahd Tech Corridor, Riyadh'}
+                    {isAr ? 'منطقة الأعمال والتقنية، شارع الزبيري' : "Al-Zubairi Tech & Business Corridor, Sana'a"}
                   </span>
                 </div>
 

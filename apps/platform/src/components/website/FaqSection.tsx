@@ -13,10 +13,10 @@ interface FaqSectionProps {
 
 export const FaqSection: React.FC<FaqSectionProps> = ({ locale }) => {
   const isAr = locale === 'ar';
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   const toggleFaq = (idx: number) => {
-    setOpenIndex(openIndex === idx ? null : idx);
+    setOpenIndex((prev) => (prev === idx ? null : idx));
   };
 
   return (
@@ -44,7 +44,10 @@ export const FaqSection: React.FC<FaqSectionProps> = ({ locale }) => {
                 <button
                   type="button"
                   className="faq-row__trigger"
-                  onClick={() => toggleFaq(idx)}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    toggleFaq(idx);
+                  }}
                   aria-expanded={isOpen}
                   aria-controls={`faq-answer-${idx}`}
                 >

@@ -213,7 +213,7 @@ export const PlatformOverviewPage: React.FC<PlatformOverviewPageProps> = ({
             <div className="pp-fact">
               <dt className="pp-fact__value">{isAr ? 'سيادي' : 'Sovereign'}</dt>
               <dd className="pp-fact__label">
-                {isAr ? 'سحابي محلي أو نشر مغلق داخل مؤسستك' : 'cloud in-KSA or air-gapped on-prem'}
+                {isAr ? 'سحابي محلي في اليمن أو نشر مغلق داخل مؤسستك' : 'local cloud in Yemen or air-gapped on-prem'}
               </dd>
             </div>
           </dl>

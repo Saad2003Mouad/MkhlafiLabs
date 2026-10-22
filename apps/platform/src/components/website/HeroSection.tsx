@@ -274,9 +274,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.9s var(--ease-out) 0.25s' }}
       >
         {[
-          { icon: <IconShield size={15} />, textAr: 'استضافة سيادية داخل المملكة', textEn: 'Sovereign hosting in the Kingdom' },
-          { icon: <IconCheckCircle size={15} />, textAr: 'متوافق مع PDPL وأطر الأمن الوطني', textEn: 'Aligned with PDPL and national security frameworks' },
-          { icon: <IconCheckCircle size={15} />, textAr: 'جاهزية الفوترة الإلكترونية ZATCA — المرحلة الثانية', textEn: 'ZATCA Phase 2 e-invoicing ready' },
+          { icon: <IconShield size={15} />, textAr: 'استضافة وسيادة بيانات محلية داخل اليمن', textEn: 'Sovereign local hosting in Yemen' },
+          { icon: <IconCheckCircle size={15} />, textAr: 'عزل مشدد للبيانات وحماية كاملة للخصوصية', textEn: 'Strict data protection & enterprise isolation' },
+          { icon: <IconCheckCircle size={15} />, textAr: 'حوكمة مالية متوافقة مع الأنظمة التجارية والمعايير الدولية', textEn: 'Governance aligned with commercial laws & IFRS standards' },
           { icon: <IconLock size={15} />, textAr: 'معمارية أمن معلومات مؤسسية وفق ISO 27001', textEn: 'ISO 27001 information security architecture' }
         ].map((item, index) => (
           <div key={index} className="site-hero__trust-item">

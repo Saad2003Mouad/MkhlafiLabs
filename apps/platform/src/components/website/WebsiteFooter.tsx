@@ -67,13 +67,14 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
           {/* Brand column */}
           <div>
             <img
-              src="/brand/logo.jpg"
+              src="/brand/logo.png"
               alt="MIKHLAFI LABS"
               style={{
                 height: '52px',
                 width: 'auto',
                 display: 'block',
-                objectFit: 'contain'
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 10px rgba(0, 0, 0, 0.45))'
               }}
             />
             <p
@@ -90,10 +91,10 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
                 : 'A deterministic operational intelligence layer that sits above your existing enterprise systems — surfacing deviations and evidencing them before they become losses.'}
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 20 }}>
-              <span className="ml-badge">Sovereign KSA</span>
-              <span className="ml-badge">PDPL</span>
+              <span className="ml-badge">{isAr ? 'صنعاء، اليمن' : "Sana'a, Yemen"}</span>
+              <span className="ml-badge">{isAr ? 'استضافة سيادية' : 'Sovereign Hosting'}</span>
               <span className="ml-badge">ISO 27001</span>
-              <span className="ml-badge">ZATCA P2</span>
+              <span className="ml-badge">{isAr ? 'عزل كامل للبيانات' : 'Air-Gapped Ready'}</span>
             </div>
           </div>
 

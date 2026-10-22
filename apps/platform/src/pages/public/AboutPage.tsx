@@ -38,8 +38,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({ locale, onNavigate }) => {
       icon: <IconServer size={22} />,
       titleAr: 'نشر سيادي وغير تطفلي',
       titleEn: 'Sovereign, non-invasive',
-      descAr: 'يدعم النشر السحابي السيادي داخل السعودية أو النشر المحلي المغلق (Air-Gapped).',
-      descEn: 'Sovereign deployment in KSA or air-gapped on-prem, with read-only integration.'
+      descAr: 'يدعم النشر السحابي السيادي داخل اليمن أو النشر المحلي المغلق (Air-Gapped).',
+      descEn: 'Sovereign deployment in Yemen or air-gapped on-prem, with read-only integration.'
     },
     {
       icon: <IconCheckCircle size={22} />,
@@ -179,16 +179,16 @@ export const AboutPage: React.FC<AboutPageProps> = ({ locale, onNavigate }) => {
               </h2>
               <p className="ml-lead pp-split__lead">
                 {isAr
-                  ? 'تدعم المنصة النشر داخل المملكة أو داخل مراكز بيانات مؤسستك، مع عزل صارم بين الكيانات وسجلات تدقيق لا يمكن تعديلها، بما يحقق متطلبات حماية البيانات والالتزامات التنظيمية.'
-                  : 'Deploy within the Kingdom of Saudi Arabia or inside your own data centers, with strict per-tenant isolation and tamper-evident audit trails that support data protection and regulatory obligations.'}
+                  ? 'تدعم المنصة النشر المحلي داخل اليمن أو داخل مراكز بيانات مؤسستك، مع عزل صارم بين الكيانات وسجلات تدقيق لا يمكن تعديلها، بما يحقق متطلبات حماية البيانات والالتزامات التنظيمية.'
+                  : 'Deploy within Yemen or inside your own private data centers, with strict per-tenant isolation and tamper-evident audit trails that support data protection and compliance obligations.'}
               </p>
               <div className="pp-split__list">
                 <div className="pp-split__item">
                   <span className="pp-split__dot" aria-hidden="true" />
                   <span>
                     {isAr
-                      ? 'مواءمة مع ضوابط الأمن السيبراني الوطنية (NCA) ونظام حماية البيانات الشخصية (PDPL).'
-                      : 'Aligned with national cybersecurity controls (NCA) and personal data protection law (PDPL).'}
+                      ? 'مواءمة مع معايير أمن المعلومات المؤسسية (ISO 27001) وضوابط حماية البيانات والخصوصية.'
+                      : 'Aligned with enterprise information security controls (ISO 27001) and strict data privacy standards.'}
                   </span>
                 </div>
                 <div className="pp-split__item">
@@ -219,7 +219,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ locale, onNavigate }) => {
                 <div className="pp-contact__item">
                   <span className="pp-contact__k">{isAr ? 'المقر الرئيسي' : 'Headquarters'}</span>
                   <span className="pp-contact__v">
-                    {isAr ? 'الرياض، المملكة العربية السعودية' : 'Riyadh, Kingdom of Saudi Arabia'}
+                    {isAr ? 'صنعاء، الجمهورية اليمنية' : "Sana'a, Republic of Yemen"}
                   </span>
                 </div>
                 <div className="pp-gap-lg" />
@@ -227,8 +227,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({ locale, onNavigate }) => {
                   <span className="pp-contact__k">{isAr ? 'النسخة السيادية' : 'Sovereign options'}</span>
                   <span className="pp-contact__v">
                     {isAr
-                      ? 'سحابة سيادية داخل السعودية أو نشر محلي مغلق بالكامل داخل مراكز بياناتك.'
-                      : 'Sovereign cloud in KSA, or a fully air-gapped deployment in your own data centers.'}
+                      ? 'سحابة سيادية داخل اليمن أو نشر محلي مغلق بالكامل داخل مراكز بياناتك.'
+                      : 'Sovereign cloud in Yemen, or a fully air-gapped deployment in your own data centers.'}
                   </span>
                 </div>
                 <div className="pp-gap-lg" />

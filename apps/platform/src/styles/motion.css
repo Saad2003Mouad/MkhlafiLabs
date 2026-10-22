@@ -92,6 +92,19 @@
   will-change: auto;
 }
 
+/* Safety override: FAQ accordion items and interactive questions must NEVER be hidden */
+.faq-row,
+.faq-row[data-reveal],
+.faq-row__trigger,
+.faq-row__answer,
+.faq-card,
+.faq-card[data-reveal] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: none !important;
+  filter: none !important;
+}
+
 /* --------------------------------------------------------------------------
    Three-dimensional depth on surfaces
    -------------------------------------------------------------------------- */

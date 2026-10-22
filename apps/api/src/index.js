@@ -11,20 +11,37 @@ export * from './auth/sessions.js';
 export * from './middleware/tenant.js';
 export * from './server.js';
 
-const PORT = process.env.API_PORT || 4000;
+const PORT = process.env.PORT || process.env.API_PORT || 4000;
+
+let migrationsPromise = null;
+async function ensureDbReady() {
+  if (!migrationsPromise) {
+    migrationsPromise = runMigrations().catch(err => {
+      console.error('[Database Migration Warning]:', err.message);
+      migrationsPromise = null;
+    });
+  }
+  return migrationsPromise;
+}
 
 export async function createApiServer() {
-  await runMigrations();
+  await ensureDbReady();
   return http.createServer((req, res) => {
     handleApiRequest(req, res);
   });
 }
 
-// If executed directly
-if (process.argv[1] && (process.argv[1].endsWith('index.js') || process.argv[1].endsWith('api'))) {
+// Vercel Serverless / Node request handler
+export default async function handler(req, res) {
+  await ensureDbReady();
+  return handleApiRequest(req, res);
+}
+
+// If executed directly or via npm start in Vercel Service
+if (process.argv[1] || process.env.PORT) {
   createApiServer().then(server => {
     server.listen(PORT, '0.0.0.0', () => {
-      console.log(`[MIKHLAFI LABS API] Running on http://localhost:${PORT}`);
+      console.log(`[MIKHLAFI LABS API] Running on port ${PORT}`);
     });
   }).catch(err => {
     console.error('[API Startup Failed]:', err);

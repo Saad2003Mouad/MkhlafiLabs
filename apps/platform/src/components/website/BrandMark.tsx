@@ -44,14 +44,15 @@ export const BrandMark: React.FC<BrandMarkProps> = ({
       }}
     >
       <img
-        src="/brand/logo.jpg"
+        src="/brand/logo.png"
         alt="MIKHLAFI LABS"
         height={size}
         style={{
           height: `${size}px`,
           width: 'auto',
           display: 'block',
-          objectFit: 'contain'
+          objectFit: 'contain',
+          filter: 'drop-shadow(0 2px 10px rgba(0, 0, 0, 0.45))'
         }}
       />
     </span>
