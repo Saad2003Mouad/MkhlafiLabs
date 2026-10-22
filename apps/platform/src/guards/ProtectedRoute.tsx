@@ -74,9 +74,36 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // If not authenticated, render null while redirect effect runs
+  // If not authenticated, render loading screen while redirect effect executes
   if (!isAuthenticated || !user) {
-    return null;
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg-base)',
+          color: 'var(--text-primary)',
+          gap: '1.25rem'
+        }}
+      >
+        <div
+          style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid var(--border-subtle)',
+            borderTopColor: 'var(--accent-base)',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite'
+          }}
+        />
+        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+          {isAr ? 'جارٍ التحويل إلى بوابة تسجيل الدخول...' : 'Redirecting to login portal...'}
+        </div>
+      </div>
+    );
   }
 
   const isOwner = Boolean(
