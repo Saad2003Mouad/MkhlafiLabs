@@ -15,6 +15,10 @@ const PORT = process.env.PORT || process.env.API_PORT || 4000;
 
 let migrationsPromise = null;
 async function ensureDbReady() {
+  // In Vercel serverless, database migrations are pre-applied to avoid multi-second cold start latency
+  if (process.env.VERCEL) {
+    return Promise.resolve();
+  }
   if (!migrationsPromise) {
     migrationsPromise = runMigrations().catch(err => {
       console.error('[Database Migration Warning]:', err.message);
@@ -33,8 +37,22 @@ export async function createApiServer() {
 
 // Vercel Serverless / Node request handler
 export default async function handler(req, res) {
-  await ensureDbReady();
-  return handleApiRequest(req, res);
+  try {
+    if (!process.env.VERCEL) {
+      await ensureDbReady();
+    }
+    return await handleApiRequest(req, res);
+  } catch (fatalErr) {
+    console.error('[Vercel Serverless Fatal Exception]:', fatalErr);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: 'Serverless invocation failure',
+        message: fatalErr.message,
+        hint: 'Check Vercel Environment Variables for DATABASE_URL'
+      }));
+    }
+  }
 }
 
 import path from 'node:path';

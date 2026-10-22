@@ -3,15 +3,27 @@
 // Canonical identity enforcement, path containment, and fail-closed database isolation
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { PGlite } from '@electric-sql/pglite';
 import { getPostgresSslConfig } from './connection.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_ROOT = path.resolve(__dirname, '../../../../data');
+
+// In serverless environments (e.g. Vercel, AWS Lambda), the runtime filesystem at /var/task is strictly read-only.
+// Writable ephemeral storage is located strictly in os.tmpdir() (/tmp).
+const isServerless = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  (process.env.NODE_ENV === 'production' && !fs.existsSync(path.resolve(__dirname, '../../../../data')))
+);
+
+const DATA_ROOT = isServerless
+  ? path.join(os.tmpdir(), 'mikhlafi-labs-data')
+  : path.resolve(__dirname, '../../../../data');
 const TENANTS_DIR = path.join(DATA_ROOT, 'tenants');
 
 // In-memory cache of tenant connection pools / PGlite instances
@@ -47,8 +59,12 @@ export class TenantManager {
   }
 
   ensureTenantsDirectory() {
-    if (!fs.existsSync(TENANTS_DIR)) {
-      fs.mkdirSync(TENANTS_DIR, { recursive: true });
+    try {
+      if (!fs.existsSync(TENANTS_DIR)) {
+        fs.mkdirSync(TENANTS_DIR, { recursive: true });
+      }
+    } catch (err) {
+      console.warn('[TenantManager] Non-fatal tenant directory notice:', err.message);
     }
   }
 
@@ -77,15 +93,20 @@ export class TenantManager {
   }
 
   async provisionTenantStorage(tenantId) {
-    const base = this.getTenantStoragePath(tenantId);
-    const subDirs = ['uploads', 'exports', 'backups', 'secrets', 'db'];
-    for (const dir of subDirs) {
-      const fullPath = path.join(base, dir);
-      if (!fs.existsSync(fullPath)) {
-        fs.mkdirSync(fullPath, { recursive: true });
+    try {
+      const base = this.getTenantStoragePath(tenantId);
+      const subDirs = ['uploads', 'exports', 'backups', 'secrets', 'db'];
+      for (const dir of subDirs) {
+        const fullPath = path.join(base, dir);
+        if (!fs.existsSync(fullPath)) {
+          fs.mkdirSync(fullPath, { recursive: true });
+        }
       }
+      return base;
+    } catch (err) {
+      console.warn(`[Tenant Storage Notice for ${tenantId}]:`, err.message);
+      return path.join(os.tmpdir(), tenantId);
     }
-    return base;
   }
 
   /**
@@ -147,6 +168,7 @@ export class TenantManager {
     await this.provisionTenantStorage(canonicalId);
     const tenantDbDir = this.getTenantStoragePath(canonicalId, 'db');
 
+    const { PGlite } = await import('@electric-sql/pglite');
     const pglite = new PGlite(tenantDbDir);
     await pglite.waitReady;
 

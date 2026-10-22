@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
-import { PGlite } from '@electric-sql/pglite';
+// PGlite is dynamically imported on demand only when no cloud database URL is configured
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,6 +132,7 @@ export async function getDb() {
       (process.env.NODE_TEST_CONTEXT !== undefined && process.env.NODE_TEST_CONTEXT !== '');
     const dataDir = runningUnderTestRunner ? undefined : process.env.PGLITE_DATA_DIR;
 
+    const { PGlite } = await import('@electric-sql/pglite');
     if (dataDir) {
       // PGlite creates the leaf directory itself but not its parents, and the parent
       // does not exist yet on a fresh checkout because data directories are ignored.

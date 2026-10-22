@@ -208,11 +208,31 @@ export async function handleApiRequest(req, res) {
   try {
     // ── HEALTH CHECK ────────────────────────────────────────────────────────
     if (method === 'GET' && (pathname === '/api/health' || pathname === '/api/v1/health')) {
-      const dbCheck = await query('SELECT count(*) FROM roles');
-      return jsonResponse(res, 200, {
-        status: 'healthy',
-        database: 'postgresql_connected',
-        rolesConfigured: parseInt(dbCheck.rows[0].count, 10),
+      let dbStatus = 'unknown';
+      let dbError = null;
+      let rolesCount = 0;
+      try {
+        const dbCheck = await query('SELECT count(*) FROM roles');
+        dbStatus = 'connected';
+        rolesCount = parseInt(dbCheck.rows[0].count, 10);
+      } catch (err) {
+        dbStatus = 'error';
+        dbError = err.message;
+      }
+
+      const availableEnvKeys = Object.keys(process.env).filter(k => /URL|POSTGRES|DB|STORAGE|NEON/i.test(k));
+
+      return jsonResponse(res, dbStatus === 'connected' ? 200 : 503, {
+        status: dbStatus === 'connected' ? 'healthy' : 'degraded',
+        database: dbStatus,
+        databaseError: dbError,
+        rolesConfigured: rolesCount,
+        environment: {
+          nodeEnv: process.env.NODE_ENV,
+          isVercel: !!process.env.VERCEL,
+          hasDatabaseUrl: Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.STORAGE_URL || process.env.STORAGE_DATABASE_URL || process.env.STORAGE_POSTGRES_URL || process.env.NEON_DATABASE_URL),
+          databaseKeysFound: availableEnvKeys
+        },
         timestamp: new Date().toISOString()
       });
     }
