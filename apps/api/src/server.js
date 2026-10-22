@@ -140,6 +140,26 @@ export function jsonResponse(res, statusCode, data, headers = {}) {
 }
 
 export function readJsonBody(req) {
+  // 1. If Vercel or an upstream middleware has already parsed req.body
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'object') {
+      return Promise.resolve(req.body);
+    }
+    if (typeof req.body === 'string') {
+      try {
+        return Promise.resolve(JSON.parse(req.body));
+      } catch (err) {
+        return Promise.reject(new Error('Invalid JSON payload'));
+      }
+    }
+  }
+
+  // 2. If the request stream has already ended or is not readable
+  if (req.readableEnded) {
+    return Promise.resolve({});
+  }
+
+  // 3. Fallback to standard Node.js streaming body consumption
   return new Promise((resolve, reject) => {
     let body = '';
     req.on('data', chunk => {

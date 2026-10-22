@@ -167,10 +167,20 @@ class ApiClient {
       credentials: 'include' // Always include HttpOnly cookies
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    let data: any = null;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      // In case Vercel or an intermediate gateway returned plain text / HTML (e.g. 500, 502, 504)
+      if (!response.ok) {
+        throw new Error(text || `Server error (${response.status})`);
+      }
+      data = { message: text };
+    }
 
     if (!response.ok) {
-      throw new Error(data.error || `Request failed with status ${response.status}`);
+      throw new Error(data?.error || data?.message || `Request failed with status ${response.status}`);
     }
 
     return data as T;

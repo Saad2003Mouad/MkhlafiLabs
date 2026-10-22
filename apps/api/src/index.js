@@ -37,8 +37,18 @@ export default async function handler(req, res) {
   return handleApiRequest(req, res);
 }
 
-// If executed directly or via npm start in Vercel Service
-if (process.argv[1] || process.env.PORT) {
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const isDirectExecution = process.argv[1] && (
+  path.resolve(process.argv[1]) === __filename ||
+  process.argv[1].endsWith('src/index.js') ||
+  process.argv[1].endsWith('src\\index.js')
+);
+
+// If executed directly (e.g. node src/index.js or npm start locally)
+if (isDirectExecution && !process.env.VERCEL) {
   createApiServer().then(server => {
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`[MIKHLAFI LABS API] Running on port ${PORT}`);

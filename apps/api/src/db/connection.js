@@ -63,6 +63,10 @@ export async function getDb() {
     process.env.DATABASE_URL ||
     process.env.POSTGRES_URL ||
     process.env.STORAGE_URL ||
+    process.env.STORAGE_DATABASE_URL ||
+    process.env.STORAGE_POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
     process.env.NEON_DATABASE_URL;
 
   // Fatal security guard: Prevent test mode from ever silently connecting to or modifying a production database
@@ -84,9 +88,12 @@ export async function getDb() {
   }
 
   if (process.env.NODE_ENV === 'production' && !databaseUrl && !process.env.ALLOW_EMBEDDED_IN_PROD) {
+    const matchedEnvKeys = Object.keys(process.env).filter(k => /URL|POSTGRES|DB|STORAGE/i.test(k));
+    console.error(`[FATAL DATABASE CONFIG]: DATABASE_URL is missing in production environment. Available matching env keys: [${matchedEnvKeys.join(', ')}]`);
     throw new Error(
-      '[FATAL SECURITY CONFIGURATION]: NODE_ENV is set to production but DATABASE_URL is not configured. ' +
-      'Silent fallback to an in-process disposable database in production is prohibited to protect data integrity.'
+      `[FATAL SECURITY CONFIGURATION]: NODE_ENV is set to production but DATABASE_URL is not configured. ` +
+      `Matching environment keys found: [${matchedEnvKeys.join(', ')}]. ` +
+      `Silent fallback to an in-process disposable database in production is prohibited to protect data integrity.`
     );
   }
 
