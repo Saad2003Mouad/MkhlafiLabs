@@ -3,7 +3,8 @@
   "services": {
     "api": {
       "root": "apps/api",
-      "runtime": "node"
+      "runtime": "node",
+      "entrypoint": "src/index.js"
     },
     "platform": {
       "root": "apps/platform",
