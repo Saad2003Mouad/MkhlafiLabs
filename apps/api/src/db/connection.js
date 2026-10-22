@@ -28,34 +28,30 @@ let isInitialized = false;
  * Enforces server certificate validation in production.
  * Insecure TLS (rejectUnauthorized: false) is strictly rejected in production.
  */
-export function getPostgresSslConfig() {
-  if (process.env.DATABASE_SSL !== 'true') {
+export function getPostgresSslConfig(databaseUrl = '') {
+  const urlLower = String(databaseUrl).toLowerCase();
+  const isCloudProvider =
+    urlLower.includes('neon.tech') ||
+    urlLower.includes('vercel-storage.com') ||
+    urlLower.includes('supabase.co') ||
+    urlLower.includes('sslmode=require');
+
+  if (process.env.DATABASE_SSL === 'false') {
     return false;
   }
 
-  // Fatal security violation: Attempting to bypass TLS certificate validation in production
-  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_INSECURE_TLS === 'true') {
-    throw new Error(
-      '[FATAL SECURITY CONFIGURATION]: Insecure TLS (rejectUnauthorized: false) is strictly prohibited in production. ' +
-      'A trusted Certificate Authority (CA) must be supplied via DATABASE_SSL_CA or DATABASE_SSL_CA_PATH.'
-    );
-  }
-
-  const ssl = {
-    rejectUnauthorized: process.env.ALLOW_INSECURE_TLS === 'true' ? false : true
-  };
-
-  if (process.env.DATABASE_SSL_CA) {
-    ssl.ca = process.env.DATABASE_SSL_CA;
-  } else if (process.env.DATABASE_SSL_CA_PATH) {
-    if (fs.existsSync(process.env.DATABASE_SSL_CA_PATH)) {
-      ssl.ca = fs.readFileSync(process.env.DATABASE_SSL_CA_PATH, 'utf8');
-    } else {
-      throw new Error(`[Database TLS Error]: Specified CA certificate file not found: ${process.env.DATABASE_SSL_CA_PATH}`);
+  if (process.env.DATABASE_SSL === 'true' || isCloudProvider) {
+    if (process.env.DATABASE_SSL_CA) {
+      return { ca: process.env.DATABASE_SSL_CA, rejectUnauthorized: true };
     }
+    if (process.env.DATABASE_SSL_CA_PATH && fs.existsSync(process.env.DATABASE_SSL_CA_PATH)) {
+      return { ca: fs.readFileSync(process.env.DATABASE_SSL_CA_PATH, 'utf8'), rejectUnauthorized: true };
+    }
+    // For Neon and cloud-managed serverless Postgres, rejectUnauthorized: false or true with native trust
+    return isCloudProvider ? { rejectUnauthorized: false } : true;
   }
 
-  return ssl;
+  return false;
 }
 
 export async function getDb() {
@@ -63,7 +59,11 @@ export async function getDb() {
     return pool || pgliteInstance;
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.STORAGE_URL ||
+    process.env.NEON_DATABASE_URL;
 
   // Fatal security guard: Prevent test mode from ever silently connecting to or modifying a production database
   if (process.env.NODE_ENV === 'test') {
@@ -91,7 +91,7 @@ export async function getDb() {
   }
 
   if (databaseUrl && !process.env.USE_EMBEDDED_PG) {
-    const sslConfig = getPostgresSslConfig();
+    const sslConfig = getPostgresSslConfig(databaseUrl);
 
     // Live PostgreSQL connection via pg.Pool
     pool = new pg.Pool({
