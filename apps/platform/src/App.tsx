@@ -48,6 +48,7 @@ import { AlertsView } from './components/platform/AlertsView';
 import { IntegrationsView } from './components/platform/IntegrationsView';
 import { WorkflowsView } from './components/platform/WorkflowsView';
 import { OrganizationView } from './components/platform/OrganizationView';
+import { TeamCollaborationView } from './components/platform/TeamCollaborationView';
 import { BillingView } from './components/platform/BillingView';
 import { SettingsView } from './components/platform/SettingsView';
 
@@ -175,6 +176,8 @@ const AppRouterContent: React.FC = () => {
           return <WorkflowsView locale={locale} />;
         case ROUTES.APP.ORGANIZATION:
           return <OrganizationView locale={locale} />;
+        case ROUTES.APP.TEAM:
+          return <TeamCollaborationView locale={locale} />;
         case ROUTES.APP.BILLING:
           return <BillingView locale={locale} />;
         case ROUTES.APP.SETTINGS:

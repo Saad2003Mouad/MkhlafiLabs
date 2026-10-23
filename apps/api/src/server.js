@@ -905,12 +905,17 @@ export async function handleApiRequest(req, res) {
            m.id AS membership_id,
            m.role,
            m.status,
+           m.department,
+           m.job_title,
            m.created_at,
            u.id AS user_id,
            u.email,
            u.name_en,
            u.name_ar,
-           b.name_en AS branch_name
+           u.phone,
+           b.id AS branch_id,
+           b.name_en AS branch_name,
+           b.name_ar AS branch_name_ar
          FROM memberships m
          JOIN users u ON u.id = m.user_id
          LEFT JOIN branches b ON b.id = m.branch_id
@@ -925,17 +930,27 @@ export async function handleApiRequest(req, res) {
       });
     }
 
-    // ── ADD MEMBER (SCOPED TO TENANT, RBAC CHECK) ───────────────────────────
+    // ── PROVISION EMPLOYEE / ADD MEMBER (SCOPED TO TENANT, RBAC CHECK) ────────
     if (method === 'POST' && pathname === '/api/v1/organizations/members') {
-      if (!hasPermission(tenant, 'member:invite')) {
-        return jsonResponse(res, 403, { error: 'Forbidden: Insufficient permissions to invite members.' });
+      if (!hasPermission(tenant, 'member:invite') && tenant.role !== 'org_owner' && tenant.role !== 'org_admin') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Insufficient permissions to add employees.' });
       }
 
       const body = await readJsonBody(req);
-      const { email, role = 'viewer', branchId = null } = body;
+      const {
+        email,
+        password,
+        nameAr,
+        nameEn,
+        phone,
+        role = 'analyst',
+        department,
+        jobTitle,
+        branchId = null
+      } = body;
 
       if (!email) {
-        return jsonResponse(res, 400, { error: 'Member email is required.' });
+        return jsonResponse(res, 400, { error: 'Employee email is required.' });
       }
 
       // Privilege escalation check: cannot assign org_owner unless you are org_owner
@@ -944,51 +959,528 @@ export async function handleApiRequest(req, res) {
       }
 
       const normalizedEmail = email.trim().toLowerCase();
-      let targetUser = (await query('SELECT id FROM users WHERE email = $1', [normalizedEmail])).rows[0];
+      const resolvedNameEn = (nameEn && nameEn.trim()) || normalizedEmail.split('@')[0];
+      const resolvedNameAr = (nameAr && nameAr.trim()) || resolvedNameEn;
+
+      // Ensure password has at least 8 chars or generate a secure one
+      let effectivePassword = password && password.trim().length >= 8
+        ? password.trim()
+        : 'Mikhlafi@' + crypto.randomBytes(4).toString('hex') + '!';
+
+      const passwordHash = await hashPassword(effectivePassword);
+
+      let targetUser = (await query('SELECT id, email, name_en, name_ar FROM users WHERE email = $1', [normalizedEmail])).rows[0];
 
       if (!targetUser) {
-        // Create user with temporary password hash
-        const tempHash = await hashPassword('MikhlafiTemp2026!');
+        // Create user with active verified status and specified credentials
         const newUserRes = await query(
-          `INSERT INTO users (email, password_hash, name_en, name_ar, is_verified, status)
-           VALUES ($1, $2, $3, $4, false, 'active')
-           RETURNING id`,
-          [normalizedEmail, tempHash, normalizedEmail.split('@')[0], normalizedEmail.split('@')[0]]
+          `INSERT INTO users (email, password_hash, name_en, name_ar, phone, is_verified, status)
+           VALUES ($1, $2, $3, $4, $5, true, 'active')
+           RETURNING id, email, name_en, name_ar, phone`,
+          [normalizedEmail, passwordHash, resolvedNameEn, resolvedNameAr, phone ? phone.trim() : null]
         );
         targetUser = newUserRes.rows[0];
+      } else {
+        // User exists: update credentials and details if requested
+        await query(
+          `UPDATE users
+           SET password_hash = $1,
+               name_en = COALESCE($2, name_en),
+               name_ar = COALESCE($3, name_ar),
+               phone = COALESCE($4, phone),
+               status = 'active',
+               updated_at = now()
+           WHERE id = $5`,
+          [passwordHash, nameEn ? nameEn.trim() : null, nameAr ? nameAr.trim() : null, phone ? phone.trim() : null, targetUser.id]
+        );
       }
 
-      // Check duplicate membership
+      // Check duplicate membership in this organization
       const existing = await query(
         'SELECT id FROM memberships WHERE user_id = $1 AND organization_id = $2',
         [targetUser.id, orgId]
       );
 
       if (existing.rows.length > 0) {
-        return jsonResponse(res, 409, { error: 'User is already a member of this organization.' });
+        return jsonResponse(res, 409, { error: 'This user is already a registered member of this organization.' });
       }
 
-      // Insert membership
+      // Insert membership with department and job title
       const newMembership = await query(
-        `INSERT INTO memberships (user_id, organization_id, role, branch_id, status)
-         VALUES ($1, $2, $3, $4, 'active')
-         RETURNING id, user_id, organization_id, role, status, created_at`,
-        [targetUser.id, orgId, role, branchId]
+        `INSERT INTO memberships (user_id, organization_id, role, branch_id, department, job_title, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active')
+         RETURNING id, user_id, organization_id, role, branch_id, department, job_title, status, created_at`,
+        [targetUser.id, orgId, role, branchId, department ? department.trim() : null, jobTitle ? jobTitle.trim() : null]
       );
 
       await recordAuditEvent({
         organizationId: orgId,
         userId: auth.user.id,
-        action: 'MEMBER_INVITED',
+        action: 'MEMBER_PROVISIONED',
         entityType: 'MEMBERSHIP',
         entityId: newMembership.rows[0].id,
-        details: { targetEmail: normalizedEmail, role }
+        details: { targetEmail: normalizedEmail, role, department, jobTitle }
       });
 
       return jsonResponse(res, 201, {
         success: true,
-        membership: newMembership.rows[0]
+        membership: newMembership.rows[0],
+        credentials: {
+          email: normalizedEmail,
+          password: effectivePassword,
+          nameAr: resolvedNameAr,
+          nameEn: resolvedNameEn,
+          role,
+          department: department || null,
+          jobTitle: jobTitle || null
+        }
       });
+    }
+
+    // ── RESET EMPLOYEE PASSWORD (SCOPED TO TENANT) ───────────────────────────
+    if (method === 'PATCH' && pathname.startsWith('/api/v1/organizations/members/') && pathname.endsWith('/password')) {
+      if (!hasPermission(tenant, 'member:update') && tenant.role !== 'org_owner' && tenant.role !== 'org_admin') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Insufficient permissions to reset employee passwords.' });
+      }
+
+      const parts = pathname.split('/');
+      const memberId = parts[parts.indexOf('members') + 1];
+      const body = await readJsonBody(req);
+
+      const memberRes = await query(
+        'SELECT m.id, m.user_id, m.role, u.email FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.id = $1 AND m.organization_id = $2',
+        [memberId, orgId]
+      );
+
+      if (memberRes.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Member not found.' });
+      }
+
+      const targetMember = memberRes.rows[0];
+      if (targetMember.role === 'org_owner' && tenant.role !== 'org_owner') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Only an organization owner can reset an owner password.' });
+      }
+
+      const effectivePassword = body.password && body.password.trim().length >= 8
+        ? body.password.trim()
+        : 'Mikhlafi@' + crypto.randomBytes(4).toString('hex') + '!';
+
+      const newHash = await hashPassword(effectivePassword);
+
+      await query(
+        'UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2',
+        [newHash, targetMember.user_id]
+      );
+
+      await recordAuditEvent({
+        organizationId: orgId,
+        userId: auth.user.id,
+        action: 'MEMBER_PASSWORD_RESET',
+        entityType: 'MEMBERSHIP',
+        entityId: memberId,
+        details: { targetEmail: targetMember.email, resetBy: auth.user.email }
+      });
+
+      return jsonResponse(res, 200, {
+        success: true,
+        email: targetMember.email,
+        newPassword: effectivePassword
+      });
+    }
+
+    // ── UPDATE MEMBER ROLE / PROFILE (SCOPED TO TENANT) ─────────────────────
+    if (method === 'PATCH' && pathname.startsWith('/api/v1/organizations/members/') && !pathname.endsWith('/password')) {
+      if (!hasPermission(tenant, 'member:update') && tenant.role !== 'org_owner' && tenant.role !== 'org_admin') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Insufficient permissions to update employee roles.' });
+      }
+
+      const parts = pathname.split('/');
+      const memberId = parts[parts.indexOf('members') + 1];
+      const body = await readJsonBody(req);
+      const { role, department, jobTitle, branchId, status } = body;
+
+      const memberRes = await query('SELECT * FROM memberships WHERE id = $1 AND organization_id = $2', [memberId, orgId]);
+      if (memberRes.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Member not found.' });
+      }
+
+      const current = memberRes.rows[0];
+
+      if (role === 'org_owner' && tenant.role !== 'org_owner') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Only an owner can assign the owner role.' });
+      }
+
+      if (current.role === 'org_owner' && role && role !== 'org_owner') {
+        const ownerCount = await query("SELECT count(*) FROM memberships WHERE organization_id = $1 AND role = 'org_owner' AND status = 'active'", [orgId]);
+        if (parseInt(ownerCount.rows[0].count, 10) <= 1) {
+          return jsonResponse(res, 400, { error: 'Cannot remove or demote the last remaining organization owner.' });
+        }
+      }
+
+      const updated = await query(
+        `UPDATE memberships
+         SET role = COALESCE($1, role),
+             department = COALESCE($2, department),
+             job_title = COALESCE($3, job_title),
+             branch_id = COALESCE($4, branch_id),
+             status = COALESCE($5, status),
+             updated_at = now()
+         WHERE id = $6 AND organization_id = $7
+         RETURNING id, user_id, organization_id, role, department, job_title, branch_id, status, updated_at`,
+        [
+          role || null,
+          department !== undefined ? department : null,
+          jobTitle !== undefined ? jobTitle : null,
+          branchId !== undefined ? branchId : null,
+          status || null,
+          memberId,
+          orgId
+        ]
+      );
+
+      await recordAuditEvent({
+        organizationId: orgId,
+        userId: auth.user.id,
+        action: 'MEMBER_UPDATED',
+        entityType: 'MEMBERSHIP',
+        entityId: memberId,
+        details: { role, department, jobTitle, status }
+      });
+
+      return jsonResponse(res, 200, {
+        success: true,
+        membership: updated.rows[0]
+      });
+    }
+
+    // ── REMOVE MEMBER (SCOPED TO TENANT) ────────────────────────────────────
+    if (method === 'DELETE' && pathname.startsWith('/api/v1/organizations/members/')) {
+      if (!hasPermission(tenant, 'member:remove') && tenant.role !== 'org_owner' && tenant.role !== 'org_admin') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Insufficient permissions to remove employees.' });
+      }
+
+      const parts = pathname.split('/');
+      const memberId = parts[parts.indexOf('members') + 1];
+
+      const memberRes = await query('SELECT * FROM memberships WHERE id = $1 AND organization_id = $2', [memberId, orgId]);
+      if (memberRes.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Member not found.' });
+      }
+
+      const target = memberRes.rows[0];
+
+      if (target.user_id === auth.user.id && target.role === 'org_owner') {
+        return jsonResponse(res, 400, { error: 'Cannot delete your own organization owner membership.' });
+      }
+
+      await query('DELETE FROM memberships WHERE id = $1 AND organization_id = $2', [memberId, orgId]);
+
+      await recordAuditEvent({
+        organizationId: orgId,
+        userId: auth.user.id,
+        action: 'MEMBER_REMOVED',
+        entityType: 'MEMBERSHIP',
+        entityId: memberId,
+        details: { removedUserId: target.user_id, role: target.role }
+      });
+
+      return jsonResponse(res, 200, { success: true, message: 'Member removed successfully.' });
+    }
+
+    // ── TEAM COLLABORATION: CHANNELS (/api/v1/team/channels) ────────────────
+    if (method === 'GET' && pathname === '/api/v1/team/channels') {
+      let channelsRes = await query(
+        `SELECT
+           c.id, c.slug, c.name_ar, c.name_en, c.description_ar, c.description_en, c.is_default, c.created_at,
+           (SELECT count(*) FROM team_messages WHERE channel_id = c.id)::int AS message_count,
+           (SELECT max(created_at) FROM team_messages WHERE channel_id = c.id) AS last_message_at
+         FROM team_channels c
+         WHERE c.organization_id = $1
+         ORDER BY c.is_default DESC, c.created_at ASC`,
+        [orgId]
+      );
+
+      if (channelsRes.rows.length === 0) {
+        // Seed default channels on the fly if not yet populated
+        await query(
+          `INSERT INTO team_channels (organization_id, slug, name_ar, name_en, description_ar, description_en, is_default)
+           VALUES
+             ($1, 'general', 'النقاشات العامة', 'General Discussion', 'القناة الرسمية لنقاشات وتوجيهات فريق العمل', 'Official channel for team updates and announcements', true),
+             ($1, 'audit-finance', 'التدقيق والعمليات المالية', 'Audit & Financial Operations', 'متابعة ومراجعة القيود المشبوهة وفروقات الموردين ومطابقات الصرف', 'Reviewing audit variances, supplier pricing, and disbursement holds', false),
+             ($1, 'tasks-reports', 'المهام والتقارير التنفيذية', 'Tasks & Executive Reports', 'مشاركة وتكليف المهام بين الموظفين ومتابعة إنجازها', 'Collaborative task assignments, executive briefs, and sign-offs', false)
+           ON CONFLICT (organization_id, slug) DO NOTHING`,
+          [orgId]
+        );
+        channelsRes = await query(
+          `SELECT
+             c.id, c.slug, c.name_ar, c.name_en, c.description_ar, c.description_en, c.is_default, c.created_at,
+             0 AS message_count,
+             null AS last_message_at
+           FROM team_channels c
+           WHERE c.organization_id = $1
+           ORDER BY c.is_default DESC, c.created_at ASC`,
+          [orgId]
+        );
+      }
+
+      return jsonResponse(res, 200, {
+        organizationId: orgId,
+        channels: channelsRes.rows
+      });
+    }
+
+    if (method === 'POST' && pathname === '/api/v1/team/channels') {
+      if (tenant.role === 'viewer') {
+        return jsonResponse(res, 403, { error: 'Forbidden: Insufficient permissions to create channels.' });
+      }
+      const body = await readJsonBody(req);
+      const { nameAr, nameEn, descriptionAr, descriptionEn, slug } = body;
+      if (!nameAr && !nameEn) {
+        return jsonResponse(res, 400, { error: 'Channel name is required.' });
+      }
+      const safeSlug = (slug || nameEn || nameAr).toLowerCase().replace(/[^a-z0-9\u0621-\u064A_-]+/g, '-').replace(/^-|-$/g, '') || `chan-${Date.now().toString(36)}`;
+      const newChan = await query(
+        `INSERT INTO team_channels (organization_id, slug, name_ar, name_en, description_ar, description_en)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, slug, name_ar, name_en, description_ar, description_en, is_default, created_at`,
+        [orgId, safeSlug, nameAr || nameEn, nameEn || nameAr, descriptionAr || null, descriptionEn || null]
+      );
+      return jsonResponse(res, 201, { success: true, channel: newChan.rows[0] });
+    }
+
+    // ── TEAM COLLABORATION: MESSAGES ─────────────────────────────────────────
+    if (method === 'GET' && pathname.startsWith('/api/v1/team/channels/') && pathname.endsWith('/messages')) {
+      const parts = pathname.split('/');
+      const channelId = parts[parts.indexOf('channels') + 1];
+
+      const chanCheck = await query('SELECT id FROM team_channels WHERE id = $1 AND organization_id = $2', [channelId, orgId]);
+      if (chanCheck.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Channel not found.' });
+      }
+
+      const messagesRes = await query(
+        `SELECT
+           m.id,
+           m.channel_id,
+           m.content,
+           m.attachment_type,
+           m.attachment_data,
+           m.created_at,
+           m.user_id,
+           u.email AS sender_email,
+           u.name_ar AS sender_name_ar,
+           u.name_en AS sender_name_en,
+           mem.role AS sender_role,
+           mem.job_title AS sender_job_title,
+           mem.department AS sender_department
+         FROM team_messages m
+         JOIN users u ON u.id = m.user_id
+         LEFT JOIN memberships mem ON mem.user_id = m.user_id AND mem.organization_id = $1
+         WHERE m.channel_id = $2 AND m.organization_id = $1
+         ORDER BY m.created_at ASC
+         LIMIT 150`,
+        [orgId, channelId]
+      );
+
+      return jsonResponse(res, 200, {
+        channelId,
+        messages: messagesRes.rows
+      });
+    }
+
+    if (method === 'POST' && pathname.startsWith('/api/v1/team/channels/') && pathname.endsWith('/messages')) {
+      const parts = pathname.split('/');
+      const channelId = parts[parts.indexOf('channels') + 1];
+
+      const chanCheck = await query('SELECT id FROM team_channels WHERE id = $1 AND organization_id = $2', [channelId, orgId]);
+      if (chanCheck.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Channel not found.' });
+      }
+
+      const body = await readJsonBody(req);
+      const { content, attachmentType = 'none', attachmentData = null } = body;
+
+      if (!content || !content.trim()) {
+        return jsonResponse(res, 400, { error: 'Message content cannot be empty.' });
+      }
+
+      const newMsg = await query(
+        `INSERT INTO team_messages (organization_id, channel_id, user_id, content, attachment_type, attachment_data)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, channel_id, user_id, content, attachment_type, attachment_data, created_at`,
+        [orgId, channelId, auth.user.id, content.trim(), attachmentType, attachmentData ? JSON.stringify(attachmentData) : null]
+      );
+
+      const senderInfo = await query(
+        `SELECT
+           u.email AS sender_email,
+           u.name_ar AS sender_name_ar,
+           u.name_en AS sender_name_en,
+           mem.role AS sender_role,
+           mem.job_title AS sender_job_title,
+           mem.department AS sender_department
+         FROM users u
+         LEFT JOIN memberships mem ON mem.user_id = u.id AND mem.organization_id = $1
+         WHERE u.id = $2`,
+        [orgId, auth.user.id]
+      );
+
+      return jsonResponse(res, 201, {
+        success: true,
+        message: {
+          ...newMsg.rows[0],
+          ...senderInfo.rows[0]
+        }
+      });
+    }
+
+    // ── TEAM COLLABORATION: TASKS (/api/v1/team/tasks) ──────────────────────
+    if (method === 'GET' && pathname === '/api/v1/team/tasks') {
+      const statusFilter = parsedUrl.searchParams.get('status');
+      const assignedFilter = parsedUrl.searchParams.get('assignedTo');
+
+      let sql = `
+        SELECT
+          t.id,
+          t.organization_id,
+          t.title,
+          t.description,
+          t.assigned_to,
+          t.created_by,
+          t.priority,
+          t.status,
+          t.due_date,
+          t.related_report_ref,
+          t.created_at,
+          t.updated_at,
+          u_assignee.name_ar AS assignee_name_ar,
+          u_assignee.name_en AS assignee_name_en,
+          u_assignee.email AS assignee_email,
+          mem_assignee.job_title AS assignee_job_title,
+          mem_assignee.department AS assignee_department,
+          u_creator.name_ar AS creator_name_ar,
+          u_creator.name_en AS creator_name_en
+        FROM team_tasks t
+        LEFT JOIN users u_assignee ON u_assignee.id = t.assigned_to
+        LEFT JOIN memberships mem_assignee ON mem_assignee.user_id = t.assigned_to AND mem_assignee.organization_id = $1
+        LEFT JOIN users u_creator ON u_creator.id = t.created_by
+        WHERE t.organization_id = $1
+      `;
+      const params = [orgId];
+
+      if (statusFilter && statusFilter !== 'all') {
+        params.push(statusFilter);
+        sql += ` AND t.status = $${params.length}`;
+      }
+      if (assignedFilter) {
+        params.push(assignedFilter);
+        sql += ` AND t.assigned_to = $${params.length}`;
+      }
+
+      sql += ` ORDER BY CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END ASC, t.created_at DESC`;
+
+      const tasksRes = await query(sql, params);
+      return jsonResponse(res, 200, {
+        organizationId: orgId,
+        tasks: tasksRes.rows
+      });
+    }
+
+    if (method === 'POST' && pathname === '/api/v1/team/tasks') {
+      const body = await readJsonBody(req);
+      const { title, description, assignedTo, priority = 'medium', status = 'pending', dueDate, relatedReportRef } = body;
+
+      if (!title || !title.trim()) {
+        return jsonResponse(res, 400, { error: 'Task title is required.' });
+      }
+
+      const newTaskRes = await query(
+        `INSERT INTO team_tasks (organization_id, title, description, assigned_to, created_by, priority, status, due_date, related_report_ref)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING id, organization_id, title, description, assigned_to, created_by, priority, status, due_date, related_report_ref, created_at, updated_at`,
+        [orgId, title.trim(), description || null, assignedTo || null, auth.user.id, priority, status, dueDate || null, relatedReportRef || null]
+      );
+
+      const task = newTaskRes.rows[0];
+
+      // Auto-post notification into tasks-reports channel
+      try {
+        const taskChan = await query("SELECT id FROM team_channels WHERE organization_id = $1 AND slug = 'tasks-reports'", [orgId]);
+        if (taskChan.rows.length > 0) {
+          await query(
+            `INSERT INTO team_messages (organization_id, channel_id, user_id, content, attachment_type, attachment_data)
+             VALUES ($1, $2, $3, $4, 'task', $5)`,
+            [
+              orgId,
+              taskChan.rows[0].id,
+              auth.user.id,
+              `تم إنشاء مهمة عمل جديدة: "${task.title}"`,
+              JSON.stringify({
+                taskId: task.id,
+                title: task.title,
+                priority: task.priority,
+                status: task.status,
+                dueDate: task.due_date,
+                relatedReportRef: task.related_report_ref
+              })
+            ]
+          );
+        }
+      } catch (postErr) {
+        console.error('[Task Broadcast Notification Warning]:', postErr.message);
+      }
+
+      return jsonResponse(res, 201, { success: true, task });
+    }
+
+    if (method === 'PATCH' && pathname.startsWith('/api/v1/team/tasks/')) {
+      const parts = pathname.split('/');
+      const taskId = parts[parts.indexOf('tasks') + 1];
+      const body = await readJsonBody(req);
+      const { title, description, assignedTo, priority, status, dueDate, relatedReportRef } = body;
+
+      const checkTask = await query('SELECT id FROM team_tasks WHERE id = $1 AND organization_id = $2', [taskId, orgId]);
+      if (checkTask.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Task not found.' });
+      }
+
+      const updatedTaskRes = await query(
+        `UPDATE team_tasks
+         SET title = COALESCE($1, title),
+             description = COALESCE($2, description),
+             assigned_to = COALESCE($3, assigned_to),
+             priority = COALESCE($4, priority),
+             status = COALESCE($5, status),
+             due_date = COALESCE($6, due_date),
+             related_report_ref = COALESCE($7, related_report_ref),
+             updated_at = now()
+         WHERE id = $8 AND organization_id = $9
+         RETURNING *`,
+        [
+          title !== undefined ? title : null,
+          description !== undefined ? description : null,
+          assignedTo !== undefined ? assignedTo : null,
+          priority || null,
+          status || null,
+          dueDate !== undefined ? dueDate : null,
+          relatedReportRef !== undefined ? relatedReportRef : null,
+          taskId,
+          orgId
+        ]
+      );
+
+      return jsonResponse(res, 200, { success: true, task: updatedTaskRes.rows[0] });
+    }
+
+    if (method === 'DELETE' && pathname.startsWith('/api/v1/team/tasks/')) {
+      const parts = pathname.split('/');
+      const taskId = parts[parts.indexOf('tasks') + 1];
+
+      const deleted = await query('DELETE FROM team_tasks WHERE id = $1 AND organization_id = $2 RETURNING id', [taskId, orgId]);
+      if (deleted.rows.length === 0) {
+        return jsonResponse(res, 404, { error: 'Task not found.' });
+      }
+      return jsonResponse(res, 200, { success: true, message: 'Task deleted successfully.' });
     }
 
     // ── BRANCHES LIST (SCOPED TO TENANT) ────────────────────────────────────

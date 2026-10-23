@@ -29,7 +29,8 @@ import {
   IconOrganization,
   IconCreditCard,
   IconSettings,
-  IconShield
+  IconShield,
+  IconMessageSquare
 } from '../components/Icons';
 import { BrandLogo } from '../components/common/BrandLogo';
 
@@ -139,11 +140,18 @@ export const CustomerLayout: React.FC<CustomerLayoutProps> = ({
       ]
     },
     {
+      labelAr: 'فريق العمل والتعاون',
+      labelEn: 'Team & Collaboration',
+      items: [
+        { route: ROUTES.APP.TEAM, icon: <IconMessageSquare size={16} />, ar: 'التواصل والمهام', en: 'Team Chat & Tasks' },
+        { route: ROUTES.APP.ORGANIZATION, icon: <IconOrganization size={16} />, ar: 'الموظفون والفروع', en: 'Employees & Branches' }
+      ]
+    },
+    {
       labelAr: 'الإدارة',
       labelEn: 'Administration',
       items: [
         { route: ROUTES.APP.INTEGRATIONS, icon: <IconServer size={16} />, ar: 'مصادر البيانات والربط', en: 'Data Sources & Integrations' },
-        { route: ROUTES.APP.ORGANIZATION, icon: <IconOrganization size={16} />, ar: 'المؤسسة والفروع', en: 'Organization & Branches' },
         { route: ROUTES.APP.BILLING, icon: <IconCreditCard size={16} />, ar: 'الاشتراك والفوترة', en: 'Subscription & Billing' },
         { route: ROUTES.APP.SETTINGS, icon: <IconSettings size={16} />, ar: 'الإعدادات', en: 'Settings' }
       ]

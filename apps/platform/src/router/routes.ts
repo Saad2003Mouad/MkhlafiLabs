@@ -37,6 +37,7 @@ export const ROUTES = {
     INTEGRATIONS: '/app/integrations',
     WORKFLOWS: '/app/workflows',
     ORGANIZATION: '/app/organization',
+    TEAM: '/app/team',
     BILLING: '/app/billing',
     SETTINGS: '/app/settings',
     FINANCE: '/app/finance'
@@ -124,6 +125,9 @@ export function parseRoute(pathname: string): RouteMatch {
   }
   if (normalized === '/app/organization' || normalized === '/app/organizations' || normalized === '/app/branch' || normalized === '/app/branches') {
     return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.ORGANIZATION };
+  }
+  if (normalized === '/app/team' || normalized === '/app/collaboration' || normalized === '/app/tasks') {
+    return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.TEAM };
   }
   if (normalized === '/app/billing' || normalized === '/app/subscription') return { category: 'app', path: normalized, matchedRoute: ROUTES.APP.BILLING };
   if (normalized === '/app/settings' || normalized === '/app/setting') {

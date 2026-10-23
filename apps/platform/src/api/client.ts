@@ -143,6 +143,96 @@ export interface RealDecisionItem {
   created_at: string;
 }
 
+export interface MemberRecord {
+  membership_id: string;
+  user_id: string;
+  email: string;
+  name_en?: string;
+  name_ar?: string;
+  phone?: string;
+  role: string;
+  status: string;
+  department?: string | null;
+  job_title?: string | null;
+  branch_id?: string | null;
+  branch_name?: string | null;
+  branch_name_ar?: string | null;
+  created_at: string;
+}
+
+export interface EmployeeProvisionPayload {
+  email: string;
+  password?: string;
+  nameAr?: string;
+  nameEn?: string;
+  phone?: string;
+  role?: string;
+  department?: string;
+  jobTitle?: string;
+  branchId?: string | null;
+}
+
+export interface ProvisionedCredentials {
+  email: string;
+  password: string;
+  nameAr: string;
+  nameEn: string;
+  role: string;
+  department?: string | null;
+  jobTitle?: string | null;
+}
+
+export interface TeamChannel {
+  id: string;
+  slug: string;
+  name_ar: string;
+  name_en: string;
+  description_ar?: string;
+  description_en?: string;
+  is_default: boolean;
+  created_at: string;
+  message_count: number;
+  last_message_at?: string | null;
+}
+
+export interface TeamMessage {
+  id: string;
+  channel_id: string;
+  content: string;
+  attachment_type: 'none' | 'report' | 'task' | 'alert' | 'ledger_entry';
+  attachment_data?: any;
+  created_at: string;
+  user_id: string;
+  sender_email: string;
+  sender_name_ar?: string;
+  sender_name_en?: string;
+  sender_role: string;
+  sender_job_title?: string;
+  sender_department?: string;
+}
+
+export interface TeamTask {
+  id: string;
+  organization_id: string;
+  title: string;
+  description?: string;
+  assigned_to?: string;
+  created_by: string;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  status: 'pending' | 'in_progress' | 'completed' | 'approved';
+  due_date?: string;
+  related_report_ref?: string;
+  created_at: string;
+  updated_at: string;
+  assignee_name_ar?: string;
+  assignee_name_en?: string;
+  assignee_email?: string;
+  assignee_job_title?: string;
+  assignee_department?: string;
+  creator_name_ar?: string;
+  creator_name_en?: string;
+}
+
 class ApiClient {
   private baseUrl = '/api/v1';
   private activeOrgId: string | null = null;
@@ -227,20 +317,57 @@ class ApiClient {
     return this.request('/organizations/current', { method: 'GET' });
   }
 
-  async getMembers(): Promise<{ organizationId: string; members: any[] }> {
+  async getMembers(): Promise<{ organizationId: string; members: MemberRecord[] }> {
     return this.request('/organizations/members', { method: 'GET' });
   }
 
+  async provisionEmployee(payload: EmployeeProvisionPayload): Promise<{
+    success: boolean;
+    membership: any;
+    credentials: ProvisionedCredentials;
+  }> {
+    return this.request('/organizations/members', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
   async inviteMember(
-    emailOrParams: string | { email: string; role?: string; branchId?: string | null },
+    emailOrParams: string | EmployeeProvisionPayload,
     role = 'viewer'
-  ): Promise<{ success: boolean; membership: any }> {
+  ): Promise<{ success: boolean; membership: any; credentials?: ProvisionedCredentials }> {
     const payload = typeof emailOrParams === 'string'
       ? { email: emailOrParams, role }
       : emailOrParams;
     return this.request('/organizations/members', {
       method: 'POST',
       body: JSON.stringify(payload)
+    });
+  }
+
+  async resetMemberPassword(
+    membershipId: string,
+    password?: string
+  ): Promise<{ success: boolean; email: string; newPassword: string }> {
+    return this.request(`/organizations/members/${membershipId}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ password })
+    });
+  }
+
+  async updateMember(
+    membershipId: string,
+    params: { role?: string; department?: string; jobTitle?: string; branchId?: string | null; status?: string }
+  ): Promise<{ success: boolean; membership: any }> {
+    return this.request(`/organizations/members/${membershipId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async removeMember(membershipId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/organizations/members/${membershipId}`, {
+      method: 'DELETE'
     });
   }
 
@@ -856,6 +983,86 @@ class ApiClient {
     return this.request('/ingest/journal-csv', {
       method: 'POST',
       body: JSON.stringify({ csv, batchId })
+    });
+  }
+
+  // ── Team Collaboration: Channels & Chat Hub ──────────────────────────────
+  async getTeamChannels(): Promise<{ organizationId: string; channels: TeamChannel[] }> {
+    return this.request('/team/channels', { method: 'GET' });
+  }
+
+  async createTeamChannel(params: {
+    nameAr: string;
+    nameEn?: string;
+    descriptionAr?: string;
+    descriptionEn?: string;
+    slug?: string;
+  }): Promise<{ success: boolean; channel: TeamChannel }> {
+    return this.request('/team/channels', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async getTeamMessages(channelId: string): Promise<{ channelId: string; messages: TeamMessage[] }> {
+    return this.request(`/team/channels/${channelId}/messages`, { method: 'GET' });
+  }
+
+  async sendTeamMessage(
+    channelId: string,
+    params: { content: string; attachmentType?: string; attachmentData?: any }
+  ): Promise<{ success: boolean; message: TeamMessage }> {
+    return this.request(`/team/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  // ── Team Collaboration: Tasks Board ───────────────────────────────────────
+  async getTeamTasks(params?: { status?: string; assignedTo?: string }): Promise<{ organizationId: string; tasks: TeamTask[] }> {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.assignedTo) searchParams.set('assignedTo', params.assignedTo);
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : '';
+    return this.request(`/team/tasks${qs}`, { method: 'GET' });
+  }
+
+  async createTeamTask(params: {
+    title: string;
+    description?: string;
+    assignedTo?: string;
+    priority?: string;
+    status?: string;
+    dueDate?: string;
+    relatedReportRef?: string;
+  }): Promise<{ success: boolean; task: TeamTask }> {
+    return this.request('/team/tasks', {
+      method: 'POST',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async updateTeamTask(
+    taskId: string,
+    params: Partial<{
+      title: string;
+      description: string;
+      assignedTo: string;
+      priority: string;
+      status: string;
+      dueDate: string;
+      relatedReportRef: string;
+    }>
+  ): Promise<{ success: boolean; task: TeamTask }> {
+    return this.request(`/team/tasks/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(params)
+    });
+  }
+
+  async deleteTeamTask(taskId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/team/tasks/${taskId}`, {
+      method: 'DELETE'
     });
   }
 }
