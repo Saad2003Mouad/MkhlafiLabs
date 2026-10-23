@@ -2670,13 +2670,13 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .section-v2--animated {
-  opacity: 0;
-  transform: translateY(28px);
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 .section-v2--visible {
   opacity: 1 !important;
-  transform: translateY(0) !important;
+  transform: none !important;
 }
 
 .section-v2--dark {

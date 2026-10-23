@@ -47,30 +47,8 @@ export const WebsiteHome: React.FC<WebsiteHomeProps> = ({
     }
   };
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) return;
+  // All sections render naturally and immediately on mount without delayed DOM painting
 
-    const sections = document.querySelectorAll('.section-v2');
-    sections.forEach((sec) => {
-      sec.classList.add('section-v2--animated');
-    });
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('section-v2--visible');
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
-    );
-
-    sections.forEach((sec) => observer.observe(sec));
-
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <div className="home-v2">

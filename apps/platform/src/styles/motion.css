@@ -78,29 +78,27 @@
   }
 }
 
+/* Elements must render immediately and naturally without artificial opacity hiding */
 [data-reveal] {
-  opacity: 0;
-  transform: translate3d(0, 20px, 0);
-  transition:
-    opacity 0.4s var(--ease-swift),
-    transform 0.4s var(--ease-swift);
-  transition-delay: var(--reveal-delay, 0ms);
-  /* Failsafe: if JavaScript is delayed or IntersectionObserver is slow, automatically reveal smoothly */
-  animation: autoRevealSafety 0.5s ease 0.4s forwards;
-  will-change: opacity, transform;
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+  visibility: visible !important;
 }
 
-[data-reveal='left'] { transform: translate3d(-32px, 0, 0); }
-[data-reveal='right'] { transform: translate3d(32px, 0, 0); }
-[data-reveal='scale'] { transform: scale(0.94); }
-[data-reveal='blur'] { filter: blur(10px); transform: translate3d(0, 22px, 0); }
+[data-reveal='left'],
+[data-reveal='right'],
+[data-reveal='scale'],
+[data-reveal='blur'] {
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
+}
 
 [data-reveal].is-revealed {
-  animation: none;
-  opacity: 1;
-  transform: none;
-  filter: none;
-  will-change: auto;
+  opacity: 1 !important;
+  transform: none !important;
+  filter: none !important;
 }
 
 /* Safety override: FAQ accordion items and interactive questions must NEVER be hidden */
