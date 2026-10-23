@@ -691,6 +691,26 @@ export async function ingestJournalEntries(orgId, entriesOrCsv, batchId = null) 
     throw new Error(`Failed to ingest journal entries: No valid records found. Errors: ${JSON.stringify(validationErrors)}`);
   }
 
+  // Enforce monthly record quota from subscription package
+  const periodKey = new Date().toISOString().slice(0, 7);
+  const quotaRes = await query(
+    `SELECT p.monthly_record_limit, p.name_ar, p.name_en,
+            COALESCE(u.records_processed, 0) as used_records
+     FROM organization_subscriptions os
+     JOIN subscription_packages p ON p.id = os.package_id
+     LEFT JOIN organization_usage u ON u.organization_id = os.organization_id AND u.period_key = $2
+     WHERE os.organization_id = $1`,
+    [orgId, periodKey]
+  );
+  if (quotaRes.rows.length > 0) {
+    const { monthly_record_limit, used_records, name_ar } = quotaRes.rows[0];
+    if (Number(used_records) + records.length > Number(monthly_record_limit)) {
+      throw new Error(
+        `تجاوزت الحد الشهري لاستهلاك السجلات لباقة (${name_ar} - الحد الأقصى: ${Number(monthly_record_limit).toLocaleString()} سجل). يرجى ترقية الباقة لاستيعاب المزيد من العمليات.`
+      );
+    }
+  }
+
   const effectiveBatchId = batchId || crypto.randomUUID();
   let insertedCount = 0;
   let duplicateCount = 0;

@@ -958,6 +958,25 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 403, { error: 'Forbidden: Cannot grant owner role.' });
       }
 
+      // Enforce subscription plan member limits
+      const memberLimitRes = await query(
+        `SELECT p.max_members, COUNT(m.id) as current_members
+         FROM organization_subscriptions os
+         JOIN subscription_packages p ON p.id = os.package_id
+         LEFT JOIN memberships m ON m.organization_id = os.organization_id AND m.status = 'active'
+         WHERE os.organization_id = $1
+         GROUP BY p.max_members`,
+        [orgId]
+      );
+      if (memberLimitRes.rows.length > 0) {
+        const { max_members, current_members } = memberLimitRes.rows[0];
+        if (Number(current_members) >= Number(max_members)) {
+          return jsonResponse(res, 403, {
+            error: `Plan member limit reached (${current_members}/${max_members}). Please upgrade your subscription tier to add more team members.`
+          });
+        }
+      }
+
       const normalizedEmail = email.trim().toLowerCase();
       const resolvedNameEn = (nameEn && nameEn.trim()) || normalizedEmail.split('@')[0];
       const resolvedNameAr = (nameAr && nameAr.trim()) || resolvedNameEn;
