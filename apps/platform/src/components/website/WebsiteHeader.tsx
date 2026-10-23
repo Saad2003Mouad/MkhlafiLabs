@@ -32,6 +32,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
 }) => {
   const isAr = locale === 'ar';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileEnginesOpen, setMobileEnginesOpen] = useState(false);
   const [enginesOpen, setEnginesOpen] = useState(false);
   const [pinnedByClick, setPinnedByClick] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -47,6 +48,7 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         window.dispatchEvent(new PopStateEvent('popstate'));
       }
       setMobileMenuOpen(false);
+      setMobileEnginesOpen(false);
       setEnginesOpen(false);
       setPinnedByClick(false);
     },
@@ -250,9 +252,46 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           <a href={ROUTES.PUBLIC.PLATFORM} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PLATFORM)} className="site-mobile-menu__link">
             {isAr ? 'المنصة' : 'Platform'}
           </a>
-          <a href={ROUTES.PUBLIC.SOLUTIONS} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)} className="site-mobile-menu__link">
-            {isAr ? 'المحركات والحلول' : 'Engines & Solutions'}
-          </a>
+          {/* Collapsible Engines & Solutions Accordion */}
+          <div className="site-mobile-menu__accordion">
+            <button
+              type="button"
+              onClick={() => setMobileEnginesOpen((prev) => !prev)}
+              className={`site-mobile-menu__link site-mobile-menu__trigger ${mobileEnginesOpen ? 'is-expanded' : ''}`}
+              aria-expanded={mobileEnginesOpen}
+            >
+              <span>{isAr ? 'المحركات والحلول' : 'Engines & Solutions'}</span>
+              <IconChevronDown
+                size={16}
+                className={`site-mobile-menu__chevron ${mobileEnginesOpen ? 'is-rotated' : ''}`}
+              />
+            </button>
+
+            {mobileEnginesOpen && (
+              <div className="site-mobile-menu__engines-list">
+                {engines.map((engine, index) => (
+                  <a
+                    key={engine.id}
+                    href={`/services/${engine.id}`}
+                    onClick={(e) => handleLinkClick(e, `/services/${engine.id}`)}
+                    className="site-mobile-menu__engine-item"
+                  >
+                    <span className="ml-mono site-mobile-menu__engine-ordinal">{String(index + 1).padStart(2, '0')}</span>
+                    <span className="site-mobile-menu__engine-title">{isAr ? engine.titleAr : engine.titleEn}</span>
+                  </a>
+                ))}
+                <a
+                  href={ROUTES.PUBLIC.SOLUTIONS}
+                  onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.SOLUTIONS)}
+                  className="site-mobile-menu__engine-all"
+                >
+                  <span>{isAr ? 'استعراض كافة الحلول والمحركات' : 'View all solutions & engines'}</span>
+                  <IconArrowRight size={13} />
+                </a>
+              </div>
+            )}
+          </div>
+
           <a href={ROUTES.PUBLIC.ABOUT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.ABOUT)} className="site-mobile-menu__link">
             {isAr ? 'عنّا' : 'About'}
           </a>
@@ -265,20 +304,6 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           <a href={ROUTES.PUBLIC.CONTACT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.CONTACT)} className="site-mobile-menu__link">
             {isAr ? 'تواصل معنا' : 'Contact'}
           </a>
-
-          <div className="site-mobile-menu__engines">
-            {engines.map((engine, index) => (
-              <a
-                key={engine.id}
-                href={`/services/${engine.id}`}
-                onClick={(e) => handleLinkClick(e, `/services/${engine.id}`)}
-                className="site-index__item"
-              >
-                <span className="ml-mono site-index__ordinal">{String(index + 1).padStart(2, '0')}</span>
-                <span className="site-index__title">{isAr ? engine.titleAr : engine.titleEn}</span>
-              </a>
-            ))}
-          </div>
 
           <div className="site-mobile-menu__cta">
             <button onClick={onLaunchPlatform} className="ml-btn ml-btn--primary ml-btn--block">
