@@ -1,80 +1,20 @@
-// MIKHLAFI LABS — Public Pricing & Engagement Models Page (/pricing)
-// Published commercial tiers (PACKAGES), engagement structure, assurance, and FAQ.
+// MIKHLAFI LABS — Public Pricing & Deployment Models Page (/pricing)
+// Shows the 3 deployment engagement models with clear CTAs
+// Cloud SaaS → triggers the full SaaS Onboarding Wizard with real pricing
+// On-Premise   → triggers the On-Premise Inquiry Modal
+// Hybrid       → triggers the general inquiry/demo modal
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { LocaleMode } from '../../types';
-import { PACKAGES as PUBLISHED_TIERS, FAQS } from '../../data/marketingContent';
-import type { PricingPackage } from '../../types';
-import { api } from '../../api/client';
-
-/** Read a bilingual capability label out of a catalogue row. */
-function capabilityLabel(entry: unknown, locale: 'ar' | 'en'): string | null {
-  if (!entry || typeof entry !== 'object') return null;
-  const record = entry as Record<string, unknown>;
-  const value = locale === 'ar' ? record.nameAr ?? record.name_ar : record.nameEn ?? record.name_en;
-  return typeof value === 'string' && value.trim() ? value : null;
-}
-
-/** Format a large operating-record count compactly. */
-function formatCount(value: number): string {
-  if (value >= 1_000_000_000) return `${value / 1_000_000_000}B`;
-  if (value >= 1_000_000) return `${Math.round(value / 1_000_000)}M`;
-  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
-  return String(value);
-}
-
-/**
- * Shape a package from the public catalogue endpoint into a published tier.
- * The platform owner creates and retires packages in /admin, so this page reads the
- * live catalogue and only falls back to the editorial tiers when it is unreachable.
- */
-function toPublishedTier(row: Record<string, unknown>, index: number, total: number): PricingPackage {
-  const rawCapabilities: unknown[] = Array.isArray(row.capabilities) ? (row.capabilities as unknown[]) : [];
-  const enLabels = rawCapabilities.map((entry) => capabilityLabel(entry, 'en')).filter(Boolean) as string[];
-  const arLabels = rawCapabilities.map((entry) => capabilityLabel(entry, 'ar')).filter(Boolean) as string[];
-
-  const maxSources = Number(row.max_branches ?? row.maxBranches ?? 0);
-  const maxLeaders = Number(row.max_members ?? row.maxMembers ?? 0);
-  const recordLimit = Number(row.monthly_record_limit ?? row.monthlyRecordLimit ?? 0);
-
-  const featuresEn = [...enLabels];
-  const featuresAr = [...arLabels];
-
-  if (maxSources > 0) {
-    featuresEn.push(maxSources >= 999 ? 'Unlimited connected data sources' : `Up to ${maxSources} connected data sources`);
-    featuresAr.push(maxSources >= 999 ? 'مصادر بيانات غير محدودة' : `حتى ${maxSources} مصادر بيانات مرتبطة`);
-  }
-  if (maxLeaders > 0) {
-    featuresEn.push(maxLeaders >= 999 ? 'Unlimited leadership accounts' : `Up to ${maxLeaders} leadership accounts`);
-    featuresAr.push(maxLeaders >= 999 ? 'حسابات قيادية غير محدودة' : `حتى ${maxLeaders} حساباً قيادياً`);
-  }
-  if (recordLimit > 0) {
-    featuresEn.push(`${formatCount(recordLimit)} operating records per month`);
-    featuresAr.push(`${formatCount(recordLimit)} حركة تشغيلية شهرياً`);
-  }
-
-  const tierLevel = Number(row.tier_level ?? row.tierLevel ?? index + 1);
-  const engineCount = rawCapabilities.length;
-
-  return {
-    id: String(row.id),
-    nameAr: String(row.name_ar ?? row.nameAr ?? ''),
-    nameEn: String(row.name_en ?? row.nameEn ?? ''),
-    subtitleAr: 'باقة منشورة من كتالوج المنصة',
-    subtitleEn: 'A tier published from the platform catalogue',
-    badgeAr: engineCount > 0 ? `${engineCount} محركات` : `المستوى ${tierLevel}`,
-    badgeEn: engineCount > 0 ? `${engineCount} Engines` : `Tier ${tierLevel}`,
-    popular: total > 1 && index === Math.floor((total - 1) / 2),
-    servicesCount: engineCount,
-    featuresAr,
-    featuresEn
-  };
-}
+import { CLOUD_TIERS } from '../../components/website/SaaSOnboardingWizard';
+import { SaaSOnboardingWizard } from '../../components/website/SaaSOnboardingWizard';
+import { OnPremiseInquiryModal } from '../../components/website/OnPremiseInquiryModal';
+import { FAQS } from '../../data/marketingContent';
 import {
   IconCheckCircle,
   IconArrowRight,
   IconChevronDown,
-  IconShield
+  IconShield,
 } from '../../components/Icons';
 
 interface PricingPageProps {
@@ -83,200 +23,348 @@ interface PricingPageProps {
   onRequestDemo: () => void;
 }
 
+type ActiveModal = 'saas-wizard' | 'onpremise' | 'hybrid-contact' | null;
+
 export const PricingPage: React.FC<PricingPageProps> = ({
   locale,
   onNavigateRegister,
-  onRequestDemo
+  onRequestDemo,
 }) => {
   const isAr = locale === 'ar';
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
-  const [liveTiers, setLiveTiers] = useState<PricingPackage[] | null>(null);
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [selectedTierId, setSelectedTierId] = useState<string | null>(null);
+  const [billingView, setBillingView] = useState<'monthly' | 'yearly'>('monthly');
 
-  // Read the live commercial catalogue so packages published or retired by the
-  // platform owner appear here immediately. Falls back to the editorial tiers when
-  // the catalogue is unreachable or has no published packages.
-  useEffect(() => {
-    let cancelled = false;
+  const openSaaSWizard = (tierId?: string) => {
+    setSelectedTierId(tierId ?? null);
+    setActiveModal('saas-wizard');
+  };
 
-    api
-      .getPackages()
-      .then((response) => {
-        if (cancelled) return;
-        const rows = Array.isArray(response?.packages) ? (response.packages as Record<string, unknown>[]) : [];
-        if (rows.length === 0) return;
-        setLiveTiers(rows.map((row, index) => toPublishedTier(row, index, rows.length)));
-      })
-      .catch(() => {
-        /* Catalogue unavailable — the editorial tiers remain on screen. */
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const packages = liveTiers ?? PUBLISHED_TIERS;
-
-  const engagementFactors = [
+  const deploymentModels = [
     {
-      id: 'engines',
-      titleEn: 'Engines in scope',
-      titleAr: 'نطاق المحركات',
-      descEn: 'Packages scale from 3 core engines to the complete 8-engine suite.',
-      descAr: 'تتراوح الباقات من 3 محركات أساسية إلى المنظومة الكاملة من 8 محركات.'
+      id: 'saas',
+      icon: '☁️',
+      color: '#d4a017',
+      titleAr: 'السحابة المشتركة (SaaS)',
+      titleEn: 'Shared Cloud (SaaS)',
+      subtitleAr: 'جاهز في دقائق · صفر بنية تحتية',
+      subtitleEn: 'Ready in minutes · Zero infrastructure',
+      descAr: 'اشترك مباشرة وابدأ الاستخدام فوراً. نتكفّل بالبنية التحتية والتحديثات والأمان.',
+      descEn: 'Subscribe directly and start immediately. We handle infrastructure, updates, and security.',
+      badgesAr: ['بدون خادم خاص', 'تحديثات تلقائية', 'ابدأ في دقائق'],
+      badgesEn: ['No private server', 'Automatic updates', 'Start in minutes'],
+      ctaAr: 'ابدأ الاشتراك الآن',
+      ctaEn: 'Start Subscription Now',
+      action: () => openSaaSWizard(),
     },
     {
-      id: 'sources',
-      titleEn: 'Connected data sources',
-      titleAr: 'مصادر البيانات المرتبطة',
-      descEn: 'From two ERP or accounting connections to unlimited enterprise sources.',
-      descAr: 'من اتصالين بـ ERP أو نظام محاسبي إلى مصادر مؤسسية غير محدودة.'
+      id: 'onpremise',
+      icon: '🏗️',
+      color: '#6366f1',
+      titleAr: 'النشر المحلي السيادي',
+      titleEn: 'Sovereign On-Premise',
+      subtitleAr: 'البيانات عندك · لا أي اتصال خارجي',
+      subtitleEn: 'Your data stays local · Zero external connectivity',
+      descAr: 'نثبّت المنظومة على خوادمك الداخلية بالكامل. مثالي للمؤسسات ذات متطلبات السيادة الصارمة.',
+      descEn: 'We deploy the full suite inside your own infrastructure. Ideal for organizations with strict sovereignty requirements.',
+      badgesAr: ['بياناتك لا تغادر خوادمك', 'يدعم Air-Gapped', 'تثبيت مخصص كامل'],
+      badgesEn: ['Data never leaves your servers', 'Air-Gapped support', 'Full custom installation'],
+      ctaAr: 'طلب تثبيت محلي',
+      ctaEn: 'Request On-Premise Setup',
+      action: () => setActiveModal('onpremise'),
     },
     {
-      id: 'accounts',
-      titleEn: 'Leadership accounts',
-      titleAr: 'الحسابات القيادية',
-      descEn: 'From 3 executive seats to unlimited accounts with custom role hierarchies.',
-      descAr: 'من 3 مقاعد تنفيذية إلى حسابات غير محدودة مع هيكل صلاحيات مخصص.'
+      id: 'hybrid',
+      icon: '🔀',
+      color: '#10b981',
+      titleAr: 'النموذج الهجين المتكيّف',
+      titleEn: 'Adaptive Hybrid Model',
+      subtitleAr: 'معالجة محلية + لوحة تحكم سحابية',
+      subtitleEn: 'Local processing + Cloud dashboard',
+      descAr: 'عقدة معالجة محلية تعمل داخل شبكتك، مع لوحة تحكم سحابية آمنة للوصول من أي مكان.',
+      descEn: 'A local worker node runs inside your network, paired with a secure cloud dashboard for anywhere access.',
+      badgesAr: ['أفضل الحالتين', 'معالجة بياناتك محلياً', 'واجهة سحابية آمنة'],
+      badgesEn: ['Best of both worlds', 'Data processed locally', 'Secure cloud dashboard'],
+      ctaAr: 'تحدث مع فريقنا',
+      ctaEn: 'Talk to Our Team',
+      action: onRequestDemo,
     },
-    {
-      id: 'deployment',
-      titleEn: 'Deployment architecture',
-      titleAr: 'هندسة النشر',
-      descEn: 'Shared cloud, isolated private cloud, or sovereign on-premise deployment.',
-      descAr: 'سحابة مشتركة، أو سحابة خاصة معزولة، أو نشر محلي سيادي.'
-    }
   ];
 
   return (
     <div className="public-page pricing-page">
-      {/* Hero */}
+
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="pp-hero pp-hero--center">
         <div className="site-container">
           <div className="pp-hero__inner">
             <span className="pp-eyebrow">
-              {isAr ? 'الباقات ونماذج التعاقد' : 'Deployment & Licensing Models'}
+              {isAr ? 'باقات الاشتراك ونماذج النشر' : 'Subscription Plans & Deployment'}
             </span>
             <h1 className="ml-display pp-hero__title">
               {isAr
-                ? 'عقود شفافة مصمّمة حسب حجم وبيئة مؤسستك'
-                : 'Enterprise licensing tailored to your scale'}
+                ? 'ابدأ بالطريقة التي تناسب بيئتك'
+                : 'Start the way that fits your environment'}
             </h1>
             <p className="pp-hero__lede">
               {isAr
-                ? 'تعتمد التكلفة على عدد الكيانات وحجم تدفق الحركات التشغيلية ونموذج النشر (سحابي سيادي أو محلي مغلق). لا رسوم خفية أو تكاليف غير معلنة.'
-                : 'Licensing is structured around transactional ingestion volume, operating subsidiaries, and deployment architecture — with no ambiguous seat markups.'}
+                ? 'سواء اخترت السحابة المشتركة أو النشر المحلي السيادي أو النموذج الهجين — لديك تحكم كامل ببياناتك.'
+                : 'Whether you choose shared cloud, sovereign on-premise, or hybrid — you retain full control of your data.'}
             </p>
-            <div className="pp-hero__actions">
-              <button type="button" className="ml-btn ml-btn--primary" onClick={onRequestDemo}>
-                <span>{isAr ? 'طلب تسعير مخصص للمؤسسة' : 'Request Enterprise Quote'}</span>
-                <IconArrowRight size={16} />
-              </button>
-              <button type="button" className="ml-btn ml-btn--ghost" onClick={onNavigateRegister}>
-                <span>{isAr ? 'إنشاء حساب تجريبي للمؤسسة' : 'Create Trial Workspace'}</span>
-              </button>
+
+            {/* Toggle monthly/yearly for SaaS */}
+            <div style={{
+              display: 'inline-flex', borderRadius: 'var(--radius-pill)',
+              border: '1px solid var(--border-subtle)', overflow: 'hidden',
+              background: 'var(--surface-2)', marginTop: 8,
+            }}>
+              {(['monthly', 'yearly'] as const).map((cycle) => (
+                <button
+                  key={cycle}
+                  type="button"
+                  onClick={() => setBillingView(cycle)}
+                  style={{
+                    padding: '8px 20px', border: 'none', cursor: 'pointer',
+                    background: billingView === cycle ? 'var(--accent-base)' : 'transparent',
+                    color: billingView === cycle ? '#000' : 'var(--text-secondary)',
+                    fontWeight: billingView === cycle ? 700 : 400,
+                    fontSize: 13, transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {cycle === 'monthly'
+                    ? (isAr ? 'شهري' : 'Monthly')
+                    : (isAr ? 'سنوي' : 'Annual')}
+                  {cycle === 'yearly' && (
+                    <span style={{
+                      fontSize: 10, background: 'var(--status-success)', color: '#fff',
+                      padding: '1px 6px', borderRadius: 20, fontWeight: 700,
+                    }}>
+                      {isAr ? 'وفّر 20%' : 'Save 20%'}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Published packages */}
+      {/* ── Cloud SaaS Pricing Tiers ──────────────────────────────────────── */}
       <section className="pp-section pp-section--tight">
         <div className="site-container">
           <div className="pp-section__head">
-            <span className="pp-eyebrow">{isAr ? 'الباقات المنشورة' : 'Published Packages'}</span>
+            <span className="pp-eyebrow">☁️ {isAr ? 'السحابة المشتركة · SaaS' : 'Shared Cloud · SaaS'}</span>
             <h2 className="pp-section__title">
-              {isAr
-                ? `${packages.length} باقات… تتوسع مع اتساع نطاق مؤسستك`
-                : `${packages.length} packages that widen with your scope`}
+              {isAr ? '3 باقات جاهزة للاشتراك الفوري' : '3 plans ready for immediate subscription'}
             </h2>
             <p className="pp-section__lede">
               {isAr
-                ? 'كل باقة تحدد عدد المحركات ومصادر البيانات والحسابات القيادية بوضوح، ويُسعّر نطاق التشغيل الفعلي بعد جلسة الاستكشاف.'
-                : 'Each package states its engines, data sources, and leadership accounts explicitly; the operating scope is priced after the discovery session.'}
+                ? 'أسعار واضحة وشفافة. لا رسوم خفية. يمكنك الترقية أو الإلغاء في أي وقت.'
+                : 'Clear, transparent pricing. No hidden fees. Upgrade or cancel anytime.'}
             </p>
-            {liveTiers && (
-              <span className="ml-badge">
-                {isAr ? 'منشورة الآن من كتالوج المنصة' : 'Published live from the platform catalogue'}
-              </span>
-            )}
           </div>
 
           <div className="site-pricing">
-            {packages.map((pkg) => (
-              <article
-                key={pkg.id}
-                className={`price-card ${pkg.popular ? 'price-card--featured' : ''}`}
-              >
-                <span className="ml-badge price-card__badge">
-                  {isAr ? pkg.badgeAr : pkg.badgeEn}
-                </span>
+            {CLOUD_TIERS.map((tier) => {
+              const price = billingView === 'yearly' ? tier.priceYearly : tier.priceMonthly;
+              return (
+                <article
+                  key={tier.id}
+                  className={`price-card ${tier.popular ? 'price-card--featured' : ''}`}
+                  style={{ position: 'relative', overflow: 'hidden' }}
+                >
+                  {tier.popular && (
+                    <div style={{
+                      position: 'absolute', top: 0, insetInlineStart: 0, insetInlineEnd: 0,
+                      height: 3, background: `linear-gradient(90deg, ${tier.color}, ${tier.color}aa)`,
+                    }} />
+                  )}
 
-                <div>
-                  <span className="pp-price__count">
-                    {pkg.servicesCount} {isAr ? 'محركات نشطة' : 'Active Engines'}
+                  <span className="ml-badge price-card__badge">
+                    {isAr ? tier.badgeAr : tier.badgeEn}
                   </span>
-                  <h3 className="price-card__name">{isAr ? pkg.nameAr : pkg.nameEn}</h3>
-                  <p className="price-card__desc">{isAr ? pkg.subtitleAr : pkg.subtitleEn}</p>
-                </div>
 
-                <div className="pp-price__quote">
-                  <div className="pp-price__quote-main">
-                    {isAr ? 'تسعير مخصص للمؤسسة' : 'Custom enterprise quote'}
+                  <div>
+                    <h3 className="price-card__name">{isAr ? tier.nameAr : tier.nameEn}</h3>
+                    <p className="price-card__desc">{isAr ? tier.subtitleAr : tier.subtitleEn}</p>
                   </div>
-                  <div className="pp-price__quote-sub">
-                    {isAr
-                      ? 'يُحدَّد بعد جلسة الاستكشاف حسب النطاق والنشر'
-                      : 'Set after discovery, based on scope and deployment'}
-                  </div>
-                </div>
 
-                <div className="price-card__list">
-                  {(isAr ? pkg.featuresAr : pkg.featuresEn).map((feat, fIdx) => (
-                    <div key={fIdx} className="price-card__item">
-                      <IconCheckCircle size={15} />
-                      <span>{feat}</span>
+                  {/* Price display */}
+                  <div style={{ margin: '16px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>$</span>
+                      <span style={{ fontSize: 38, fontWeight: 800, color: tier.color, lineHeight: 1 }}>
+                        {price}
+                      </span>
+                      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                        /{isAr ? 'شهر' : 'mo'}
+                      </span>
                     </div>
+                    {billingView === 'yearly' && (
+                      <div style={{ fontSize: 12, color: 'var(--status-success)', marginTop: 4 }}>
+                        {isAr ? `يُدفع $${price * 12} سنوياً` : `$${price * 12} billed annually`}
+                      </div>
+                    )}
+                    {billingView === 'monthly' && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                        {isAr ? `$${tier.priceYearly}/شهر عند الدفع سنوياً` : `$${tier.priceYearly}/mo when billed annually`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Limits row */}
+                  <div style={{
+                    display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16,
+                    padding: '10px 12px', borderRadius: 'var(--radius-sm)',
+                    background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                  }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      🔧 {isAr ? `${tier.engines} محركات` : `${tier.engines} engines`}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      👥 {tier.maxUsers === 'unlimited' ? (isAr ? 'غير محدود' : 'Unlimited') : tier.maxUsers} {isAr ? 'مستخدم' : 'users'}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      📊 {tier.recordsPerMonth} {isAr ? 'حركة/شهر' : 'rec/mo'}
+                    </span>
+                  </div>
+
+                  <div className="price-card__list">
+                    {(isAr ? tier.featuresAr : tier.featuresEn).map((feat, fIdx) => (
+                      <div key={fIdx} className="price-card__item">
+                        <IconCheckCircle size={15} />
+                        <span>{feat}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    className={`ml-btn ${tier.popular ? 'ml-btn--primary' : 'ml-btn--ghost'} pp-price__cta`}
+                    onClick={() => openSaaSWizard(tier.id)}
+                  >
+                    <span>{isAr ? 'ابدأ الاشتراك' : 'Start Subscription'}</span>
+                    <IconArrowRight size={15} />
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Deployment Models ─────────────────────────────────────────────── */}
+      <section className="pp-section pp-section--muted">
+        <div className="site-container">
+          <div className="pp-section__head">
+            <span className="pp-eyebrow">{isAr ? 'نماذج النشر' : 'Deployment Models'}</span>
+            <h2 className="pp-section__title">
+              {isAr ? 'اختر كيف تعمل المنصة في بيئتك' : 'Choose how the platform runs in your environment'}
+            </h2>
+            <p className="pp-section__lede">
+              {isAr
+                ? 'سواء كنت في السحابة، أو تدير بنيتك الخاصة، أو تحتاج نموذجاً هجيناً — لدينا الخيار المناسب.'
+                : 'Whether you\'re in the cloud, running your own infrastructure, or need a hybrid approach — we have you covered.'}
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+            {deploymentModels.map((model) => (
+              <div
+                key={model.id}
+                style={{
+                  padding: '28px 24px', borderRadius: 'var(--radius-lg)',
+                  background: 'var(--surface-1)', border: '1px solid var(--border-subtle)',
+                  display: 'flex', flexDirection: 'column', gap: 16,
+                  transition: 'all 0.25s ease',
+                  position: 'relative', overflow: 'hidden',
+                }}
+                onMouseOver={(e) => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.borderColor = model.color + '44';
+                  el.style.boxShadow = `0 8px 32px ${model.color}14, 0 0 0 1px ${model.color}22`;
+                  el.style.transform = 'translateY(-2px)';
+                }}
+                onMouseOut={(e) => {
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.borderColor = 'var(--border-subtle)';
+                  el.style.boxShadow = 'none';
+                  el.style.transform = 'translateY(0)';
+                }}
+              >
+                {/* Top accent line */}
+                <div style={{
+                  position: 'absolute', top: 0, insetInlineStart: 0, insetInlineEnd: 0,
+                  height: 2, background: `linear-gradient(90deg, ${model.color}88, transparent)`,
+                }} />
+
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                  <span style={{
+                    fontSize: 28, width: 52, height: 52, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 'var(--radius-md)',
+                    background: `${model.color}14`, border: `1px solid ${model.color}33`,
+                    flexShrink: 0,
+                  }}>
+                    {model.icon}
+                  </span>
+                  <div>
+                    <h3 style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 4px' }}>
+                      {isAr ? model.titleAr : model.titleEn}
+                    </h3>
+                    <span style={{ fontSize: 12, color: model.color, fontWeight: 600 }}>
+                      {isAr ? model.subtitleAr : model.subtitleEn}
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+                  {isAr ? model.descAr : model.descEn}
+                </p>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(isAr ? model.badgesAr : model.badgesEn).map((badge, i) => (
+                    <span key={i} style={{
+                      fontSize: 11, padding: '3px 10px', borderRadius: 20,
+                      background: `${model.color}14`, border: `1px solid ${model.color}33`,
+                      color: model.color, fontWeight: 600,
+                    }}>
+                      ✓ {badge}
+                    </span>
                   ))}
                 </div>
 
                 <button
                   type="button"
-                  className={`ml-btn ${pkg.popular ? 'ml-btn--primary' : 'ml-btn--ghost'} pp-price__cta`}
-                  onClick={onRequestDemo}
+                  onClick={model.action}
+                  style={{
+                    marginTop: 'auto', padding: '12px 20px', borderRadius: 'var(--radius-md)',
+                    background: `${model.color}18`, border: `1.5px solid ${model.color}44`,
+                    color: model.color, fontWeight: 700, fontSize: 14,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}
+                  onMouseOver={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = `${model.color}28`;
+                  }}
+                  onMouseOut={(e) => {
+                    (e.currentTarget as HTMLElement).style.background = `${model.color}18`;
+                  }}
                 >
-                  <span>{isAr ? 'طلب عرض سعر مفصل' : 'Request Custom Proposal'}</span>
+                  {isAr ? model.ctaAr : model.ctaEn}
                   <IconArrowRight size={15} />
                 </button>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Engagement structure */}
-      <section className="pp-section pp-section--muted">
-        <div className="site-container">
-          <div className="pp-section__head">
-            <span className="pp-eyebrow">{isAr ? 'بنية التعاقد' : 'Engagement Structure'}</span>
-            <h2 className="pp-section__title">
-              {isAr ? 'ما الذي يحدّد نطاق عقدك' : 'What defines the scope of your agreement'}
-            </h2>
-          </div>
-
-          <div className="site-grid site-grid--4">
-            {engagementFactors.map((factor, idx) => (
-              <div key={factor.id} className="pp-factor">
-                <span className="pp-factor__index">{String(idx + 1).padStart(2, '0')}</span>
-                <h3 className="pp-factor__title">{isAr ? factor.titleAr : factor.titleEn}</h3>
-                <p className="pp-factor__desc">{isAr ? factor.descAr : factor.descEn}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Assurance */}
+      {/* ── Assurance ─────────────────────────────────────────────────────── */}
       <section className="pp-section">
         <div className="site-container">
           <div className="pp-assure">
@@ -285,7 +373,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
             </span>
             <div className="pp-assure__body">
               <h2 className="pp-assure__title">
-                {isAr ? 'ضمانات الامتثال واستمرارية الأعمال' : 'Sovereignty & enterprise commitments'}
+                {isAr ? 'ضمانات السيادة والامتثال المؤسسي' : 'Sovereignty & Enterprise Commitments'}
               </h2>
               <p className="pp-assure__text">
                 {isAr
@@ -303,7 +391,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* ── FAQ ──────────────────────────────────────────────────────────── */}
       <section className="pp-section pp-section--muted">
         <div className="site-container">
           <div className="pp-section__head">
@@ -322,10 +410,7 @@ export const PricingPage: React.FC<PricingPageProps> = ({
                     type="button"
                     className="faq-row__trigger"
                     aria-expanded={isOpen}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setOpenFaqIndex((prev) => (prev === idx ? null : idx));
-                    }}
+                    onClick={() => setOpenFaqIndex((prev) => (prev === idx ? null : idx))}
                   >
                     <span>{isAr ? faq.qAr : faq.qEn}</span>
                     <IconChevronDown size={18} />
@@ -342,31 +427,49 @@ export const PricingPage: React.FC<PricingPageProps> = ({
         </div>
       </section>
 
-      {/* CTA */}
+      {/* ── CTA ──────────────────────────────────────────────────────────── */}
       <section className="pp-cta">
         <div className="site-container">
           <div className="pp-cta__inner">
             <span className="pp-eyebrow">{isAr ? 'الخطوة التالية' : 'Next Step'}</span>
             <h2 className="pp-cta__title">
-              {isAr ? 'حدّد نطاق مؤسستك مع فريقنا' : 'Scope your organization with our team'}
+              {isAr ? 'ابدأ اليوم أو تحدث مع فريقنا' : 'Start today or talk to our team'}
             </h2>
             <p className="pp-cta__lede">
               {isAr
-                ? 'جلسة استكشاف واحدة تحدد المحركات المناسبة ومصادر البيانات ونموذج النشر المناسب لبيئتك.'
-                : 'A single discovery session determines the right engines, data sources, and deployment model for your environment.'}
+                ? 'ابدأ باشتراك السحابة فوراً أو دعنا نجهز لك عرضاً مخصصاً للنشر المحلي أو الهجين.'
+                : 'Start with a cloud subscription immediately, or let us prepare a custom quote for on-premise or hybrid deployment.'}
             </p>
             <div className="pp-cta__actions">
-              <button type="button" className="ml-btn ml-btn--primary" onClick={onRequestDemo}>
-                <span>{isAr ? 'طلب تسعير مخصص' : 'Request Enterprise Quote'}</span>
+              <button type="button" className="ml-btn ml-btn--primary" onClick={() => openSaaSWizard()}>
+                <span>{isAr ? 'ابدأ الاشتراك بالسحابة' : 'Start Cloud Subscription'}</span>
                 <IconArrowRight size={16} />
               </button>
-              <button type="button" className="ml-btn ml-btn--ghost" onClick={onNavigateRegister}>
-                <span>{isAr ? 'إنشاء حساب مؤسسي' : 'Create Organization Account'}</span>
+              <button type="button" className="ml-btn ml-btn--ghost" onClick={() => setActiveModal('onpremise')}>
+                <span>{isAr ? 'طلب نشر محلي' : 'Request On-Premise'}</span>
               </button>
             </div>
           </div>
         </div>
       </section>
+
+      {/* ── Modals ───────────────────────────────────────────────────────── */}
+      <SaaSOnboardingWizard
+        locale={locale}
+        isOpen={activeModal === 'saas-wizard'}
+        initialTierId={selectedTierId}
+        onClose={() => setActiveModal(null)}
+        onComplete={() => {
+          setActiveModal(null);
+          onNavigateRegister();
+        }}
+      />
+
+      <OnPremiseInquiryModal
+        locale={locale}
+        isOpen={activeModal === 'onpremise'}
+        onClose={() => setActiveModal(null)}
+      />
     </div>
   );
 };
