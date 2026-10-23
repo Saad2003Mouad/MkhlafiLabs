@@ -423,3 +423,68 @@
 [dir="rtl"] .stat-tile__label { letter-spacing: normal; }
 .stat-tile__value { margin-top: 9px; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); font-family: var(--font-mono); }
 .stat-tile__hint { margin-top: 5px; font-size: 11.5px; color: var(--text-muted); }
+
+/* --------------------------------------------------------------------------
+   Team Collaboration & Internal Chat (Mobile-Responsive Workspace)
+   -------------------------------------------------------------------------- */
+.team-chat-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 310px) 1fr;
+  gap: 1rem;
+  min-height: 600px;
+  height: calc(100vh - 230px);
+  max-height: 850px;
+}
+
+.team-mobile-back-btn {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .team-chat-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 520px;
+    height: calc(100vh - 180px);
+    max-height: none;
+    gap: 0;
+  }
+  .team-mobile-back-btn {
+    display: inline-flex !important;
+  }
+  .team-chat-sidebar.is-mobile-hidden {
+    display: none !important;
+  }
+  .team-chat-main.is-mobile-hidden {
+    display: none !important;
+  }
+  .team-chat-sidebar,
+  .team-chat-main {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 1 auto;
+  }
+  .record-row {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .record-row__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .team-btn-text-desktop,
+  .team-send-text-desktop {
+    display: none !important;
+  }
+  .app-content {
+    padding: 14px 10px 48px;
+  }
+  .page-title {
+    font-size: 19px;
+  }
+}
+

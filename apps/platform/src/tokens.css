@@ -702,7 +702,7 @@ button {
 /* Challenges Grid */
 .challenges-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
   gap: 20px;
 }
 
@@ -1292,6 +1292,13 @@ button {
 @media (max-width: 768px) {
   .platform-page-container {
     padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .platform-page-container {
+    padding: 12px 10px;
+    gap: 14px;
   }
 }
 

@@ -171,7 +171,7 @@ export const FinancialCharts: React.FC<FinancialChartsProps> = ({ locale, analyt
             </div>
 
             <div style={{ width: '100%', overflowX: 'auto' }}>
-              <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', minWidth: '400px', maxHeight: '220px' }}>
+              <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: '100%', minWidth: 'min(100%, 360px)', maxHeight: '220px' }}>
                 {/* Horizontal Grid lines */}
                 <line x1={paddingX} y1={paddingY} x2={svgWidth - paddingX} y2={paddingY} stroke="var(--border-subtle)" strokeDasharray="3 3" />
                 <line x1={paddingX} y1={paddingY + usableHeight / 2} x2={svgWidth - paddingX} y2={paddingY + usableHeight / 2} stroke="var(--border-subtle)" strokeDasharray="3 3" />

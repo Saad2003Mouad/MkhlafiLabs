@@ -16,7 +16,8 @@ import {
   IconAlert,
   IconClock,
   IconFinance,
-  IconTrash
+  IconTrash,
+  IconArrowRight
 } from '../Icons';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -40,6 +41,9 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
 
   // Tab mode: 'chat' or 'tasks'
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat');
+
+  // Mobile responsive view for chat: 'channels' list or 'messages' view
+  const [mobileChatView, setMobileChatView] = useState<'channels' | 'messages'>('messages');
 
   // Channels & Messages State
   const [channels, setChannels] = useState<TeamChannel[]>([]);
@@ -463,18 +467,10 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
 
       {/* ─── TAB 1: CHAT & CHANNELS ─── */}
       {activeTab === 'chat' && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(260px, 310px) 1fr',
-            gap: '1rem',
-            minHeight: '680px',
-            height: 'calc(100vh - 230px)',
-            maxHeight: '850px'
-          }}
-        >
+        <div className="team-chat-layout">
           {/* Left Column: Channels & Online Team Members */}
           <div
+            className={`team-chat-sidebar ${mobileChatView === 'messages' ? 'is-mobile-hidden' : ''}`}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -519,7 +515,10 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
                 return (
                   <button
                     key={chan.id}
-                    onClick={() => setActiveChannelId(chan.id)}
+                    onClick={() => {
+                      setActiveChannelId(chan.id);
+                      setMobileChatView('messages');
+                    }}
                     style={{
                       width: '100%',
                       display: 'flex',
@@ -611,6 +610,7 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
 
           {/* Right Column: Chat Feed & Composer */}
           <div
+            className={`team-chat-main ${mobileChatView === 'channels' ? 'is-mobile-hidden' : ''}`}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -624,42 +624,58 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
             {activeChannel ? (
               <div
                 style={{
-                  padding: '14px 20px',
+                  padding: '12px 16px',
                   borderBottom: '1px solid var(--color-border, rgba(255,255,255,0.08))',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  background: 'rgba(0,0,0,0.1)'
+                  background: 'rgba(0,0,0,0.1)',
+                  gap: '8px',
+                  flexWrap: 'wrap'
                 }}
               >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '1.1rem', color: 'var(--color-brand-primary, #0D9488)', fontWeight: 800 }}>#</span>
-                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'var(--color-text-primary, #FFF)' }}>
-                      {isAr ? activeChannel.name_ar : activeChannel.name_en}
-                    </span>
-                    {activeChannel.is_default && (
-                      <span className="ml-badge ml-badge--accent" style={{ fontSize: '0.7rem' }}>
-                        {isAr ? 'رسمية' : 'Default'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                  <button
+                    type="button"
+                    onClick={() => setMobileChatView('channels')}
+                    className="ml-btn ml-btn--subtle ml-btn--sm team-mobile-back-btn"
+                    title={isAr ? 'العودة لقائمة القنوات' : 'Back to Channels'}
+                    style={{ padding: '6px 10px', gap: '4px', flexShrink: 0 }}
+                  >
+                    <IconArrowRight size={14} style={{ transform: isAr ? 'none' : 'rotate(180deg)' }} />
+                    <span style={{ fontSize: '0.8rem' }}>{isAr ? 'القنوات' : 'Channels'}</span>
+                  </button>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                      <span style={{ fontSize: '1.1rem', color: 'var(--color-brand-primary, #0D9488)', fontWeight: 800 }}>#</span>
+                      <span style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--color-text-primary, #FFF)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {isAr ? activeChannel.name_ar : activeChannel.name_en}
                       </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--color-text-tertiary, #8892B0)', marginTop: '2px' }}>
-                    {isAr ? activeChannel.description_ar : activeChannel.description_en}
+                      {activeChannel.is_default && (
+                        <span className="ml-badge ml-badge--accent" style={{ fontSize: '0.68rem', padding: '1px 5px', flexShrink: 0 }}>
+                          {isAr ? 'رسمية' : 'Default'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary, #8892B0)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {isAr ? activeChannel.description_ar : activeChannel.description_en}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                   <button
                     onClick={() => {
                       setSelectedAttachmentType('task');
                       setIsAttachModalOpen(true);
                     }}
                     className="ml-btn ml-btn--subtle ml-btn--sm"
-                    style={{ fontSize: '0.78rem' }}
+                    style={{ fontSize: '0.76rem', padding: '6px 10px' }}
+                    title={isAr ? 'إرفاق مهمة' : 'Attach Task'}
                   >
                     <IconCheckSquare size={13} />
-                    <span>{isAr ? 'إرفاق مهمة' : 'Attach Task'}</span>
+                    <span className="team-btn-text-desktop">{isAr ? 'إرفاق مهمة' : 'Attach Task'}</span>
                   </button>
                   <button
                     onClick={() => {
@@ -667,10 +683,11 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
                       setIsAttachModalOpen(true);
                     }}
                     className="ml-btn ml-btn--subtle ml-btn--sm"
-                    style={{ fontSize: '0.78rem' }}
+                    style={{ fontSize: '0.76rem', padding: '6px 10px' }}
+                    title={isAr ? 'إرفاق تقرير تدقيق' : 'Attach Report'}
                   >
                     <IconFinance size={13} />
-                    <span>{isAr ? 'إرفاق تقرير تدقيق' : 'Attach Report'}</span>
+                    <span className="team-btn-text-desktop">{isAr ? 'تقرير مالي' : 'Report'}</span>
                   </button>
                 </div>
               </div>
@@ -852,19 +869,19 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
             <form
               onSubmit={(e) => handleSendMessage(e)}
               style={{
-                padding: '14px 18px',
+                padding: '10px 14px',
                 borderTop: '1px solid var(--color-border, rgba(255,255,255,0.08))',
                 background: 'rgba(0,0,0,0.12)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px'
+                gap: '8px'
               }}
             >
               <button
                 type="button"
                 onClick={() => setIsAttachModalOpen(true)}
                 className="ml-btn ml-btn--subtle"
-                style={{ padding: '8px', borderRadius: '50%' }}
+                style={{ padding: '8px', borderRadius: '50%', flexShrink: 0, minWidth: '38px', minHeight: '38px' }}
                 title={isAr ? 'إرفاق مهمة أو تقرير' : 'Attach task or report'}
               >
                 <IconPaperclip size={16} />
@@ -873,7 +890,7 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
               <input
                 type="text"
                 className="ml-input"
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px' }}
+                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', minWidth: 0, minHeight: '40px' }}
                 placeholder={
                   activeChannel
                     ? isAr
@@ -892,10 +909,10 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
                 type="submit"
                 disabled={sendingMessage || !messageInput.trim() || !activeChannelId}
                 className="ml-btn ml-btn--primary"
-                style={{ padding: '10px 16px', borderRadius: '8px' }}
+                style={{ padding: '10px 14px', borderRadius: '8px', flexShrink: 0, minHeight: '40px' }}
               >
                 <IconSend size={15} />
-                <span>{isAr ? 'إرسال' : 'Send'}</span>
+                <span className="team-send-text-desktop">{isAr ? 'إرسال' : 'Send'}</span>
               </button>
             </form>
           </div>
@@ -981,7 +998,7 @@ export const TeamCollaborationView: React.FC<TeamCollaborationViewProps> = ({ lo
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
                 gap: '1rem'
               }}
             >

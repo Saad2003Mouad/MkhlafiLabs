@@ -522,7 +522,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
                         }}
                       >
                         {/* Member Identity & Details */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 240 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: '1 1 200px' }}>
                           <div
                             style={{
                               width: '38px',
@@ -569,7 +569,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
                         </div>
 
                         {/* Action Buttons */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => {
                               setResetModalMember(m);
@@ -703,7 +703,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
             <form onSubmit={handleProvisionEmployee}>
               <div className="ml-modal__body">
                 {/* Names */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
                   <div className="ml-field">
                     <label className="ml-label">{isAr ? 'الاسم بالكامل (بالعربية)' : 'Full Name (Arabic)'}</label>
                     <input
@@ -727,7 +727,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
                 </div>
 
                 {/* Email and Phone */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
                   <div className="ml-field">
                     <label className="ml-label">{isAr ? 'البريد الإلكتروني / اسم المستخدم' : 'Email / Username'} *</label>
                     <input
@@ -753,7 +753,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
                 </div>
 
                 {/* Department and Job Title */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
                   <div className="ml-field">
                     <label className="ml-label">{isAr ? 'الإدارة / القسم' : 'Department'}</label>
                     <input
@@ -777,7 +777,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({ locale }) =>
                 </div>
 
                 {/* Role and Branch */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
                   <div className="ml-field">
                     <label className="ml-label">{isAr ? 'الدور ومستوى الصلاحيات' : 'Role & Permissions'}</label>
                     <select
