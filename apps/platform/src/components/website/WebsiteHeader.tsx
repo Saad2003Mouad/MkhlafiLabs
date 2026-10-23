@@ -217,8 +217,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           <a href={ROUTES.PUBLIC.INDUSTRIES} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.INDUSTRIES)} className={navLinkClass(ROUTES.PUBLIC.INDUSTRIES)}>
             {isAr ? 'القطاعات' : 'Industries'}
           </a>
-          <a href={ROUTES.PUBLIC.PRICING} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PRICING)} className={navLinkClass(ROUTES.PUBLIC.PRICING)}>
-            {isAr ? 'الباقات' : 'Pricing'}
+          <a href={ROUTES.PUBLIC.DEPLOYMENT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.DEPLOYMENT)} className={navLinkClass(ROUTES.PUBLIC.DEPLOYMENT)}>
+            {isAr ? 'نماذج التشغيل والباقات' : 'Deployment & Plans'}
           </a>
         </nav>
 
@@ -269,8 +269,8 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
           <a href={ROUTES.PUBLIC.INDUSTRIES} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.INDUSTRIES)} className="site-mobile-menu__link">
             {isAr ? 'القطاعات' : 'Industries'}
           </a>
-          <a href={ROUTES.PUBLIC.PRICING} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.PRICING)} className="site-mobile-menu__link">
-            {isAr ? 'الباقات' : 'Pricing'}
+          <a href={ROUTES.PUBLIC.DEPLOYMENT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.DEPLOYMENT)} className="site-mobile-menu__link">
+            {isAr ? 'نماذج التشغيل والباقات' : 'Deployment & Plans'}
           </a>
           <a href={ROUTES.PUBLIC.CONTACT} onClick={(e) => handleLinkClick(e, ROUTES.PUBLIC.CONTACT)} className="site-mobile-menu__link">
             {isAr ? 'تواصل معنا' : 'Contact'}

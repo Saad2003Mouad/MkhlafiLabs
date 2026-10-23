@@ -304,6 +304,7 @@ const AppRouterContent: React.FC = () => {
             onRequestDemo={() => navigate(ROUTES.PUBLIC.CONTACT)}
           />
         );
+      case ROUTES.PUBLIC.DEPLOYMENT:
       case ROUTES.PUBLIC.PRICING:
         return (
           <PricingPage

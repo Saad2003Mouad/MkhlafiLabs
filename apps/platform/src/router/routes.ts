@@ -11,7 +11,8 @@ export const ROUTES = {
     SERVICES: '/services',
     SERVICE_DETAIL: '/services/:serviceId',
     INDUSTRIES: '/industries',
-    PRICING: '/pricing',
+    DEPLOYMENT: '/deployment',
+    PRICING: '/deployment',
     CONTACT: '/contact'
   },
 
@@ -199,7 +200,9 @@ export function parseRoute(pathname: string): RouteMatch {
   if (normalized === '/platform' || normalized === '/features' || normalized === '/architecture') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.PLATFORM };
   if (normalized === '/solutions' || normalized === '/services' || normalized === '/service') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.SOLUTIONS };
   if (normalized === '/industries' || normalized === '/sectors') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.INDUSTRIES };
-  if (normalized === '/pricing' || normalized === '/plans' || normalized === '/packages') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.PRICING };
+  if (normalized === '/deployment' || normalized === '/pricing' || normalized === '/plans' || normalized === '/packages' || normalized === '/models') {
+    return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.DEPLOYMENT };
+  }
   if (normalized === '/contact' || normalized === '/contact-us' || normalized === '/contactus') return { category: 'public', path: normalized, matchedRoute: ROUTES.PUBLIC.CONTACT };
 
   // Unknown route -> 404

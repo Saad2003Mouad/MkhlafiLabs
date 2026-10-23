@@ -1428,3 +1428,185 @@
   flex-direction: column;
   gap: clamp(16px, 2.4vw, 22px);
 }
+
+/* --------------------------------------------------------------------------
+   17. Deployment & Plans Luxury Showcase (.deployment-page)
+   -------------------------------------------------------------------------- */
+
+.deployment-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  margin-top: 24px;
+  backdrop-filter: blur(12px);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.deployment-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.deployment-tab-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.deployment-tab-btn.is-active {
+  background: var(--accent-base);
+  color: #000;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(212, 160, 23, 0.25);
+}
+
+/* 4 Deployment Architecture Cards */
+.deployment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .deployment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .deployment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deploy-arch-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 30px 24px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s, box-shadow 0.3s;
+  overflow: hidden;
+}
+
+.deploy-arch-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--card-accent, var(--border-glow));
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.5), 0 0 24px -6px var(--card-glow, transparent);
+}
+
+/* Luxury Deployment FAQ Accordion */
+.deploy-faq-wrap {
+  max-width: 860px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.deploy-faq-card {
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.25s, box-shadow 0.25s, background-color 0.25s;
+  overflow: hidden;
+}
+
+.deploy-faq-card:hover {
+  border-color: var(--border-default);
+  background: var(--surface-2);
+}
+
+.deploy-faq-card.is-open {
+  border-color: var(--border-glow);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25), 0 0 1px var(--accent-base);
+  background: var(--surface-2);
+}
+
+.deploy-faq-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: start;
+}
+
+.deploy-faq-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.deploy-faq-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--accent-subtle);
+  color: var(--accent-light);
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.deploy-faq-question {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.deploy-faq-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s, color 0.2s;
+}
+
+.deploy-faq-card.is-open .deploy-faq-icon {
+  transform: rotate(180deg);
+  background: var(--accent-base);
+  color: #000;
+  border-color: var(--accent-base);
+}
+
+.deploy-faq-body {
+  padding: 0 24px 22px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  border-top: 1px dashed var(--border-subtle);
+  margin-top: 0;
+  padding-top: 16px;
+}
+

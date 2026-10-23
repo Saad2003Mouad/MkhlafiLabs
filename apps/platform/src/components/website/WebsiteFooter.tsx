@@ -35,7 +35,7 @@ export const WebsiteFooter: React.FC<WebsiteFooterProps> = ({
         { en: 'Platform overview', ar: 'نظرة عامة', path: ROUTES.PUBLIC.PLATFORM },
         { en: 'Engines & solutions', ar: 'المحركات والحلول', path: ROUTES.PUBLIC.SOLUTIONS },
         { en: 'Industries', ar: 'القطاعات', path: ROUTES.PUBLIC.INDUSTRIES },
-        { en: 'Pricing & plans', ar: 'الباقات والأسعار', path: ROUTES.PUBLIC.PRICING }
+        { en: 'Deployment & Plans', ar: 'نماذج التشغيل والباقات', path: ROUTES.PUBLIC.DEPLOYMENT }
       ]
     },
     {
