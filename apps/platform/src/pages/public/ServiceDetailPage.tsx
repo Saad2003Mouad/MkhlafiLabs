@@ -22,14 +22,6 @@ import {
   IconChevronDown
 } from '../../components/Icons';
 import { ROUTES } from '../../router/routes';
-import { ForensicAuditWorkbench } from '../../components/financial/ForensicAuditWorkbench';
-import { ExecutiveDecisionWorkbench } from '../../components/decisions/ExecutiveDecisionWorkbench';
-import { PredictiveRiskWorkbench } from '../../components/risk/PredictiveRiskWorkbench';
-import { ProjectMarginWorkbench } from '../../components/projects/ProjectMarginWorkbench';
-import { SupplierRiskWorkbench } from '../../components/suppliers/SupplierRiskWorkbench';
-import { CustomerRiskWorkbench } from '../../components/customers/CustomerRiskWorkbench';
-import { ExecutiveAssistantWorkbench } from '../../components/assistant/ExecutiveAssistantWorkbench';
-import { DataQualityWorkbench } from '../../components/governance/DataQualityWorkbench';
 
 interface ServiceDetailPageProps {
   serviceId: string;
@@ -89,96 +81,6 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
     }
   };
 
-  /**
-   * The real, interactive workbench for this engine. Returning null means the engine
-   * has no in-browser demonstration, in which case no sandbox section is rendered at
-   * all — we would rather show nothing than show a scripted mock.
-   */
-  const renderWorkbench = () => {
-    switch (service.id) {
-      case 'financial-leak-detection':
-        return (
-          <ForensicAuditWorkbench
-            locale={locale}
-            initialScenario="contracting"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'executive-decisions':
-        return (
-          <ExecutiveDecisionWorkbench
-            locale={locale}
-            initialScenario="retail"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'risk-radar':
-        return (
-          <PredictiveRiskWorkbench
-            locale={locale}
-            initialScenario="contracting"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'project-margins':
-        return (
-          <ProjectMarginWorkbench
-            locale={locale}
-            initialScenario="infrastructure"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'supplier-intelligence':
-      case 'supplier-risk':
-        return (
-          <SupplierRiskWorkbench
-            locale={locale}
-            initialScenario="fmcg_retail"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'customer-retention':
-      case 'customer-risk':
-        return (
-          <CustomerRiskWorkbench
-            locale={locale}
-            initialScenario="b2b_tech"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'executive-assistant':
-      case 'ai-assistant':
-        return (
-          <ExecutiveAssistantWorkbench
-            locale={locale}
-            initialScenario="conglomerate_holding"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      case 'data-quality-governance':
-      case 'data-quality':
-      case 'data-integrity':
-        return (
-          <DataQualityWorkbench
-            locale={locale}
-            initialScenario="retail_distribution"
-            isEmbeddedInPublicPage={true}
-            onRequestAssistance={(details) => onRequestDemo(`${engineName}: ${details}`)}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
-  const workbench = renderWorkbench();
   const otherEngines = SERVICES_CATALOG.filter((engine) => engine.id !== service.id);
 
   return (
@@ -241,27 +143,6 @@ export const ServiceDetailPage: React.FC<ServiceDetailPageProps> = ({
           </div>
         </div>
       </section>
-
-      {/* ── Interactive sandbox (only when a real workbench exists) ───────── */}
-      {workbench && (
-        <section className="site-section site-section--alt">
-          <div className="site-container">
-            <div className="site-section__head site-section__head--center">
-              <span className="ml-eyebrow">{isAr ? 'بيئة تجريبية تفاعلية' : 'INTERACTIVE SANDBOX'}</span>
-              <h2 className="ml-heading site-section__title">
-                {isAr ? 'شغّل المنطق الحتمي بنفسك' : 'Run the deterministic logic yourself'}
-              </h2>
-              <p className="ml-lead site-section__lead" style={{ marginInline: 'auto', textAlign: 'center' }}>
-                {isAr
-                  ? 'بيئة تدريب تفاعلية تعمل على بيانات نموذجية موسومة بوضوح. لا تتصل ببياناتك ولا تعرض أي أرقام من مؤسستك.'
-                  : 'An interactive training environment running on clearly-labelled sample data. It never connects to your data and shows nothing from your organization.'}
-              </p>
-            </div>
-
-            <div className="pp-gap-lg">{workbench}</div>
-          </div>
-        </section>
-      )}
 
       {/* ── Pain points resolved ──────────────────────────────────────────── */}
       <section className="site-section">
