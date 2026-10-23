@@ -4,11 +4,9 @@
 // icon tiles, no second competing colour — the titles carry the hierarchy.
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { LocaleMode, ThemeMode } from '../../types';
+import { LocaleMode } from '../../types';
 import {
   IconGlobe,
-  IconSun,
-  IconMoon,
   IconMenu,
   IconX,
   IconArrowRight,
@@ -19,9 +17,7 @@ import { usePublishedEngines } from '../../hooks/publishedEngines';
 
 interface WebsiteHeaderProps {
   locale: LocaleMode;
-  theme: ThemeMode;
   onToggleLocale: () => void;
-  onToggleTheme: () => void;
   onLaunchPlatform: () => void;
   onRequestDemo?: () => void;
   onNavigate?: (path: string) => void;
@@ -29,9 +25,7 @@ interface WebsiteHeaderProps {
 
 export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
   locale,
-  theme,
   onToggleLocale,
-  onToggleTheme,
   onLaunchPlatform,
   onRequestDemo,
   onNavigate
@@ -226,10 +220,6 @@ export const WebsiteHeader: React.FC<WebsiteHeaderProps> = ({
         <div className="site-header__actions">
           <button onClick={onToggleLocale} className="ml-icon-btn" title={isAr ? 'English' : 'العربية'} aria-label="Toggle language">
             <IconGlobe size={15} />
-          </button>
-
-          <button onClick={onToggleTheme} className="ml-icon-btn" title="Theme" aria-label="Toggle theme">
-            {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
           </button>
 
           <button

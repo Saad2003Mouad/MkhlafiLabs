@@ -13,18 +13,16 @@ import { RevealEngine } from '../components/common/RevealEngine';
 
 interface PublicLayoutProps {
   locale: LocaleMode;
-  theme: ThemeMode;
+  theme?: ThemeMode;
   onToggleLocale: () => void;
-  onToggleTheme: () => void;
+  onToggleTheme?: () => void;
   onNavigate: (path: string) => void;
   children: React.ReactNode;
 }
 
 export const PublicLayout: React.FC<PublicLayoutProps> = ({
   locale,
-  theme,
   onToggleLocale,
-  onToggleTheme,
   onNavigate,
   children
 }) => {
@@ -32,7 +30,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
   const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
 
   return (
-    <div className="site-shell">
+    <div className="site-shell" data-theme="dark">
       {/* Decorative animated light field — presentational only */}
       <AmbientBackdrop />
       {/* Scroll-linked entrance motion for section content */}
@@ -45,9 +43,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({
 
       <WebsiteHeader
         locale={locale}
-        theme={theme}
         onToggleLocale={onToggleLocale}
-        onToggleTheme={onToggleTheme}
         onLaunchPlatform={() => onNavigate('/login')}
         onRequestDemo={() => setIsDemoModalOpen(true)}
         onNavigate={onNavigate}

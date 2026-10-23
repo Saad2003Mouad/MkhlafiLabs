@@ -99,17 +99,21 @@ const AppRouterContent: React.FC = () => {
     return () => document.removeEventListener('click', handleGlobalClick);
   }, [navigate]);
 
-  // Sync theme and locale attributes
+  const routeMatch: RouteMatch = parseRoute(currentPath);
+
+  // Sync theme and locale attributes — Public website is strictly and permanently dark mode
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    if (routeMatch.category === 'public' || routeMatch.category === 'auth') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }, [theme, routeMatch.category]);
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', locale === 'ar' ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', locale);
   }, [locale]);
-
-  const routeMatch: RouteMatch = parseRoute(currentPath);
 
   // ── Render Dedicated Auth Pages ───────────────────────────────────────────
   if (routeMatch.category === 'auth') {
@@ -117,9 +121,7 @@ const AppRouterContent: React.FC = () => {
       return (
         <LoginPage
           locale={locale}
-          theme={theme}
           onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           onNavigateHome={() => navigate(ROUTES.PUBLIC.HOME)}
           onNavigateRegister={(returnUrl) =>
             navigate(returnUrl ? `${ROUTES.AUTH.REGISTER}?returnUrl=${encodeURIComponent(returnUrl)}` : ROUTES.AUTH.REGISTER)
@@ -133,9 +135,7 @@ const AppRouterContent: React.FC = () => {
       return (
         <RegisterPage
           locale={locale}
-          theme={theme}
           onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-          onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           onNavigateHome={() => navigate(ROUTES.PUBLIC.HOME)}
           onNavigateLogin={(returnUrl) =>
             navigate(returnUrl ? `${ROUTES.AUTH.LOGIN}?returnUrl=${encodeURIComponent(returnUrl)}` : ROUTES.AUTH.LOGIN)
@@ -343,9 +343,7 @@ const AppRouterContent: React.FC = () => {
     <>
       <PublicLayout
         locale={locale}
-        theme={theme}
         onToggleLocale={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         onNavigate={navigate}
       >
         {renderPublicPage()}

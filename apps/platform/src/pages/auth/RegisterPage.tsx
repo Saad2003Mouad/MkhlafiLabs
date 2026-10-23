@@ -8,8 +8,6 @@ import { LocaleMode, ThemeMode } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import {
   IconArrowRight,
-  IconSun,
-  IconMoon,
   IconGlobe,
   IconLock,
   IconShield,
@@ -21,9 +19,9 @@ import { BrandLogo } from '../../components/common/BrandLogo';
 
 interface RegisterPageProps {
   locale: LocaleMode;
-  theme: ThemeMode;
+  theme?: ThemeMode;
   onToggleLocale: () => void;
-  onToggleTheme: () => void;
+  onToggleTheme?: () => void;
   onNavigateHome: () => void;
   onNavigateLogin: (returnUrl?: string) => void;
   onRegisterSuccess: (destination: string) => void;
@@ -31,9 +29,7 @@ interface RegisterPageProps {
 
 export const RegisterPage: React.FC<RegisterPageProps> = ({
   locale,
-  theme,
   onToggleLocale,
-  onToggleTheme,
   onNavigateHome,
   onNavigateLogin,
   onRegisterSuccess
@@ -201,16 +197,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({
             aria-label={isAr ? 'Switch to English' : 'التبديل إلى العربية'}
           >
             <IconGlobe size={15} />
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleTheme}
-            className="ml-icon-btn"
-            title={isAr ? 'تبديل المظهر' : 'Toggle theme'}
-            aria-label={isAr ? 'تبديل المظهر' : 'Toggle theme'}
-          >
-            {theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
           </button>
 
           <button type="button" onClick={onNavigateHome} className="ml-btn ml-btn--subtle ml-btn--sm">
