@@ -1308,13 +1308,13 @@ export async function handleApiRequest(req, res) {
         return jsonResponse(res, 403, { error: 'Forbidden: AI Business Assistant is not enabled for your subscription tier. Upgrade required.' });
       }
       const body = await readJsonBody(req);
-      const { query: queryText, locale = 'ar' } = body;
+      const { query: queryText, locale = 'ar', personaConfig } = body || {};
 
       if (!queryText || !queryText.trim()) {
         return jsonResponse(res, 400, { error: 'Query text is required.' });
       }
 
-      const result = await processAssistantQuery(orgId, auth.user.id, queryText, locale);
+      const result = await processAssistantQuery(orgId, auth.user.id, queryText, locale, personaConfig);
       return jsonResponse(res, 200, {
         success: true,
         ...result

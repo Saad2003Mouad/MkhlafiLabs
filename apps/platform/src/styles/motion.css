@@ -70,13 +70,23 @@
    so no component needs to opt in.
    -------------------------------------------------------------------------- */
 
+@keyframes autoRevealSafety {
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
 [data-reveal] {
   opacity: 0;
-  transform: translate3d(0, 26px, 0);
+  transform: translate3d(0, 20px, 0);
   transition:
-    opacity var(--motion-slow) var(--ease-swift),
-    transform var(--motion-slow) var(--ease-swift);
+    opacity 0.4s var(--ease-swift),
+    transform 0.4s var(--ease-swift);
   transition-delay: var(--reveal-delay, 0ms);
+  /* Failsafe: if JavaScript is delayed or IntersectionObserver is slow, automatically reveal smoothly */
+  animation: autoRevealSafety 0.5s ease 0.4s forwards;
   will-change: opacity, transform;
 }
 
@@ -86,6 +96,7 @@
 [data-reveal='blur'] { filter: blur(10px); transform: translate3d(0, 22px, 0); }
 
 [data-reveal].is-revealed {
+  animation: none;
   opacity: 1;
   transform: none;
   filter: none;

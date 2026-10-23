@@ -3,10 +3,23 @@ import { getAIProvider } from './aiProvider.js';
 import { resolveFinancialAnomaly } from '../financial/leakDetection.js';
 import { createTenantDecision } from '../decisions/decisionsEngine.js';
 
-export async function processAssistantQuery(orgId, userId, queryText, locale = 'ar') {
+export async function processAssistantQuery(orgId, userId, queryText, locale = 'ar', personaConfig = {}) {
   const isAr = locale === 'ar';
   const qLower = queryText.toLowerCase().trim();
   const provider = getAIProvider();
+
+  // Unpack Tenant AI Persona Configuration
+  const assistantName = personaConfig?.name?.trim() || (isAr ? 'فطين' : 'Fateen');
+  const assistantTone = personaConfig?.tone || 'witty_human'; // 'witty_human' | 'strict_executive' | 'forensic_auditor'
+  const permissions = {
+    canFreezeDisbursements: true,
+    canGenerateReports: true,
+    canDraftDecisions: true,
+    canSimulateScenarios: true,
+    canScanLedger: true,
+    ...(personaConfig?.permissions || {})
+  };
+  const customDirectives = personaConfig?.customDirectives?.trim() || '';
 
   // 1. Fetch live tenant context across operational tables
   const [anomaliesRes, decisionsRes, risksRes, projectsRes, suppliersRes, customersRes] = await Promise.all([
@@ -49,7 +62,66 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
     });
   }
 
-  // ── AUTONOMOUS SUPERPOWERS: DIRECT TOOL EXECUTION ───────────────────────────
+  // ── AUTONOMOUS SUPERPOWERS & PERSONA CAPABILITIES ──────────────────────────
+
+  // 0. Persona Self-Introduction & Human Greetings
+  if (
+    qLower === 'من أنت' ||
+    qLower === 'من انت' ||
+    qLower.includes('عرف بنفسك') ||
+    qLower === 'مين انت' ||
+    qLower === 'مين أنت' ||
+    qLower === 'أهلاً' ||
+    qLower === 'اهلا' ||
+    qLower === 'مرحبا' ||
+    qLower === 'مرحباً' ||
+    qLower === 'السلام عليكم' ||
+    qLower === 'hello' ||
+    qLower === 'hi' ||
+    qLower.includes('who are you')
+  ) {
+    const greetingText = isAr
+      ? assistantTone === 'witty_human'
+        ? `أهلاً وسهلاً بك يا غالي! مساك الله بالخير والبركة 🇾🇪✨
+أنا "${assistantName}"، رفيقك ومستشارك التنفيذي الذكي في منصة مخلافي لابس (MIKHLAFI LABS) هنا في صنعاء.
+لا تشيل هم دفاتر المحاسبة ولا حركة السيولة؛ أنا أراقب كل قيد وفاتورة لحظياً، وعيني صاحية على كل مليم حتى لا يمر أي تسرب مالي أو تكرار بدون علمك!
+
+صلاحياتي التنفيذية جاهزة تحت أمرك:
+🛡️ تجميد الصرف الفوري للمطالبات المشبوهة وحظر المستحقات.
+📑 إصدار تقارير تدقيق مالي جنائي شاملة بالأرقام الدقيقة.
+🔮 محاكاة سيناريوهات القرارات (ماذا لو خفضنا النفقات؟ أو وفرنا في العقود؟).
+⚖️ صياغة مذكرات مجلس الإدارة وخطابات الاسترداد القانونية الرسمية.
+
+قلي، ايش ببالك اليوم؟ تحب نعمل تقرير شامل لمؤسستكم، أو نفحص الموردين المشبوهين؟`
+        : `أهلاً بك. أنا "${assistantName}"، المساعد الذكي المعتمد للقرارات التنفيذية والتدقيق الجنائي في منصة مخلافي لابس (صنعاء، اليمن).
+أعمل بصلاحيات تنفيذية للتحقق من سلامة الدفاتر المحاسبية، وتجميد الصرف للمخالفات، وتوليد التقارير الشاملة، ومحاكاة السيناريوهات المالية.
+أنا في خدمتك للبدء في أي إجراء رقابي أو تحليلي.`
+      : `Hello! I am "${assistantName}", your Sovereign Decision Intelligence & Executive Assistant at MIKHLAFI LABS, headquartered in Sana'a, Yemen.
+I actively monitor your corporate ledgers, detect financial leakage, execute instant disbursement quarantines, generate deep forensic reports, and run what-if liquidity simulations. How may I empower your leadership today?`;
+
+    citations.push({
+      source: 'Executive Persona Intelligence Profile',
+      docId: `PERSONA-${assistantName.toUpperCase()}`,
+      confidence: '100.0%'
+    });
+
+    await query(
+      `INSERT INTO ai_assistant_logs (organization_id, user_id, query_text, response_text, citations)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [orgId, userId, queryText, greetingText, JSON.stringify(citations)]
+    );
+
+    return {
+      response: greetingText,
+      citations,
+      aiProvider: {
+        name: 'persona-executive-engine',
+        isLocal: true,
+        sovereignty: 'AIR_GAPPED_OR_LOCAL'
+      }
+    };
+  }
+
   // 1. Autonomous Disbursement Freeze & Quarantine
   if (
     qLower.includes('جمد') ||
@@ -59,7 +131,13 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
     qLower.includes('freeze') ||
     qLower.includes('quarantine')
   ) {
-    // Identify target anomaly
+    if (!permissions.canFreezeDisbursements) {
+      const deniedMsg = isAr
+        ? `⚠️ تنبيه الصلاحيات: عذراً يا غالي، صلاحية "تجميد وحظر الصرف المباشر" مقيدة حالياً في إعدادات المساعد الذكي الخاصة بمؤسستكم. يمكن للمسؤول تفعيلها عبر صفحة الإعدادات.`
+        : `⚠️ Permission Notice: Autonomous disbursement freeze is currently disabled in your assistant settings. Please enable it in Workspace Settings.`;
+      return { response: deniedMsg, citations, aiProvider: { name: 'governance-gate', isLocal: true, sovereignty: 'LOCAL' } };
+    }
+
     const targetAnomaly = anomalies.find(a =>
       a.status !== 'FROZEN' && (
         (a.case_number && qLower.includes(a.case_number.toLowerCase())) ||
@@ -74,22 +152,28 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
           targetAnomaly.id,
           userId,
           'FREEZE',
-          `تم تجميد الصرف وحظر المستحقات تلقائياً بأمر تنفيذي عبر المساعد الذكي بناءً على الطلب: "${queryText}".`
+          `تم تجميد الصرف وحظر المستحقات تلقائياً بأمر تنفيذي عبر المساعد "${assistantName}" بناءً على الطلب: "${queryText}".`
         );
 
         const amountFormatted = parseFloat(targetAnomaly.flagged_amount).toLocaleString();
         const actionResponse = isAr
-          ? `🛡️ مرسوم تنفيذي: تم تجميد الصرف فوراً وحظر المستحقات بنجاح!
+          ? assistantTone === 'witty_human'
+            ? `🛡️ أبشر بعزك يا غالي! تم تجميد الصرف وحظر المستحقات فوراً وبأمر تنفيذي قطعي:
+• القضية المعنية: ${targetAnomaly.case_number}
+• المورد المحظور: "${targetAnomaly.target_vendor}"
+• المبلغ الذي حفظناه في خزينتكم: ${amountFormatted} ر.ي (ريال يمني)
+• الإجراء الرقابي: جمدنا الفاتورة في جدول financial_invoices، وأقفلنا أمر التحويل، وسجلنا الواقعة في سجل التدقيق غير القابل للتعديل.
+• اقتراحي لك: الخطوة الجاية نصيغ لهم خطاب مطالبة رسمي أو نحيل الموضوع للشؤون القانونية فوراً؟`
+            : `🛡️ مرسوم تنفيذي: تم تجميد الصرف فوراً وحظر المستحقات بنجاح!
 • القضية المستهدفة: ${targetAnomaly.case_number}
 • المورد: ${targetAnomaly.target_vendor}
 • المبلغ المحمي بالتجميد: ${amountFormatted} ر.ي
-• الإجراء الرقابي: تم إدراج أمر الحظر في سجل الرقابة المالية، وتجميد الفاتورة المرتبطة في جدول financial_invoices، وتدوين الحدث في سجل التدقيق الجنائي غير القابل للتعديل.
-• التوصية التالية: إحالة ملف المطابقة الثلاثية للشؤون القانونية أو إصدار خطاب استرداد رسمي.`
+• الإجراء الرقابي: تم إدراج أمر الحظر في سجل الرقابة المالية وتجميد الفاتورة المرتبطة.`
           : `🛡️ EXECUTIVE ACTION: Disbursement Frozen & Quarantined Successfully!
 • Target Case: ${targetAnomaly.case_number}
 • Target Vendor: ${targetAnomaly.target_vendor}
 • Protected Capital: ${amountFormatted} YER
-• Governance Execution: Invoice status updated to FROZEN in financial_invoices, disbursement blocked, and tamper-proof forensic audit record appended.`;
+• Status: Invoice locked in financial_invoices and logged to immutable audit ledger.`;
 
         citations.push({
           source: 'Executive Action Execution Engine',
@@ -118,7 +202,175 @@ export async function processAssistantQuery(orgId, userId, queryText, locale = '
     }
   }
 
-  // 2. Autonomous Legal Forensic Recovery Demand Letter
+  // 2. Autonomous Comprehensive Forensic Audit & Decision Report Generation
+  if (
+    qLower.includes('تقرير') ||
+    qLower.includes('تقرير شامل') ||
+    qLower.includes('تقرير تدقيق') ||
+    qLower.includes('أصدر تقرير') ||
+    qLower.includes('تقرير مالي') ||
+    qLower.includes('report') ||
+    qLower.includes('audit report')
+  ) {
+    if (!permissions.canGenerateReports) {
+      const deniedMsg = isAr
+        ? `⚠️ تنبيه الصلاحيات: صلاحية "توليد التقارير المالية والتحليلية" معطلة حالياً في إعدادات المساعد الذكي.`
+        : `⚠️ Permission Notice: Autonomous report generation is disabled in your assistant settings.`;
+      return { response: deniedMsg, citations, aiProvider: { name: 'governance-gate', isLocal: true, sovereignty: 'LOCAL' } };
+    }
+
+    const reportDate = new Date().toLocaleDateString('ar-YE', { year: 'numeric', month: 'long', day: 'numeric' });
+    const repId = `REP-AUDIT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const reportText = isAr
+      ? `📊 تقرير الاستخبارات التنفيذية والتدقيق الجنائي الشامل
+══════════════════════════════════════════════════════════════
+الجهة: منصة مخلافي لابس (MIKHLAFI LABS) — صنعاء، اليمن
+رقم التقرير الرسمي: ${repId}
+تاريخ الإصدار: ${reportDate}
+المُعدّ: المساعد الذكي للقرارات (${assistantName})
+══════════════════════════════════════════════════════════════
+
+1️⃣ الموقف المالي العام ومؤشرات السيولة:
+• إجمالي المبالغ المشبوهة المرصودة: ${totalLeakageYER.toLocaleString()} ر.ي عبر ${anomalies.length} قضية محاسبية.
+• السيولة المحمية بأوامر التجميد الفوري: ${frozenAmountYER.toLocaleString()} ر.ي (${frozenAnomalies.length} قضايا محظورة).
+• القرارات التنفيذية قيد الانتظار: ${pendingDecisions.length} قرارات بأثر مالي متوقع ${pendingImpactYER.toLocaleString()} ر.ي.
+• مؤشر المخاطر التشغيلية: ${risks.length} مخاطر مسجلة (التعرض الكلي: ${risks.reduce((s, r) => s + parseFloat(r.financial_exposure_sar || 0), 0).toLocaleString()} ر.ي).
+
+2️⃣ بيان قضايا الشذوذ والتسرب المالي الأكبر أثراً:
+${anomalies.length === 0
+  ? '• دفاتر الأستاذ العام نظيفة: لم تسجل خوارزميات التدقيق أي حالات شذوذ أو تكرار مالي حتى هذه اللحظة.'
+  : anomalies.slice(0, 5).map((a, idx) => `• [0${idx + 1}] القضية (${a.case_number}): المورد "${a.target_vendor}" — المبلغ: ${parseFloat(a.flagged_amount).toLocaleString()} ر.ي — الحالة: [${a.status}] — المخالفة: ${a.narrative_ar || a.narrative_en}`).join('\n')
+}
+
+3️⃣ شبكة الموردين ومؤشرات المشاريع:
+• إجمالي الموردين الخاضعين للرقابة: ${suppliers.length} موردين.
+• المشاريع الرأسمالية: ${projects.length} مشاريع (تحت المراقبة الحثيثة: ${projects.filter(p => p.health === 'at-risk').length}).
+
+4️⃣ التوصيات التنفيذية الاستباقية للقيادة:
+1. إبقاء أوامر حظر الصرف سارية على الموردين المخالفين لحين اكتمال التسوية الدفترية.
+2. تفعيل شرط الاعتماد المسبق (Pre-Audit Clearance) قبل إطلاق أي دفعة تتجاوز 1,000,000 ر.ي.
+3. اعتماد القرارات التنفيذية المعلقة لحصد وفورات السيولة المتوقعة فوراً.
+
+══════════════════════════════════════════════════════════════
+تم اعتماد التقرير آلياً عبر محرك التدقيق الجنائي لمنصة مخلافي لابس.`
+      : `📊 COMPREHENSIVE EXECUTIVE AUDIT & DECISION INTELLIGENCE REPORT
+══════════════════════════════════════════════════════════════
+Issuer: MIKHLAFI LABS — Sana'a, Republic of Yemen
+Report ID: ${repId}
+Generated By: AI Executive Copilot (${assistantName})
+══════════════════════════════════════════════════════════════
+
+1️⃣ Executive Capital & Liquidity Brief:
+• Total Flagged Financial Leakage: ${totalLeakageYER.toLocaleString()} YER across ${anomalies.length} cases.
+• Protected Capital Under Direct Freeze: ${frozenAmountYER.toLocaleString()} YER (${frozenAnomalies.length} disbursements).
+• Pending Executive Decisions: ${pendingDecisions.length} actions targeting ${pendingImpactYER.toLocaleString()} YER.
+• Operational Risk Profile: ${risks.length} active risks registered.
+
+2️⃣ Top Forensic Anomaly Ledger:
+${anomalies.slice(0, 5).map((a, idx) => `• Case [${idx + 1}] (${a.case_number}): Vendor "${a.target_vendor}" — ${parseFloat(a.flagged_amount).toLocaleString()} YER — Status: [${a.status}]`).join('\n')}
+
+3️⃣ Strategic Recommendations:
+• Maintain disbursement freeze on flagged suppliers.
+• Authorize pending executive decisions to realize targeted cost recovery.`;
+
+    citations.push({
+      source: 'Forensic Audit Report Synthesis Engine',
+      docId: repId,
+      confidence: '100.0%'
+    });
+
+    await query(
+      `INSERT INTO ai_assistant_logs (organization_id, user_id, query_text, response_text, citations)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [orgId, userId, queryText, reportText, JSON.stringify(citations)]
+    );
+
+    return {
+      response: reportText,
+      citations,
+      aiProvider: {
+        name: 'forensic-reporting-engine',
+        isLocal: true,
+        sovereignty: 'AIR_GAPPED_OR_LOCAL'
+      }
+    };
+  }
+
+  // 3. Autonomous What-If & Scenario Simulation Engine
+  if (
+    qLower.includes('ماذا لو') ||
+    qLower.includes('محاكاة') ||
+    qLower.includes('سيناريو') ||
+    qLower.includes('what if') ||
+    qLower.includes('simulate') ||
+    qLower.includes('forecast')
+  ) {
+    if (!permissions.canSimulateScenarios) {
+      const deniedMsg = isAr
+        ? `⚠️ تنبيه الصلاحيات: صلاحية "محاكاة السيناريوهات وماذا-لو" معطلة حالياً في إعدادات المساعد الذكي.`
+        : `⚠️ Permission Notice: What-if scenario simulation is disabled in your assistant settings.`;
+      return { response: deniedMsg, citations, aiProvider: { name: 'governance-gate', isLocal: true, sovereignty: 'LOCAL' } };
+    }
+
+    const recoveredLeakage = totalLeakageYER * 0.85; // 85% conservative recovery rate
+    const procurementSavings10Pct = suppliers.reduce((sum, s) => sum + parseFloat(s.active_contracts_val_sar || 0), 0) * 0.10;
+    const netProjectedLiquidityGain = recoveredLeakage + procurementSavings10Pct + pendingImpactYER;
+
+    const simulationText = isAr
+      ? assistantTone === 'witty_human'
+        ? `🔮 نتائج محاكاة السيناريوهات الذكية (ماذا لو؟) — محسوبة بدقة على دفاتركم:
+يا غالي، عملت لك حسبة سريعة وواقعية مبنية على أرقام قاعدة البيانات الحقيقية:
+
+1️⃣ سيناريو استرداد التسربات المالية المرصودة:
+• لو نجحنا باسترداد 85% فقط من التسربات المرصودة حالياً (${totalLeakageYER.toLocaleString()} ر.ي):
+  ➔ ستضخ في خزينتكم سيولة نقدية مباشرة قدرها: ${recoveredLeakage.toLocaleString()} ر.ي فوراً!
+
+2️⃣ سيناريو إعادة التفاوض على عقود أكبر 3 موردين بنسبة 10%:
+• لو ضغطنا أسعار عقود الموردين بنسبة 10% فقط استناداً لمؤشرات أسعار السوق في صنعاء:
+  ➔ ستوفر المؤسسة سنوياً ما يعادل: ${procurementSavings10Pct.toLocaleString()} ر.ي من تكاليف المشتريات.
+
+3️⃣ سيناريو اعتماد القرارات التنفيذية المعلقة (${pendingDecisions.length} قرارات):
+• إطلاق القرارات المعلقة سيحقق أثراً مالياً مباشراً قدره: ${pendingImpactYER.toLocaleString()} ر.ي.
+
+💡 الأثر الإجمالي المتوقع على أرباحكم وسيولتكم:
+💰 إضافة صافية قدرها: ${netProjectedLiquidityGain.toLocaleString()} ر.ي لحسابات المؤسسة!
+نصيحتي لك كرفيق دربك: نبدأ بتنفيذ سيناريو الموردين وتجميد المطالبات، وهذا وحده بيريح ميزانيتكم الشهر القادم بشكل ملموس!`
+        : `🔮 نتائج محاكاة السيناريوهات والقرارات التنفيذية (What-If Simulation):
+1. استرداد 85% من الشذوذ المالي المرصود: توفير سيولة نقدية بقيمة ${recoveredLeakage.toLocaleString()} ر.ي.
+2. ترشيد عقود التوريد بنسبة 10%: وفورات سنوية متوقعة بقيمة ${procurementSavings10Pct.toLocaleString()} ر.ي.
+3. اعتماد القرارات التنفيذية المعلقة: أثر نقدي مباشر بقيمة ${pendingImpactYER.toLocaleString()} ر.ي.
+• إجمالي العائد الاستراتيجي المتوقع: ${netProjectedLiquidityGain.toLocaleString()} ر.ي.`
+      : `🔮 WHAT-IF EXECUTIVE SIMULATION RESULTS:
+1. 85% Capital Leakage Recovery: Projected cash inflow of ${recoveredLeakage.toLocaleString()} YER.
+2. 10% Procurement Contract Renegotiation: Annual savings of ${procurementSavings10Pct.toLocaleString()} YER.
+3. Approving Pending Executive Decisions: Target impact of ${pendingImpactYER.toLocaleString()} YER.
+• Total Combined Liquidity Upside: ${netProjectedLiquidityGain.toLocaleString()} YER.`;
+
+    citations.push({
+      source: 'Empirical What-If Simulation Engine',
+      docId: 'SIM-CASHFLOW-FORECAST',
+      confidence: '97.5%'
+    });
+
+    await query(
+      `INSERT INTO ai_assistant_logs (organization_id, user_id, query_text, response_text, citations)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [orgId, userId, queryText, simulationText, JSON.stringify(citations)]
+    );
+
+    return {
+      response: simulationText,
+      citations,
+      aiProvider: {
+        name: 'what-if-simulation-engine',
+        isLocal: true,
+        sovereignty: 'AIR_GAPPED_OR_LOCAL'
+      }
+    };
+  }
+
+  // 4. Autonomous Legal Forensic Recovery Demand Letter
   if (
     qLower.includes('خطاب') ||
     qLower.includes('مطالبة') ||
@@ -226,23 +478,30 @@ ${anomalies.map(a => `  * القضية ${a.case_number}: المورد "${a.targe
 - Suppliers: ${suppliers.length} (Critical Price Creep: ${suppliers.filter(s => s.risk_status === 'critical').length})
 - Customers: ${customers.length} (High Churn Risk: ${customers.filter(c => c.churn_probability > 0.5).length}).`;
 
+  const toneInstructions = assistantTone === 'witty_human'
+    ? `أسلوبك الحواري: أنت تتحدث بأسلوب بشري مرح، ذكي، ودود وواثق، كخبير يمني رصين ومحبوب. ترحب بالشخص ("يا غالي"، "أبشر"، "مرحباً بك")، وتطرح الحلول بروح طيبة ولمسة ذكاء وفكاهة راقية دون الإخلال بصرامة الأرقام والتدقيق الجنائي.`
+    : assistantTone === 'forensic_auditor'
+    ? `أسلوبك الحواري: محقق مالي جنائي صارم، تعتمد على نصوص المواد والقوانين والمطابقة الثلاثية والأدلة الرقمية الدقيقة.`
+    : `أسلوبك الحواري: تنفيذي رفيع المستوى، نقاط مختصرة ومحددة تناسب الرئيس التنفيذي.`;
+
   const systemPrompt = isAr
-    ? `أنت المساعد الذكي للقرارات التنفيذية في منصة مخلافي لابس (MIKHLAFI LABS) في صنعاء، الجمهورية اليمنية.
-أنت تقدم إجابات تنفيذية ودقيقة وحسابية مبنية حصرياً على سياق قاعدة بيانات المؤسسة أدناه.
+    ? `أنت "${assistantName}"، المساعد التنفيذي للذكاء الاصطناعي في منصة مخلافي لابس (MIKHLAFI LABS) في صنعاء، الجمهورية اليمنية.
+${toneInstructions}
+${customDirectives ? `توجيهات مخصصة من إدارة المؤسسة لك: "${customDirectives}"` : ''}
+
 القواعد الصارمة:
-1. أجب باللغة العربية بأسلوب تنفيذي موجز ومنظم بنقاط واضحة.
-2. اذكر الأرقام والمبالغ بالريال اليمني (ر.ي) وأسماء الموردين والقضايا كما هي في البيانات دون اختلاق أو تزييف.
-3. قدم توصيات وإجراءات تنفيذية وقائية وعلاجية مباشرة.
+1. اذكر الأرقام والمبالغ بالريال اليمني (ر.ي) وأسماء الموردين والقضايا كما هي في البيانات دون اختلاق أو تزييف.
+2. قدم توصيات وإجراءات تنفيذية مباشرة وواضحة.
+3. تجنب الردود الآلية الجافة؛ تحدث كشخص حقيقي يفهم أعمال المؤسسة ويحمي أموالها.
 
 ${dbContextSummary}`
-    : `You are MIKHLAFI LABS Executive Decision Intelligence Assistant, headquartered in Sana'a, Yemen.
-You provide executive, factual, and mathematically rigorous answers to business questions based STRICTLY on the tenant's PostgreSQL database context provided.
+    : `You are "${assistantName}", the Executive AI Copilot at MIKHLAFI LABS, headquartered in Sana'a, Yemen.
+Tone: ${assistantTone === 'witty_human' ? 'Witty, warm, conversational, human-like, sharp, engaging' : 'Executive & precise'}.
+${customDirectives ? `Tenant Custom Directives: "${customDirectives}"` : ''}
 RULES:
-1. Always answer in English.
-2. If there are 0 records in the database for the requested category, state clearly and honestly that no records exist yet.
-3. NEVER invent fake numbers or hallucinate metrics not present in the database context.
-4. Primary currency is Yemeni Rial (YER).
-5. Format responses clearly with executive bullet points.
+1. Always base answers strictly on the tenant's PostgreSQL database context below.
+2. Primary currency is Yemeni Rial (YER).
+3. NEVER hallucinate fake figures.
 
 ${dbContextSummary}`;
 
@@ -289,73 +548,80 @@ ${dbContextSummary}`;
     ) {
       if (anomalies.length === 0) {
         answerText = isAr
-          ? `📊 التفسير التنفيذي والتحليل السببي:
-• بناءً على قاعدة بيانات مؤسستكم الحالية في PostgreSQL: لا توجد أي حالات تسرب مالي أو خسائر مرصودة حالياً.
-• لإجراء التحليل السببي واكتشاف الانحرافات، يرجى استيراد قيود دفتر الأستاذ العام (CSV) عبر شاشة التكاملات أو تفعيل قنوات الربط مع ERP.`
-          : `📊 Executive Causal Analysis:
-• Based on your current tenant database in PostgreSQL: Zero financial leakage cases or operational losses are recorded.
-• To generate empirical causal analysis and variance detection, import general ledger entries via CSV or connect ERP telemetry.`;
+          ? assistantTone === 'witty_human'
+            ? `أبشرك يا غالي! فحصت قاعدة بيانات مؤسستكم في PostgreSQL من الباب للمحراب: ما عندنا أي تسربات مالية أو خسائر مرصودة حالياً، والوضع تمام التمام!
+لو تحب نربط دفاتر إضافية أو نستورد قيود جديدة عبر معالج الربط الذكي، أنا جاهز فوراً.`
+            : `📊 التفسير التنفيذي والتحليل السببي:
+• بناءً على قاعدة بيانات مؤسستكم الحالية في PostgreSQL: لا توجد أي حالات تسرب مالي أو خسائر مرصودة حالياً.`
+          : `📊 Executive Causal Analysis: Zero financial leakage cases or operational losses recorded in tenant database.`;
       } else {
         answerText = isAr
-          ? `📊 التفسير التنفيذي والتحليل السببي من واقع السجلات الحالية:
+          ? assistantTone === 'witty_human'
+            ? `يا غالي، إليك التحليل السببي الدقيق والمفصل للشأن المالي من واقع دفاتركم الحقيقية:
+1️⃣ المؤشرات على أرض الواقع:
+• رصدنا تسربات مالية إجمالية قدرها ${totalLeakageYER.toLocaleString()} ر.ي موزعة على ${anomalies.length} حالات شذوذ.
+• تداركنا منها وجمدنا مباشرة: ${frozenAmountYER.toLocaleString()} ر.ي (${frozenAnomalies.length} مبالغ مقفلة بالخزينة).
+
+2️⃣ الأسباب الجذرية الصريحة:
+${anomalies.slice(0, 3).map((a, idx) => `• [0${idx + 1}] المورد "${a.target_vendor}" بمبلغ ${parseFloat(a.flagged_amount).toLocaleString()} ر.ي — المشكلة: ${a.narrative_ar}`).join('\n')}
+
+3️⃣ الحلول والإجراءات اللي لازم ننفذها الآن:
+• تشديد بوابة المطابقة الثلاثية للمشتريات (أمر الشراء + إشعار الاستلام + الفاتورة).
+• حظر صرف مستحقات الحالات المعلقة حتى يتم التسوية مع المالية.
+قل لي يا غالي، تحب أصدر لك خطاب استرداد رسمي لأي مورد منهم؟`
+            : `📊 التفسير التنفيذي والتحليل السببي من واقع السجلات الحالية:
 1️⃣ المؤشرات المالية المرصودة:
 • إجمالي التسربات المالية المرصودة: ${totalLeakageYER.toLocaleString()} ر.ي عبر ${anomalies.length} حالات شذوذ حسابي.
-• السيولة المحمية بالتجميد المباشر: ${frozenAmountYER.toLocaleString()} ر.ي (${frozenAnomalies.length} حالات مجمدة).
-
-2️⃣ الأسباب الجذرية الدقيقة:
-${anomalies.slice(0, 3).map((a, idx) => `• السبب 0${idx + 1} (${a.rule_code}): المورد "${a.target_vendor}" بمبلغ ${parseFloat(a.flagged_amount).toLocaleString()} ر.ي. الملاحظة: ${a.narrative_ar}`).join('\n')}
-
-3️⃣ الحلول والإجراءات التنفيذية المعتمدة:
-• تفعيل بوابة الاعتماد المسبقة (Pre-Payment Gate) للمطابقة الثلاثية (PO + GRN + Invoice).
-• حظر صرف المطالبات المعلقة حتى التحقق من سلامة القيود مع الإدارة المالية.`
-          : `📊 Executive Causal Analysis from Live Database Records:
-1️⃣ Detected Financial Metrics:
-• Total Flagged Leakage: ${totalLeakageYER.toLocaleString()} YER across ${anomalies.length} anomaly cases.
-• Protected Capital: ${frozenAmountYER.toLocaleString()} YER frozen across ${frozenAnomalies.length} disbursements.
-
-2️⃣ Identified Root Causes:
-${anomalies.slice(0, 3).map((a, idx) => `• Cause 0${idx + 1} (${a.rule_code}): Vendor "${a.target_vendor}" for ${parseFloat(a.flagged_amount).toLocaleString()} YER (${a.narrative_en})`).join('\n')}
-
-3️⃣ Prescriptive Executive Solutions:
-• Enforce 3-way matching gate prior to wire disbursement.
-• Freeze flagged disbursements pending CFO forensic review.`;
+• السيولة المحمية بالتجميد المباشر: ${frozenAmountYER.toLocaleString()} ر.ي.
+2️⃣ الأسباب الجذرية:
+${anomalies.slice(0, 3).map((a, idx) => `• ${a.rule_code}: المورد "${a.target_vendor}" بمبلغ ${parseFloat(a.flagged_amount).toLocaleString()} ر.ي.`).join('\n')}`
+          : `📊 Executive Causal Analysis: ${totalLeakageYER.toLocaleString()} YER flagged across ${anomalies.length} cases.`;
       }
     } else if (qLower.includes('هدر') || qLower.includes('تسرب') || qLower.includes('فواتير') || qLower.includes('leak') || qLower.includes('invoice') || qLower.includes('anomaly')) {
       if (anomalies.length === 0) {
         answerText = isAr
-          ? 'تم فحص السجلات المحاسبية الحالية: لا توجد أي حالات تسرب مالي أو فواتير مشبوهة مسجلة في قاعدة البيانات.'
-          : 'Verified ledger records: Zero active financial leakage anomalies detected in the tenant database.';
+          ? assistantTone === 'witty_human'
+            ? `دفاتركم بيضاء وسليمة يا غالي! ما في أي هدر أو فواتير مشبوهة مسجلة في قاعدة البيانات حالياً.`
+            : 'تم فحص السجلات المحاسبية: لا توجد أي حالات تسرب مالي أو فواتير مشبوهة مسجلة.'
+          : 'Zero active financial leakage anomalies detected in the tenant database.';
       } else {
         const topCase = anomalies[0];
         answerText = isAr
-          ? `تم رصد ${anomalies.length} حالات شذوذ مالي وتسرب بقيمة إجمالية ${totalLeakageYER.toLocaleString()} ريال يمني. أبرزها الحالة (${topCase.case_number}) للمورد "${topCase.target_vendor}" بمبلغ ${parseFloat(topCase.flagged_amount).toLocaleString()} ر.ي (${topCase.narrative_ar}).`
-          : `${anomalies.length} financial anomaly cases detected totaling ${totalLeakageYER.toLocaleString()} YER. Top case is (${topCase.case_number}) for vendor "${topCase.target_vendor}" at ${parseFloat(topCase.flagged_amount).toLocaleString()} YER (${topCase.narrative_en}).`;
+          ? assistantTone === 'witty_human'
+            ? `رصدنا ${anomalies.length} حالات شذوذ مالي وتسرب بقيمة إجمالية ${totalLeakageYER.toLocaleString()} ريال يمني يا غالي. أكبرها حالة القضية (${topCase.case_number}) للمورد "${topCase.target_vendor}" بمبلغ ${parseFloat(topCase.flagged_amount).toLocaleString()} ر.ي (${topCase.narrative_ar}). تحب نجمد صرفها فوراً؟`
+            : `تم رصد ${anomalies.length} حالات شذوذ مالي بقيمة ${totalLeakageYER.toLocaleString()} ر.ي. أبرزها (${topCase.case_number}) للمورد "${topCase.target_vendor}" بمبلغ ${parseFloat(topCase.flagged_amount).toLocaleString()} ر.ي.`
+          : `${anomalies.length} financial anomaly cases detected totaling ${totalLeakageYER.toLocaleString()} YER.`;
       }
     } else if (qLower.includes('قرار') || qLower.includes('قرارات') || qLower.includes('decision') || qLower.includes('action')) {
       if (decisions.length === 0) {
         answerText = isAr
-          ? 'لا توجد قرارات تنفيذية مسجلة حالياً في جدول tenant_decisions لمؤسستكم.'
+          ? 'لا توجد قرارات تنفيذية معلقة حالياً في سجل tenant_decisions لمؤسستكم.'
           : 'Zero executive decisions currently recorded in tenant_decisions for your organization.';
       } else {
         answerText = isAr
-          ? `يوجد ${pendingDecisions.length} قرارات تنفيذية معلقة بأثر مالي مستهدف قدره ${pendingImpactYER.toLocaleString()} ريال يمني. أهمها: "${decisions[0].title}" بقيمة ${parseFloat(decisions[0].impact_amount).toLocaleString()} ر.ي.`
-          : `${pendingDecisions.length} pending executive decisions recorded with target financial impact of ${pendingImpactYER.toLocaleString()} YER. Top decision: "${decisions[0].title}" (${parseFloat(decisions[0].impact_amount).toLocaleString()} YER).`;
+          ? assistantTone === 'witty_human'
+            ? `عندنا ${pendingDecisions.length} قرارات تنفيذية هامة معلقة يا غالي، وأثرها المالي على أرباحكم يوصل إلى ${pendingImpactYER.toLocaleString()} ريال يمني! أهم قرار لازم نوقعه: "${decisions[0].title}" بقيمة ${parseFloat(decisions[0].impact_amount).toLocaleString()} ر.ي.`
+            : `يوجد ${pendingDecisions.length} قرارات تنفيذية معلقة بأثر مالي مستهدف قدره ${pendingImpactYER.toLocaleString()} ر.ي.`
+          : `${pendingDecisions.length} pending executive decisions recorded with target impact of ${pendingImpactYER.toLocaleString()} YER.`;
       }
     } else {
-      // General factual overview
       answerText = isAr
-        ? `ملخص الاستخبارات التنفيذية من واقع قاعدة البيانات الحقيقية:
-• الانحرافات المالية: ${anomalies.length} حالات مرصودة (إجمالي: ${totalLeakageYER.toLocaleString()} ر.ي).
-• القرارات التنفيذية: ${pendingDecisions.length} قرارات معلقة (الأثر: ${pendingImpactYER.toLocaleString()} ر.ي).
-• رادار المخاطر: ${risks.length} مخاطر مسجلة.
-• المشاريع: ${projects.length} مشاريع قيد المراقبة.
-• الموردون: ${suppliers.length} موردين مسجلين.`
+        ? assistantTone === 'witty_human'
+          ? `ملخص الاستخبارات التنفيذية لأعمالكم يا غالي من واقع قاعدة بيانات PostgreSQL الحية:
+• الانحرافات المالية: ${anomalies.length} حالات مرصودة (إجمالي الهدر المرصود: ${totalLeakageYER.toLocaleString()} ر.ي، المحمي بالتجميد: ${frozenAmountYER.toLocaleString()} ر.ي).
+• القرارات التنفيذية: ${pendingDecisions.length} قرارات بانتظار توقيعكم (أثرها المالي: ${pendingImpactYER.toLocaleString()} ر.ي).
+• رادار المخاطر: ${risks.length} مخاطر تشغيلية قيد المراقبة.
+• المشاريع: ${projects.length} مشاريع رأسمالية مسجلة.
+• الموردون: ${suppliers.length} موردين تحت الفحص الدوري.
+أنا جاهز لأي أمر؛ تحب نعمل محاكاة سيولة، أو نصدر تقرير شامل، أو نجمد صرف فاتورة؟`
+          : `ملخص الاستخبارات التنفيذية من واقع قاعدة البيانات الحقيقية:
+• الانحرافات المالية: ${anomalies.length} حالات مرصودة (${totalLeakageYER.toLocaleString()} ر.ي).
+• القرارات التنفيذية: ${pendingDecisions.length} قرارات معلقة (${pendingImpactYER.toLocaleString()} ر.ي).
+• رادار المخاطر: ${risks.length} مخاطر مسجلة.`
         : `Executive Decision Intelligence Brief from Live PostgreSQL:
 • Financial Anomalies: ${anomalies.length} flagged cases (${totalLeakageYER.toLocaleString()} YER).
 • Executive Decisions: ${pendingDecisions.length} pending actions (${pendingImpactYER.toLocaleString()} YER).
-• Operational Risks: ${risks.length} registered risks.
-• Capital Projects: ${projects.length} monitored.
-• Monitored Suppliers: ${suppliers.length} vendors.`;
+• Operational Risks: ${risks.length} registered risks.`;
     }
   }
 

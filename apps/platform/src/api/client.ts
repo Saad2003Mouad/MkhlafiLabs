@@ -721,7 +721,7 @@ class ApiClient {
     return this.request('/data-quality/scan', { method: 'POST' });
   }
 
-  async askAssistant(queryText: string, locale = 'ar'): Promise<{
+  async askAssistant(queryText: string, locale = 'ar', personaConfig?: any): Promise<{
     success: boolean;
     response: string;
     citations: Array<{ source: string; docId: string; confidence: string }>;
@@ -729,10 +729,30 @@ class ApiClient {
   }> {
     return this.request('/assistant/chat', {
       method: 'POST',
-      body: JSON.stringify({ query: queryText, locale })
+      body: JSON.stringify({ query: queryText, locale, personaConfig })
     });
   }
 
+  async ingestLedgerEntries(entries: Array<{
+    documentNumber: string;
+    vendorName?: string;
+    amount: number;
+    postingDate?: string;
+    text?: string;
+    category?: string;
+  }>, batchId?: string): Promise<{
+    success: boolean;
+    batchId: string;
+    totalIngested: number;
+    duplicateCount: number;
+    flaggedCount: number;
+    flaggedItems?: any[];
+  }> {
+    return this.request('/ingest/journal-entries', {
+      method: 'POST',
+      body: JSON.stringify({ entries, batchId })
+    });
+  }
 
   // ── Operations: Integrations Hub ──────────────────────────────────────────
   async getIntegrations(): Promise<{ organizationId: string; integrations: IntegrationSource[] }> {

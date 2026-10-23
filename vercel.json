@@ -19,9 +19,24 @@
       }
     },
     {
+      "source": "/assets/(.*)",
+      "destination": {
+        "service": "platform",
+        "path": "/assets/$1"
+      }
+    },
+    {
+      "source": "/(.*\\.(?:js|css|png|jpg|jpeg|svg|ico|json|woff2?|webp|txt|xml|webmanifest))",
+      "destination": {
+        "service": "platform",
+        "path": "/$1"
+      }
+    },
+    {
       "source": "/(.*)",
       "destination": {
-        "service": "platform"
+        "service": "platform",
+        "path": "/index.html"
       }
     }
   ]

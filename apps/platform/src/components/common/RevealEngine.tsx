@@ -75,7 +75,7 @@ function primeElement(element: HTMLElement, index: number, observer: Intersectio
   }
 
   const bounds = element.getBoundingClientRect();
-  const isOnScreen = bounds.top < window.innerHeight * 0.92 && bounds.bottom > 0;
+  const isOnScreen = bounds.top < window.innerHeight * 2.5 && bounds.bottom > -300;
   // A zero-height element can never cross a non-zero threshold, so reveal it at once.
   const isCollapsed = bounds.height === 0;
 
@@ -89,7 +89,10 @@ function primeElement(element: HTMLElement, index: number, observer: Intersectio
 
 export const RevealEngine: React.FC = () => {
   useEffect(() => {
-    if (prefersReducedMotion()) return;
+    if (prefersReducedMotion()) {
+      revealAll();
+      return;
+    }
 
     const reduceMotionQuery =
       typeof window.matchMedia === 'function'
@@ -107,8 +110,8 @@ export const RevealEngine: React.FC = () => {
                 }
               }
             },
-            // threshold 0 so zero-area targets still report a crossing
-            { rootMargin: '0px 0px -8% 0px', threshold: 0 }
+            // Positive margin so content pre-reveals 250px before entering viewport
+            { rootMargin: '250px 0px 250px 0px', threshold: 0 }
           )
         : null;
 
@@ -143,16 +146,27 @@ export const RevealEngine: React.FC = () => {
 
     scan();
 
+    // Immediate safety timer: ensures zero sections remain hidden after initial page paint
+    const safetyTimer = setTimeout(() => {
+      revealAll();
+    }, 350);
+
     // React to client-side navigation and to content that arrives after first paint.
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const scheduleScan = () => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(scan, 120);
+      debounce = setTimeout(scan, 80);
     };
 
-    // Async content (for example packages fetched from the catalogue) can mount late
-    // and land below the fold with nothing left to trigger a re-scan.
-    const settle = setTimeout(scan, 900);
+    const handleScrollOrResize = () => {
+      scheduleScan();
+    };
+
+    window.addEventListener('scroll', handleScrollOrResize, { passive: true });
+    window.addEventListener('resize', handleScrollOrResize, { passive: true });
+
+    // Secondary settle check
+    const settle = setTimeout(scan, 600);
 
     const mutationObserver =
       typeof MutationObserver === 'function' ? new MutationObserver(scheduleScan) : null;
@@ -170,7 +184,10 @@ export const RevealEngine: React.FC = () => {
 
     return () => {
       if (debounce) clearTimeout(debounce);
+      clearTimeout(safetyTimer);
       clearTimeout(settle);
+      window.removeEventListener('scroll', handleScrollOrResize);
+      window.removeEventListener('resize', handleScrollOrResize);
       mutationObserver?.disconnect();
       observer?.disconnect();
       reduceMotionQuery?.removeEventListener?.('change', onPreferenceChange);

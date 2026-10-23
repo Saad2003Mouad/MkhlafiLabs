@@ -37,18 +37,53 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
   const [inputVal, setInputVal] = useState('');
   const [isThinking, setIsThinking] = useState(false);
 
+  // Load sovereign persona & executive powers configuration
+  const [personaConfig] = useState<{
+    name: string;
+    tone: 'witty_human' | 'strict_executive' | 'forensic_auditor';
+    permissions: {
+      canFreezeDisbursements: boolean;
+      canGenerateReports: boolean;
+      canDraftDecisions: boolean;
+      canSimulateScenarios: boolean;
+      canScanLedger: boolean;
+    };
+    customDirectives: string;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem('mikhlafi_ai_assistant_settings');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      name: 'فطين',
+      tone: 'witty_human',
+      permissions: {
+        canFreezeDisbursements: true,
+        canGenerateReports: true,
+        canDraftDecisions: true,
+        canSimulateScenarios: true,
+        canScanLedger: true
+      },
+      customDirectives: ''
+    };
+  });
+
+  const assistantName = personaConfig.name || (isAr ? 'فطين' : 'Fatin');
+
   const suggestedQueries = isAr
     ? [
-        'ما هي أعلى الانحرافات التشغيلية التي تتطلب قراراً هذا الأسبوع؟',
-        'هل يوجد تباين غير مبرَّر في أسعار الموردين مقارنة بالعقود؟',
-        'ما هي الحسابات أو المشاريع التي تواجه مخاطر متصاعدة؟',
-        'أعطني ملخصاً تنفيذياً شاملاً لحالة مؤسستك الحالية'
+        `من أنت وما هي صلاحياتك يا ${assistantName}؟`,
+        'أعد لي تقريراً جنائياً شاملاً ومفصلاً عن التدقيق المالي للمؤسسة',
+        'قم بمحاكاة سيناريو انخفاض الإيرادات بنسبة 15% وتأخر التحصيل 45 يوماً',
+        'افحص قيود الصرف وجمد أي أمر دفع مشبوه أو مخالف للمطابقة',
+        'أعطني ملخصاً تنفيذياً لمجلس الإدارة حول السيولة والمخاطر'
       ]
     : [
-        'Which operational deviations require an executive decision this week?',
-        'Is there unexplainable variance in supplier pricing against contracts?',
-        'Which accounts or projects show escalating risk signals?',
-        'Provide an executive summary across your organization’s current state'
+        `Who are you and what are your powers, ${assistantName}?`,
+        'Generate a comprehensive forensic audit report on our organizational finances',
+        'Simulate a what-if scenario: 15% revenue drop and 45-day collection delay',
+        'Audit disbursement orders and freeze any suspicious high-risk payments',
+        'Provide an executive summary for the board regarding cashflow and solvency'
       ];
 
   const handleSend = async (textToSend?: string) => {
@@ -73,7 +108,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
     setIsThinking(true);
 
     try {
-      const res = await api.askAssistant(q, locale);
+      const res = await api.askAssistant(q, locale, personaConfig);
       const providerLabel = res.aiProvider
         ? `${res.aiProvider.name}${res.aiProvider.isLocal ? ` — ${res.aiProvider.sovereignty}` : ''}`
         : undefined;
@@ -92,8 +127,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
         id: `err-${Date.now()}`,
         sender: 'assistant',
         text: isAr
-          ? `تعذّر الوصول إلى محرك المساعد: ${err.message || 'خطأ في الشبكة'}. لم يتم توليد أي إجابة.`
-          : `The assistant engine could not be reached: ${err.message || 'Network error'}. No answer was generated.`,
+          ? `تعذّر الوصول إلى محرك المساعد (${assistantName}): ${err.message || 'خطأ في الشبكة'}. لم يتم توليد أي إجابة.`
+          : `The assistant engine (${assistantName}) could not be reached: ${err.message || 'Network error'}. No answer was generated.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isError: true
       };
@@ -103,26 +138,47 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
     }
   };
 
+  const getToneLabel = () => {
+    if (personaConfig.tone === 'witty_human') return isAr ? '😊 مرح وبشري ذكي' : '😊 Witty & Human';
+    if (personaConfig.tone === 'strict_executive') return isAr ? '⚡ تنفيذي حاسم' : '⚡ Strict Executive';
+    return isAr ? '🔍 مدقق جنائي صارم' : '🔍 Forensic Auditor';
+  };
+
   return (
     <div className="platform-page-container">
       <PageHeader
         locale={locale}
         icon={<IconAssistant size={22} />}
         breadcrumb={[isAr ? 'المنصة' : 'Platform', isAr ? 'محركات الذكاء' : 'Intelligence Suite']}
-        title={isAr ? 'المساعد التنفيذي القائم على الأدلة' : 'Evidence-Grounded Executive Assistant'}
+        title={isAr ? `المساعد التنفيذي: ${assistantName}` : `Executive Copilot: ${assistantName}`}
         subtitle={
           isAr
-            ? 'استجواب فوري لبيانات مؤسستك بلغة طبيعية، مع إسناد موثّق لكل نتيجة إلى سجلاتها المصدرية. تُولَّد الإجابات حصرياً من محرك المساعد الحي.'
-            : 'Natural-language interrogation of your organization’s data with every conclusion cited back to its source records. Answers are generated exclusively by the live assistant engine.'
+            ? `استجواب فوري لبيانات مؤسستك بلغة طبيعية مع المساعد (${assistantName}). يتميز بصلاحيات تنفيذية في التجميد، وإعداد التقارير، والمحاكاة المالية.`
+            : `Natural-language interrogation with your sovereign copilot (${assistantName}). Equipped with autonomous powers for disbursement holds, forensic reports, and what-if simulations.`
         }
         action={
-          <div className="kpi-micro-badge">
-            <span className="label">{isAr ? 'وضع الاتصال' : 'Connection Mode'}</span>
-            <span className="value" style={{ color: isAuthenticated ? 'var(--status-success)' : 'var(--text-tertiary)' }}>
-              {isAuthenticated
-                ? (isAr ? `حيّ — ${tenant?.orgNameAr || tenant?.orgNameEn}` : `Live — ${tenant?.orgNameEn}`)
-                : (isAr ? 'يتطلب تسجيل دخول' : 'Sign-in required')}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span
+              className="ml-badge"
+              style={{
+                background: 'rgba(13, 148, 136, 0.15)',
+                color: '#0d9488',
+                borderColor: 'rgba(13, 148, 136, 0.3)',
+                padding: '4px 10px',
+                fontSize: '11px',
+                fontWeight: 600
+              }}
+            >
+              {getToneLabel()}
             </span>
+            <div className="kpi-micro-badge">
+              <span className="label">{isAr ? 'وضع الاتصال' : 'Connection Mode'}</span>
+              <span className="value" style={{ color: isAuthenticated ? 'var(--status-success)' : 'var(--text-tertiary)' }}>
+                {isAuthenticated
+                  ? (isAr ? `حيّ — ${tenant?.orgNameAr || tenant?.orgNameEn}` : `Live — ${tenant?.orgNameEn}`)
+                  : (isAr ? 'يتطلب تسجيل دخول' : 'Sign-in required')}
+              </span>
+            </div>
           </div>
         }
       />
@@ -159,12 +215,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
               {/* Chat Thread */}
               {messages.length === 0 && !isThinking ? (
                 <EmptyState
-                  icon={<IconShield size={30} />}
-                  title={isAr ? 'لا توجد أسئلة بعد' : 'No questions yet'}
+                  icon={<IconAssistant size={32} />}
+                  title={isAr ? `المساعد الذكي (${assistantName}) جاهز لخدمتك` : `${assistantName} is ready`}
                   description={
                     isAr
-                      ? 'اطرح سؤالاً باللغة الطبيعية عن بيانات مؤسستك. تُولَّد الإجابة من محرك المساعد الحي مع إسناد كل نتيجة إلى سجلاتها المصدرية.'
-                      : 'Ask a natural-language question about your organization’s data. The answer is generated by the live assistant engine, with every conclusion cited back to its source records.'
+                      ? `اطرح أي استفسار مالي أو محاسبي، أو اطلب تقريراً شاملاً، أو محاكاة سيناريو، أو فحص وتجميد أوامر الصرف. يعمل المساعد بنبرة (${getToneLabel()}) وبصلاحيات تنفيذية كاملة.`
+                      : `Ask any financial question, request forensic reports, simulate what-if scenarios, or audit disbursements. Operating in (${getToneLabel()}) mode with autonomous powers.`
                   }
                 />
               ) : (
@@ -180,7 +236,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({ locale }) => {
                             ? (isAr ? 'أنت (القيادة)' : 'You (Executive)')
                             : m.isError
                               ? (isAr ? 'خطأ في المحرك' : 'Engine Error')
-                              : (isAr ? 'المساعد التنفيذي' : 'Executive Assistant')}
+                              : `${assistantName} (${isAr ? 'المساعد الذكي' : 'Executive Copilot'})`}
                         </strong>
                         {m.providerLabel && (
                           <span className="vb-msg__provider">

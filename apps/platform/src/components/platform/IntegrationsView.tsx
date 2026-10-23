@@ -1,4 +1,4 @@
-﻿// MIKHLAFI LABS — Integrations & Data Sources
+// MIKHLAFI LABS — Integrations & Data Sources
 // Every connector record is loaded exclusively from the authenticated backend.
 // No demonstration fixtures, sample rows, or fabricated counters are rendered.
 
@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
 import { EmptyState } from '../common/EmptyState';
 import { PageHeader } from '../common/PageHeader';
+import { SmartColumnMappingWizard } from '../integrations/SmartColumnMappingWizard';
 
 interface IntegrationsViewProps {
   locale: LocaleMode;
@@ -130,6 +131,9 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ locale }) =>
   const [filter, setFilter] = useState<'all' | 'healthy' | 'attention'>('all');
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  // Smart AI Column Mapping Wizard state
+  const [isSmartWizardOpen, setIsSmartWizardOpen] = useState<boolean>(false);
 
   // CSV dataset upload
   const [isIngestOpen, setIsIngestOpen] = useState<boolean>(false);
@@ -375,14 +379,35 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ locale }) =>
                   openAuthModal();
                   return;
                 }
+                setIsSmartWizardOpen(true);
+              }}
+              className="ml-btn ml-btn--primary ml-btn--sm"
+              style={{
+                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                boxShadow: '0 2px 10px rgba(2, 132, 199, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 700
+              }}
+            >
+              <span>🤖</span>
+              <span>{isAr ? 'معالج الربط الذكي بالذكاء الاصطناعي' : 'Smart AI Mapping Wizard'}</span>
+            </button>
+            <button
+              onClick={() => {
+                if (!isAuthenticated) {
+                  openAuthModal();
+                  return;
+                }
                 setIngestError(null);
                 setIngestSuccess(null);
                 setIsIngestOpen(true);
               }}
-              className="ml-btn ml-btn--primary ml-btn--sm"
+              className="ml-btn ml-btn--subtle ml-btn--sm"
             >
               <IconDownload size={14} />
-              <span>{isAr ? 'رفع ملف CSV' : 'Upload CSV'}</span>
+              <span>{isAr ? 'رفع ملف CSV مباشر' : 'Direct CSV'}</span>
             </button>
           </div>
         }
@@ -638,6 +663,23 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ locale }) =>
           </div>
         </div>
       )}
+
+      {/* Smart AI Column-Mapping Wizard */}
+      <SmartColumnMappingWizard
+        locale={locale}
+        isOpen={isSmartWizardOpen}
+        onClose={() => setIsSmartWizardOpen(false)}
+        onIngestComplete={async (result) => {
+          await fetchIntegrations();
+          setFeedback({
+            type: 'success',
+            message: isAr
+              ? `اكتمل استيراد وتدقيق ${result.totalIngested} قيد محاسبي عبر معالج الربط الذكي.`
+              : `Successfully ingested and audited ${result.totalIngested} records via Smart AI Mapping.`
+          });
+        }}
+        apiClient={api}
+      />
     </div>
   );
 };
