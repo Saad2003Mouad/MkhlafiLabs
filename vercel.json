@@ -26,7 +26,35 @@
       }
     },
     {
-      "source": "/(.*\\.(?:js|css|png|jpg|jpeg|svg|ico|json|woff2?|webp|txt|xml|webmanifest))",
+      "source": "/brand/(.*)",
+      "destination": {
+        "service": "platform",
+        "path": "/brand/$1"
+      }
+    },
+    {
+      "source": "/favicon(.*)",
+      "destination": {
+        "service": "platform",
+        "path": "/favicon$1"
+      }
+    },
+    {
+      "source": "/apple-touch-icon.png",
+      "destination": {
+        "service": "platform",
+        "path": "/apple-touch-icon.png"
+      }
+    },
+    {
+      "source": "/pwa-(.*)",
+      "destination": {
+        "service": "platform",
+        "path": "/pwa-$1"
+      }
+    },
+    {
+      "source": "/(.*\\.[a-zA-Z0-9]+)",
       "destination": {
         "service": "platform",
         "path": "/$1"
