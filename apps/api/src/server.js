@@ -111,7 +111,13 @@ export function getAllowedOrigin(incomingOrigin) {
   }
   try {
     const parsed = new URL(incomingOrigin);
-    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+    if (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname.endsWith('.vercel.app') ||
+      parsed.hostname.endsWith('mkhlafilabs.com') ||
+      parsed.hostname.endsWith('mkhlafi-labs.com')
+    ) {
       return incomingOrigin;
     }
   } catch (_) {}
@@ -351,12 +357,57 @@ export async function handleApiRequest(req, res) {
 
         // 5. Seed Initial Tenant Decision Records for this new organization
         await tx.query(
-          `INSERT INTO tenant_decisions (organization_id, branch_id, title, category, impact_amount, currency, risk_level, status)
+          `INSERT INTO tenant_decisions (organization_id, branch_id, title, category, impact_amount, currency, risk_level, status, details)
            VALUES
-             ($1, $2, 'Single-Source Cement Supplier Price Drift (+16.5%)', 'Procurement', 362400.00, 'SAR', 'CRITICAL', 'PENDING'),
-             ($1, $2, 'Early Payment Discount Capture on Q3 Batches', 'Working Capital', 145000.00, 'SAR', 'HIGH', 'PENDING'),
-             ($1, $2, 'Subcontractor Milestone Variance Delay Claim', 'Project Governance', 540000.00, 'SAR', 'MEDIUM', 'PENDING')`,
-          [org.id, branchId]
+             ($1, $2, 'Single-Source Cement Supplier Price Drift (+16.5%)', 'Procurement', 362400.00, 'SAR', 'CRITICAL', 'PENDING', $3::jsonb),
+             ($1, $2, 'Early Payment Discount Capture on Q3 Batches', 'Working Capital', 145000.00, 'SAR', 'HIGH', 'PENDING', $4::jsonb),
+             ($1, $2, 'Subcontractor Milestone Variance Delay Claim', 'Project Governance', 540000.00, 'SAR', 'MEDIUM', 'PENDING', $5::jsonb)`,
+          [
+            org.id,
+            branchId,
+            JSON.stringify({
+              rationaleAr: 'تم رصد انحراف تصاعدي تراكمي في أسعار توريد الأسمنت بنسبة +16.5% مقارنة بمتوسط أسعار العقود القياسية السابقة عبر مطابقة 14 فاتورة توريد. يتطلب القرار إيقاف صرف الدفعات المعلقة وإلزام المورد بتسوية الفروقات بموجب العقد الموحد.',
+              rationaleEn: 'Detected cumulative +16.5% price indexation drift on cement supply across 14 reconciled purchase orders against regional benchmark baselines. Executive hold recommended to enforce contractual caps.',
+              rootCauseAr: 'عدم تفعيل بند تثبيت الأسعار الربع سنوي الصادر في أمر الشراء الأساسي، مما سمح للمورد بتمرير زيادات غير معتمدة.',
+              rootCauseEn: 'Contractual unit price variance between issued PO and supplier invoice due to unapplied quarterly price indexing caps.',
+              confidencePct: 99.2,
+              baselineDeviation: '+16.5%',
+              benchmarkRate: '195.00 SAR/Ton',
+              invoicedRate: '227.18 SAR/Ton',
+              evidenceCount: 14,
+              regulatoryClause: 'المادة 42 من نظام المنافسات والمشتريات الحكومية ولائحة الرقابة المالية الداخلية',
+              recommendedActionAr: 'تطبيق حجز فوري للمطابقة (Payment Hold) وإلزام المورد بإصدار إشعار دائن (Credit Note) بمبلغ 362,400 ر.س قبل الإفراج عن الدفعة التالية.',
+              recommendedActionEn: 'Enforce immediate AP payment hold and mandate a credit memo recovery of 362,400 SAR before release.'
+            }),
+            JSON.stringify({
+              rationaleAr: 'إمكانية تحصيل خصومات السداد المبكر (2/10 Net 30) على دفعات الخدمات اللوجستية المعتمدة بقيمة 145,000 ر.س عند السداد خلال 48 ساعة قبل انتهاء نافذة الخصم المالي.',
+              rationaleEn: 'Opportunity to capture 2/10 Net 30 early payment discounts on verified logistics batches yielding 145,000 SAR in direct cash savings if authorized within 48 hours.',
+              rootCauseAr: 'تأخر تدفق أوامر الدفع في الدورة المستندية التقليدية مما يفوّت خصومات السداد المتفق عليها تعاقدياً.',
+              rootCauseEn: 'Document approval latency in legacy AP workflow risking forfeiture of contractual settlement discounts.',
+              confidencePct: 97.8,
+              baselineDeviation: 'خصم 2% متاح',
+              benchmarkRate: 'Net 30 Days',
+              invoicedRate: 'Day 8 Window',
+              evidenceCount: 8,
+              regulatoryClause: 'سياسة إدارة السيولة النقدية والتدفقات المالية المعتمدة للمنشأة',
+              recommendedActionAr: 'اعتماد الصرف المعجّل لدفعة الخدمات اللوجستية للاستفادة الكاملة من الخصم التعاقدي البالغ 145,000 ر.س.',
+              recommendedActionEn: 'Authorize expedited settlement for verified logistics batch to secure 145,000 SAR contract discount.'
+            }),
+            JSON.stringify({
+              rationaleAr: 'رصد انحراف زمني مقداره 14 يوماً في تسليم مراحل المقاول من الباطن لمشروع الأتمتة، مع مطالبة المقاول بتعويض مالي غير مبرر قدره 540,000 ر.س دون إثبات أوامر تغيير معتمدة.',
+              rationaleEn: 'Forensic audit detected 14-day schedule milestone slippage by subcontractor paired with an unjustified delay claim of 540,000 SAR lacking approved Variation Orders (VO).',
+              rootCauseAr: 'غياب التوثيق الميداني المعتمد لأوامر التغيير ومحاولة المقاول تحميل المنشأة تكاليف التأخير الذاتي.',
+              rootCauseEn: 'Unsubstantiated extension of time (EOT) claim without client-signed variation documentation.',
+              confidencePct: 96.5,
+              baselineDeviation: '+540,000 SAR مطالبة غير معتمدة',
+              benchmarkRate: 'Contractual Milestone Delivery',
+              invoicedRate: 'Slippage: +14 Calendar Days',
+              evidenceCount: 6,
+              regulatoryClause: 'المادة 68 من شروط عقود الفيدك (FIDIC) للأعمال الهندسية ومطابقات أمر التغيير',
+              recommendedActionAr: 'رفض مطالبة التعويض المالي، وتطبيق غرامة التأخير التعاقدية مع حجز مستحقات مرحلة الإنجاز حتى إتمام الفحص الفني.',
+              recommendedActionEn: 'Reject financial compensation claim, enforce liquidated damages clause, and retain milestone disbursement pending audit clearance.'
+            })
+          ]
         );
 
         // 6. Seed Initial Financial Intelligence Records (Invoices & Anomalies)

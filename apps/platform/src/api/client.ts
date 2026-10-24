@@ -131,6 +131,26 @@ export interface IngestResult {
   validationErrors: Array<{ row: number; field: string; message: string }>;
 }
 
+export interface DecisionDetails {
+  rationaleAr?: string;
+  rationaleEn?: string;
+  rootCauseAr?: string;
+  rootCauseEn?: string;
+  confidencePct?: number;
+  baselineDeviation?: string;
+  benchmarkRate?: string;
+  invoicedRate?: string;
+  evidenceCount?: number;
+  regulatoryClause?: string;
+  recommendedActionAr?: string;
+  recommendedActionEn?: string;
+  titleAr?: string;
+  ownerName?: string;
+  ownerRole?: string;
+  evidence?: string;
+  [key: string]: any;
+}
+
 export interface RealDecisionItem {
   id: string;
   organization_id: string;
@@ -141,6 +161,7 @@ export interface RealDecisionItem {
   risk_level: string;
   status: string;
   created_at: string;
+  details?: DecisionDetails | null;
 }
 
 export interface MemberRecord {

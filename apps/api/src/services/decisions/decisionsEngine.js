@@ -5,7 +5,7 @@ import { query } from '../../db/connection.js';
 import { recordAuditEvent } from '../../middleware/tenant.js';
 
 export async function getTenantDecisions(orgId, statusFilter = null) {
-  let sql = `SELECT id, organization_id, title, category, impact_amount, currency, risk_level, status, source_system, created_at
+  let sql = `SELECT id, organization_id, title, category, impact_amount, currency, risk_level, status, source_system, details, created_at
              FROM tenant_decisions
              WHERE organization_id = $1`;
   const params = [orgId];
@@ -47,7 +47,7 @@ export async function createTenantDecision(orgId, { title, category, impactAmoun
 
 export async function getTenantDecisionById(orgId, recordId) {
   const recRes = await query(
-    `SELECT id, organization_id, title, category, impact_amount, currency, risk_level, status, created_at
+    `SELECT id, organization_id, title, category, impact_amount, currency, risk_level, status, details, created_at
      FROM tenant_decisions
      WHERE id = $1 AND organization_id = $2`,
     [recordId, orgId]
