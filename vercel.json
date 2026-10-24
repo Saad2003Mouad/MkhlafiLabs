@@ -19,53 +19,11 @@
       }
     },
     {
-      "source": "/assets/(.*)",
-      "destination": {
-        "service": "platform",
-        "path": "/assets/$1"
-      }
-    },
-    {
-      "source": "/brand/(.*)",
-      "destination": {
-        "service": "platform",
-        "path": "/brand/$1"
-      }
-    },
-    {
-      "source": "/favicon(.*)",
-      "destination": {
-        "service": "platform",
-        "path": "/favicon$1"
-      }
-    },
-    {
-      "source": "/apple-touch-icon.png",
-      "destination": {
-        "service": "platform",
-        "path": "/apple-touch-icon.png"
-      }
-    },
-    {
-      "source": "/pwa-(.*)",
-      "destination": {
-        "service": "platform",
-        "path": "/pwa-$1"
-      }
-    },
-    {
-      "source": "/(.*\\.[a-zA-Z0-9]+)",
-      "destination": {
-        "service": "platform",
-        "path": "/$1"
-      }
-    },
-    {
       "source": "/(.*)",
       "destination": {
-        "service": "platform",
-        "path": "/index.html"
+        "service": "platform"
       }
     }
   ]
 }
+
