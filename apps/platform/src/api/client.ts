@@ -677,7 +677,7 @@ class ApiClient {
   }
 
   async getPackages(): Promise<{ packages: any[] }> {
-    return this.request('/packages', { method: 'GET' });
+    return this.request('/admin/packages', { method: 'GET' });
   }
 
   // ── Platform services (engines) catalog ───────────────────────────────────

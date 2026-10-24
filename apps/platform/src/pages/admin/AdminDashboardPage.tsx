@@ -1045,7 +1045,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ locale, 
       maxBranches: toCount(record.max_branches),
       maxMembers: toCount(record.max_members),
       monthlyRecordLimit: toCount(record.monthly_record_limit),
-      capabilities: Array.isArray(record.capabilities) ? record.capabilities : []
+      capabilities: Array.isArray(record.capabilities)
+        ? record.capabilities.map((c: any) => (typeof c === 'string' ? c : c?.id)).filter(Boolean)
+        : []
     });
     setPackageModal({ mode: 'edit', record });
     setFormError(null);
@@ -1962,11 +1964,18 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({ locale, 
 
                       {caps.length > 0 ? (
                         <div className="admin-chips">
-                          {caps.map((cap) => {
-                            const known = ALL_CAPABILITIES.find((c) => c.id === cap);
+                          {caps.map((cap: any, capIdx: number) => {
+                            const capId = typeof cap === 'string' ? cap : (cap?.id || String(capIdx));
+                            const known = ALL_CAPABILITIES.find((c) => c.id === capId);
+                            const displayName =
+                              typeof cap === 'object' && cap !== null
+                                ? (isAr ? cap.nameAr || cap.nameEn || capId : cap.nameEn || cap.nameAr || capId)
+                                : known
+                                  ? (isAr ? known.nameAr : known.nameEn)
+                                  : capId;
                             return (
-                              <span className="admin-chip" key={cap} title={cap}>
-                                {known ? (isAr ? known.nameAr : known.nameEn) : cap}
+                              <span className="admin-chip" key={capId} title={capId}>
+                                {displayName}
                               </span>
                             );
                           })}
