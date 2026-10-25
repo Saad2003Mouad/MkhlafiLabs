@@ -15,15 +15,37 @@
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "api"
+        "service": "api",
+        "path": "/api/$1"
       }
     },
     {
-      "source": "/(.*)",
+      "source": "/assets/(.*)",
       "destination": {
-        "service": "platform"
+        "service": "platform",
+        "path": "/assets/$1"
+      }
+    },
+    {
+      "source": "/brand/(.*)",
+      "destination": {
+        "service": "platform",
+        "path": "/brand/$1"
+      }
+    },
+    {
+      "source": "/(.*\\.(?:ico|png|svg|jpg|jpeg|webp|json|js|css|woff2|woff|ttf))",
+      "destination": {
+        "service": "platform",
+        "path": "/$1"
+      }
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": {
+        "service": "platform",
+        "path": "/index.html"
       }
     }
   ]
 }
-
